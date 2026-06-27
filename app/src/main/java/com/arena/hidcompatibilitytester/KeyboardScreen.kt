@@ -606,6 +606,33 @@ fun KeyboardScreen(
                 }
                 onSendKey(st.modByte(), emptyList())
             }
+
+            // Special case: if Tab is pressed with modifiers, release only Tab, keep modifiers held
+            key.code == 0x2B -> {
+                val mod = st.modByte()
+                val keepModifiersHeld = st.anyMod
+
+                val label = buildString {
+                    append(st.modPrefix())
+                    append(key.label.ifEmpty { "Space" })
+                }
+
+                onSendKey(mod, listOf(key.code))
+                st = st.copy(lastKey = label)
+
+                scope.launch {
+                    delay(60)
+                    if (keepModifiersHeld) {
+                        // Release only Tab, keep currently active modifiers held
+                        onSendKey(st.modByte(), emptyList())
+                    } else {
+                        // No modifier was active, behave normally
+                        onSendKey(0, emptyList())
+                        st = st.releaseMods()
+                    }
+                }
+            }
+
             key.code != 0 -> {
                 var mod      = st.modByte()
                 val isLetter = key.label.length == 1 && key.label[0].isLetter()
