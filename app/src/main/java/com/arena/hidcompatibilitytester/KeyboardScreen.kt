@@ -4,6 +4,7 @@ package com.arena.hidcompatibilitytester
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,6 +38,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Scroll-safe tap with optional key-repeat.
@@ -211,22 +216,20 @@ private data class KbState(
 // ═════════════════════════════════════════════════════════════════════════════
 
 private val ROW_FN = listOf(
-    Key("Esc",   code=0x29, w=1.0f, color=KC.DANGER,  noRepeat=true),
-    Key("F1",    code=0x3A, fnLabel="Brt▼", color=KC.FN),
-    Key("F2",    code=0x3B, fnLabel="Brt▲", color=KC.FN),
-    Key("F3",    code=0x3C, fnLabel="Srch",  color=KC.FN),
-    Key("F4",    code=0x3D, fnLabel="App",   color=KC.FN),
-    Key("F5",    code=0x3E, fnLabel="Ref",   color=KC.FN),
-    Key("F6",    code=0x3F, fnLabel="Prv",   color=KC.FN),
-    Key("F7",    code=0x40, fnLabel="⏮",    color=KC.FN),
-    Key("F8",    code=0x41, fnLabel="⏯",    color=KC.FN),
-    Key("F9",    code=0x42, fnLabel="⏭",    color=KC.FN),
-    Key("F10",   code=0x43, fnLabel="🔇",   color=KC.FN),
-    Key("F11",   code=0x44, fnLabel="🔉",   color=KC.FN),
-    Key("F12",   code=0x45, fnLabel="🔊",   color=KC.FN),
-    Key("PrtSc", code=0x46, color=KC.SPECIAL, noRepeat=true),
-    Key("ScrLk", code=0x47, color=KC.SPECIAL, noRepeat=true, isScroll=true),
-    Key("Pause", code=0x48, color=KC.SPECIAL, noRepeat=true),
+    Key("Esc", code = 0x29, w = 1.4f, color = KC.DANGER, noRepeat = true),
+    Key("F1",  code = 0x3A, fnLabel = "Brt▼", color = KC.FN),
+    Key("F2",  code = 0x3B, fnLabel = "Brt▲", color = KC.FN),
+    Key("F3",  code = 0x3C, fnLabel = "Srch", color = KC.FN),
+    Key("F4",  code = 0x3D, fnLabel = "App",  color = KC.FN),
+    Key("F5",  code = 0x3E, fnLabel = "Ref",  color = KC.FN),
+    Key("F6",  code = 0x3F, fnLabel = "Prv",  color = KC.FN),
+    Key("F7",  code = 0x40, fnLabel = "⏮",   color = KC.FN),
+    Key("F8",  code = 0x41, fnLabel = "⏯",   color = KC.FN),
+    Key("F9",  code = 0x42, fnLabel = "⏭",   color = KC.FN),
+    Key("F10", code = 0x43, fnLabel = "🔇",  color = KC.FN),
+    Key("F11", code = 0x44, fnLabel = "🔉",  color = KC.FN),
+    Key("F12", code = 0x45, fnLabel = "🔊",  color = KC.FN),
+    Key("Del", code = 0x4C, w = 1.4f, color = KC.DANGER)
 )
 private val ROW_NUM = listOf(
     Key("`","~",code=0x35), Key("1","!",code=0x1E), Key("2","@",code=0x1F),
@@ -910,31 +913,185 @@ fun KeyboardScreen(
 
             // ── TAB 0: Full QWERTY ────────────────────────────────────────────
             0 -> Box(
-                Modifier
+                modifier = Modifier
                     .fillMaxSize()
                     .background(Color(0xFF080F18))
             ) {
+
+                // Scrollable upper content
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 255.dp)   // reserve space for keyboard
+                        .verticalScroll(rememberScrollState())
+                        .padding(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+
+                    // Arrow Keys
+                    Text(
+                        "Arrow Keys",
+                        color = Color(0xFF607D8B),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth(0.60f),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            KBtn(
+                                key = KEY_UP,
+                                modifier = Modifier.weight(1f),
+                                h = 40.dp,
+                                mainLabel = "↑",
+                                scrollable = true,
+                                onPress = { handleKey(KEY_UP) }
+                            )
+                        }
+
+                        Row(Modifier.fillMaxWidth(0.60f)) {
+                            listOf(KEY_LEFT, KEY_DOWN, KEY_RIGHT).forEach { k ->
+                                KBtn(
+                                    key = k,
+                                    modifier = Modifier.weight(1f),
+                                    h = 40.dp,
+                                    mainLabel = k.label,
+                                    scrollable = true,
+                                    onPress = { handleKey(k) }
+                                )
+                            }
+                        }
+                    }
+
+                    // System Keys
+                    Text(
+                        "System Keys",
+                        color = Color(0xFF607D8B),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+
+                        Row(Modifier.fillMaxWidth()) {
+                            SYSTEM_ROW1.forEach { k ->
+                                KBtn(
+                                    key = k,
+                                    modifier = Modifier.weight(1f),
+                                    h = 40.dp,
+                                    active = isKeyActive(k, st),
+                                    mainLabel = displayMain(k, st),
+                                    scrollable = true,
+                                    onPress = { handleKey(k) }
+                                )
+                            }
+                        }
+
+                        Row(Modifier.fillMaxWidth()) {
+                            SYSTEM_ROW2.forEach { k ->
+                                KBtn(
+                                    key = k,
+                                    modifier = Modifier.weight(1f),
+                                    h = 40.dp,
+                                    active = isKeyActive(k, st),
+                                    mainLabel = displayMain(k, st),
+                                    scrollable = true,
+                                    onPress = { handleKey(k) }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(6.dp))
+
+                    // Quick Modifiers
+                    Text(
+                        "Quick Modifiers",
+                        color = Color(0xFF607D8B),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        listOf(
+                            Key("Ctrl", modBit = MOD_LCTRL, color = KC.MOD, isMod = true, noRepeat = true),
+                            Key("Shift", modBit = MOD_LSHIFT, color = KC.MOD, isMod = true, noRepeat = true),
+                            Key("Alt", modBit = MOD_LALT, color = KC.MOD, isMod = true, noRepeat = true),
+                            Key("Win", modBit = MOD_LGUI, color = KC.MOD, isMod = true, noRepeat = true),
+                            Key("AltGr", modBit = MOD_RALT, color = KC.MOD, isMod = true, noRepeat = true),
+                            Key("Menu", code=0x65,w=1.0f,color=KC.MOD,noRepeat=true),
+                        ).forEach { k ->
+                            KBtn(
+                                key = k,
+                                modifier = Modifier.weight(1f),
+                                h = 40.dp,
+                                active = isKeyActive(k, st),
+                                mainLabel = k.label,
+                                scrollable = true,
+                                onPress = { handleKey(k) }
+                            )
+                        }
+                    }
+
+                    if (st.anyMod) {
+                        Spacer(Modifier.height(4.dp))
+
+                        TextButton(
+                            onClick = {
+                                st = st.releaseMods().copy(lastKey = "")
+                                onSendKey(0, emptyList())
+                            },
+                            modifier = Modifier.align(Alignment.End)
+                        ) {
+                            Text(
+                                "Clear Modifiers",
+                                fontSize = 11.sp,
+                                color = Color(0xFFEF9A9A)
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+                }
+
+                // Fixed keyboard
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
+                        .background(Color(0xFF080F18))
                         .padding(horizontal = 2.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    ResponsiveRow(ROW_FN,     32.dp, st) { handleKey(it) }
-                    HorizontalDivider(color=Color.White.copy(0.04f), thickness=1.dp)
-                    ResponsiveRow(ROW_NUM,    42.dp, st) { handleKey(it) }
-                    ResponsiveRow(ROW_QWERTY, 42.dp, st) { handleKey(it) }
-                    ResponsiveRow(ROW_HOME,   42.dp, st) { handleKey(it) }
-                    ResponsiveRow(ROW_ALPHA,  42.dp, st) { handleKey(it) }
-                    ResponsiveRow(ROW_MODS,   42.dp, st) { handleKey(it) }
+
+                    ResponsiveRow(ROW_FN, 38.dp, st) { handleKey(it) }
+
+                    HorizontalDivider(
+                        color = Color.White.copy(0.04f),
+                        thickness = 1.dp
+                    )
+
+                    ResponsiveRow(ROW_NUM, 40.dp, st) { handleKey(it) }
+                    ResponsiveRow(ROW_QWERTY, 40.dp, st) { handleKey(it) }
+                    ResponsiveRow(ROW_HOME, 40.dp, st) { handleKey(it) }
+                    ResponsiveRow(ROW_ALPHA, 40.dp, st) { handleKey(it) }
+                    ResponsiveRow(ROW_MODS, 40.dp, st) { handleKey(it) }
                 }
             }
 
             // ── TAB 1: Nav + Numpad ───────────────────────────────────────────
             1 -> Column(
                 modifier = Modifier.fillMaxSize().background(Color(0xFF080F18))
-                    .verticalScroll(rememberScrollState()).padding(8.dp),
+                    .verticalScroll(rememberScrollState()).imePadding().padding(8.dp),
                 verticalArrangement=Arrangement.spacedBy(10.dp)
             ) {
                 // Nav cluster + Arrows
@@ -1030,32 +1187,79 @@ fun KeyboardScreen(
                     )
                 }
 
-                // Type & Send
+                val bringIntoViewRequester = remember { BringIntoViewRequester() }
+                val keyboardController = LocalSoftwareKeyboardController.current
+
                 KbCard("Type & Send Text") {
+
                     OutlinedTextField(
-                        value=typeText, onValueChange={ typeText=it },
-                        modifier=Modifier.fillMaxWidth(),
-                        placeholder={ Text("Enter text to send…", color=Color.Gray) },
-                        maxLines=4,
-                        colors=OutlinedTextFieldDefaults.colors(
-                            focusedTextColor    =Color.White,
-                            unfocusedTextColor  =Color.White,
-                            focusedBorderColor  =Color(0xFF4A90D9),
-                            unfocusedBorderColor=Color.White.copy(0.2f),
-                            cursorColor         =Color(0xFF4A90D9),
+                        value = typeText,
+                        onValueChange = { newText ->
+
+                            when {
+                                // Characters added
+                                newText.length > typeText.length -> {
+                                    val added = newText.substring(typeText.length)
+                                    if (added.isNotEmpty()) {
+                                        onTypeText(added)
+                                    }
+                                }
+
+                                // Characters deleted (Backspace)
+                                newText.length < typeText.length -> {
+                                    repeat(typeText.length - newText.length) {
+                                        onSendKey(0, listOf(0x2A)) // HID Backspace
+                                    }
+                                }
+                            }
+
+                            typeText = newText
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .bringIntoViewRequester(bringIntoViewRequester)
+                            .onFocusChanged { state ->
+                                if (state.isFocused) {
+                                    keyboardController?.show()
+
+                                    scope.launch {
+                                        delay(250)
+                                        bringIntoViewRequester.bringIntoView()
+                                    }
+                                }
+                            },
+                        placeholder = {
+                            Text(
+                                "Type here…",
+                                color = Color.Gray
+                            )
+                        },
+                        maxLines = 4,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color(0xFF4A90D9),
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                            cursorColor = Color(0xFF4A90D9),
                         )
                     )
+
                     Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick={ if(typeText.isNotBlank()){ onTypeText(typeText); typeText="" } },
-                            modifier=Modifier.weight(1f),
-                            colors=ButtonDefaults.buttonColors(containerColor=Color(0xFF1565C0))
-                        ) { Text("Send Text") }
-                        OutlinedButton(
-                            onClick={ typeText="" }, modifier=Modifier.weight(0.4f),
-                            border=androidx.compose.foundation.BorderStroke(1.dp,Color.White.copy(0.2f))
-                        ) { Text("Clear",color=Color.White) }
+
+                    OutlinedButton(
+                        onClick = {
+                            typeText = ""
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        border = BorderStroke(
+                            1.dp,
+                            Color.White.copy(alpha = 0.2f)
+                        )
+                    ) {
+                        Text(
+                            "Clear",
+                            color = Color.White
+                        )
                     }
                 }
 
@@ -1082,6 +1286,24 @@ fun KeyboardScreen(
                         (MEDIA_VOLUME+MEDIA_BRIGHT).forEach { mk ->
                             MediaKeyBtn(mk.icon, mk.label, Modifier.weight(1f), 56.dp) {
                                 onConsumerKey(mk.code); st=st.copy(lastKey=mk.label)
+                            }
+                        }
+                    }
+                }
+                KbCard("Arrow Keys") {
+                    Column(
+                        modifier=Modifier.fillMaxWidth(),
+                        horizontalAlignment=Alignment.CenterHorizontally,
+                        verticalArrangement=Arrangement.spacedBy(3.dp)
+                    ) {
+                        Row(Modifier.fillMaxWidth(0.66f), horizontalArrangement=Arrangement.Center) {
+                            KBtn(key=KEY_UP, modifier=Modifier.weight(1f), h=46.dp,
+                                mainLabel="↑", scrollable=true, onPress={ handleKey(KEY_UP) })
+                        }
+                        Row(Modifier.fillMaxWidth(0.66f)) {
+                            listOf(KEY_LEFT,KEY_DOWN,KEY_RIGHT).forEach { k ->
+                                KBtn(key=k, modifier=Modifier.weight(1f), h=46.dp,
+                                    mainLabel=k.label, scrollable=true, onPress={ handleKey(k) })
                             }
                         }
                     }
@@ -1126,24 +1348,6 @@ fun KeyboardScreen(
                             border=androidx.compose.foundation.BorderStroke(
                                 1.dp,Color(0xFFEF9A9A).copy(0.5f))
                         ) { Text("✕ Clear All Modifiers",color=Color(0xFFEF9A9A),fontSize=12.sp) }
-                    }
-                }
-                KbCard("Arrow Keys") {
-                    Column(
-                        modifier=Modifier.fillMaxWidth(),
-                        horizontalAlignment=Alignment.CenterHorizontally,
-                        verticalArrangement=Arrangement.spacedBy(3.dp)
-                    ) {
-                        Row(Modifier.fillMaxWidth(0.66f), horizontalArrangement=Arrangement.Center) {
-                            KBtn(key=KEY_UP, modifier=Modifier.weight(1f), h=46.dp,
-                                mainLabel="↑", scrollable=true, onPress={ handleKey(KEY_UP) })
-                        }
-                        Row(Modifier.fillMaxWidth(0.66f)) {
-                            listOf(KEY_LEFT,KEY_DOWN,KEY_RIGHT).forEach { k ->
-                                KBtn(key=k, modifier=Modifier.weight(1f), h=46.dp,
-                                    mainLabel=k.label, scrollable=true, onPress={ handleKey(k) })
-                            }
-                        }
                     }
                 }
                 Spacer(Modifier.height(16.dp))
