@@ -909,18 +909,26 @@ fun KeyboardScreen(
         when (st.tab) {
 
             // ── TAB 0: Full QWERTY ────────────────────────────────────────────
-            0 -> Column(
-                modifier = Modifier.fillMaxSize().background(Color(0xFF080F18))
-                    .padding(horizontal=2.dp, vertical=3.dp),
-                verticalArrangement=Arrangement.spacedBy(2.dp)
+            0 -> Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFF080F18))
             ) {
-                ResponsiveRow(ROW_FN,     32.dp, st) { handleKey(it) }
-                HorizontalDivider(color=Color.White.copy(0.04f), thickness=1.dp)
-                ResponsiveRow(ROW_NUM,    42.dp, st) { handleKey(it) }
-                ResponsiveRow(ROW_QWERTY, 42.dp, st) { handleKey(it) }
-                ResponsiveRow(ROW_HOME,   42.dp, st) { handleKey(it) }
-                ResponsiveRow(ROW_ALPHA,  42.dp, st) { handleKey(it) }
-                ResponsiveRow(ROW_MODS,   42.dp, st) { handleKey(it) }
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 2.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    ResponsiveRow(ROW_FN,     32.dp, st) { handleKey(it) }
+                    HorizontalDivider(color=Color.White.copy(0.04f), thickness=1.dp)
+                    ResponsiveRow(ROW_NUM,    42.dp, st) { handleKey(it) }
+                    ResponsiveRow(ROW_QWERTY, 42.dp, st) { handleKey(it) }
+                    ResponsiveRow(ROW_HOME,   42.dp, st) { handleKey(it) }
+                    ResponsiveRow(ROW_ALPHA,  42.dp, st) { handleKey(it) }
+                    ResponsiveRow(ROW_MODS,   42.dp, st) { handleKey(it) }
+                }
             }
 
             // ── TAB 1: Nav + Numpad ───────────────────────────────────────────
