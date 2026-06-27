@@ -18,9 +18,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -33,6 +36,60 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.abs
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scroll-safe tap: fires ONLY when finger lifts without having moved > slop px.
+// Used on tabs that have verticalScroll so accidental drags never fire a key.
+// ─────────────────────────────────────────────────────────────────────────────
+private suspend fun PointerInputScope.scrollSafeTap(
+    slopPx  : Float = 18f,   // max movement in px to still count as a tap
+    onTap   : () -> Unit,
+) {
+    awaitPointerEventScope {
+        // 1. Wait for first finger down
+        var ev = awaitPointerEvent(PointerEventPass.Initial)
+        while (ev.changes.none { it.pressed }) {
+            ev = awaitPointerEvent(PointerEventPass.Initial)
+        }
+        val down = ev.changes.first()
+        val startPos: Offset = down.position
+
+        // 2. Track movement until finger lifts or slop exceeded
+        var moved = false
+        while (true) {
+            ev = awaitPointerEvent(PointerEventPass.Initial)
+            val c = ev.changes.firstOrNull() ?: break
+
+            if (!c.pressed) {
+                // Finger lifted — fire tap only if it didn't move much
+                if (!moved) {
+                    c.consume()
+                    onTap()
+                }
+                break
+            }
+
+            // Check if we've moved beyond slop
+            val dx = abs(c.position.x - startPos.x)
+            val dy = abs(c.position.y - startPos.y)
+            if (dx > slopPx || dy > slopPx) {
+                moved = true
+                // Do NOT consume — let the scroll parent have it
+            }
+        }
+    }
+}
+
+// Wraps scrollSafeTap in an infinite loop so it keeps working after each tap
+private suspend fun PointerInputScope.repeatScrollSafeTap(
+    slopPx: Float = 18f,
+    onTap : () -> Unit,
+) {
+    while (true) {
+        scrollSafeTap(slopPx, onTap)
+    }
+}
 
 // ═════════════════════════════════════════════════════════════════════════════
 // HID Modifier bits
@@ -47,15 +104,7 @@ private const val MOD_RSHIFT = 0x20
 private const val MOD_RALT   = 0x40
 private const val MOD_RGUI   = 0x80
 
-// ═════════════════════════════════════════════════════════════════════════════
-// Key color type
-// ═════════════════════════════════════════════════════════════════════════════
-
 private enum class KC { NORMAL, MOD, SPECIAL, ACCENT, DANGER, FN }
-
-// ═════════════════════════════════════════════════════════════════════════════
-// Key data class
-// ═════════════════════════════════════════════════════════════════════════════
 
 private data class Key(
     val label    : String,
@@ -76,10 +125,6 @@ private data class Key(
 
 private fun Key.shouldRepeat() =
     !noRepeat && !isMod && !isCaps && !isNum && !isFn && !isScroll
-
-// ═════════════════════════════════════════════════════════════════════════════
-// Keyboard State
-// ═════════════════════════════════════════════════════════════════════════════
 
 private data class KbState(
     val lCtrl     : Boolean = false,
@@ -137,7 +182,7 @@ private data class KbState(
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Key row definitions
+// Key row definitions  (unchanged)
 // ═════════════════════════════════════════════════════════════════════════════
 
 private val ROW_FN = listOf(
@@ -158,88 +203,62 @@ private val ROW_FN = listOf(
     Key("ScrLk", code=0x47, color=KC.SPECIAL, noRepeat=true, isScroll=true),
     Key("Pause", code=0x48, color=KC.SPECIAL, noRepeat=true),
 )
-
 private val ROW_NUM = listOf(
-    Key("`",  "~",  code=0x35),
-    Key("1",  "!",  code=0x1E),
-    Key("2",  "@",  code=0x1F),
-    Key("3",  "#",  code=0x20),
-    Key("4",  "$",  code=0x21),
-    Key("5",  "%",  code=0x22),
-    Key("6",  "^",  code=0x23),
-    Key("7",  "&",  code=0x24),
-    Key("8",  "*",  code=0x25),
-    Key("9",  "(",  code=0x26),
-    Key("0",  ")",  code=0x27),
-    Key("-",  "_",  code=0x2D),
-    Key("=",  "+",  code=0x2E),
-    Key("⌫", "",   code=0x2A, w=2.0f, color=KC.DANGER),
+    Key("`","~",code=0x35), Key("1","!",code=0x1E), Key("2","@",code=0x1F),
+    Key("3","#",code=0x20), Key("4","$",code=0x21), Key("5","%",code=0x22),
+    Key("6","^",code=0x23), Key("7","&",code=0x24), Key("8","*",code=0x25),
+    Key("9","(",code=0x26), Key("0",")",code=0x27), Key("-","_",code=0x2D),
+    Key("=","+",code=0x2E),
+    Key("⌫","",code=0x2A,w=2.0f,color=KC.DANGER),
 )
-
 private val ROW_QWERTY = listOf(
-    Key("Tab",  code=0x2B, w=1.5f, color=KC.MOD),
-    Key("Q","Q", code=0x14), Key("W","W", code=0x1A), Key("E","E", code=0x08),
-    Key("R","R", code=0x15), Key("T","T", code=0x17), Key("Y","Y", code=0x1C),
-    Key("U","U", code=0x18), Key("I","I", code=0x0C), Key("O","O", code=0x12),
-    Key("P","P", code=0x13),
-    Key("[", "{", code=0x2F),
-    Key("]", "}", code=0x30),
-    Key("\\","|", code=0x31, w=1.5f),
+    Key("Tab",code=0x2B,w=1.5f,color=KC.MOD),
+    Key("Q","Q",code=0x14),Key("W","W",code=0x1A),Key("E","E",code=0x08),
+    Key("R","R",code=0x15),Key("T","T",code=0x17),Key("Y","Y",code=0x1C),
+    Key("U","U",code=0x18),Key("I","I",code=0x0C),Key("O","O",code=0x12),
+    Key("P","P",code=0x13),Key("[","{",code=0x2F),Key("]","}",code=0x30),
+    Key("\\","|",code=0x31,w=1.5f),
 )
-
 private val ROW_HOME = listOf(
-    Key("Caps", code=0x39, w=1.75f, color=KC.MOD, isCaps=true, noRepeat=true),
-    Key("A","A", code=0x04), Key("S","S", code=0x16), Key("D","D", code=0x07),
-    Key("F","F", code=0x09), Key("G","G", code=0x0A), Key("H","H", code=0x0B),
-    Key("J","J", code=0x0D), Key("K","K", code=0x0E), Key("L","L", code=0x0F),
-    Key(";", ":", code=0x33),
-    Key("'", "\"",code=0x34),
-    Key("↵",  "",  code=0x28, w=2.25f, color=KC.ACCENT),
+    Key("Caps",code=0x39,w=1.75f,color=KC.MOD,isCaps=true,noRepeat=true),
+    Key("A","A",code=0x04),Key("S","S",code=0x16),Key("D","D",code=0x07),
+    Key("F","F",code=0x09),Key("G","G",code=0x0A),Key("H","H",code=0x0B),
+    Key("J","J",code=0x0D),Key("K","K",code=0x0E),Key("L","L",code=0x0F),
+    Key(";",":",code=0x33),Key("'","\"",code=0x34),
+    Key("↵","",code=0x28,w=2.25f,color=KC.ACCENT),
 )
-
 private val ROW_ALPHA = listOf(
-    Key("⇧", modBit=MOD_LSHIFT, w=2.25f, color=KC.MOD, isMod=true, noRepeat=true),
-    Key("Z","Z", code=0x1D), Key("X","X", code=0x1B), Key("C","C", code=0x06),
-    Key("V","V", code=0x19), Key("B","B", code=0x05), Key("N","N", code=0x11),
-    Key("M","M", code=0x10),
-    Key(",", "<", code=0x36),
-    Key(".", ">", code=0x37),
-    Key("/", "?", code=0x38),
-    Key("⇧", modBit=MOD_RSHIFT, w=2.75f, color=KC.MOD, isMod=true, noRepeat=true),
+    Key("⇧",modBit=MOD_LSHIFT,w=2.25f,color=KC.MOD,isMod=true,noRepeat=true),
+    Key("Z","Z",code=0x1D),Key("X","X",code=0x1B),Key("C","C",code=0x06),
+    Key("V","V",code=0x19),Key("B","B",code=0x05),Key("N","N",code=0x11),
+    Key("M","M",code=0x10),Key(",","<",code=0x36),Key(".",">" ,code=0x37),
+    Key("/","?",code=0x38),
+    Key("⇧",modBit=MOD_RSHIFT,w=2.75f,color=KC.MOD,isMod=true,noRepeat=true),
 )
-
 private val ROW_MODS = listOf(
-    Key("Ctrl",  modBit=MOD_LCTRL,  w=1.5f, color=KC.MOD, isMod=true, noRepeat=true),
-    Key("Win",   modBit=MOD_LGUI,   w=1.2f, color=KC.MOD, isMod=true, noRepeat=true),
-    Key("Alt",   modBit=MOD_LALT,   w=1.2f, color=KC.MOD, isMod=true, noRepeat=true),
-    Key("Space", code=0x2C, w=5.0f),
-    Key("AltGr", modBit=MOD_RALT,   w=1.2f, color=KC.MOD, isMod=true, noRepeat=true),
-    Key("Menu",  code=0x65, w=1.0f, color=KC.MOD, noRepeat=true),
-    Key("Fn",    w=1.0f, color=KC.FN, isFn=true, noRepeat=true),
-    Key("Ctrl",  modBit=MOD_RCTRL,  w=1.5f, color=KC.MOD, isMod=true, noRepeat=true),
+    Key("Ctrl", modBit=MOD_LCTRL, w=1.5f,color=KC.MOD,isMod=true,noRepeat=true),
+    Key("Win",  modBit=MOD_LGUI,  w=1.2f,color=KC.MOD,isMod=true,noRepeat=true),
+    Key("Alt",  modBit=MOD_LALT,  w=1.2f,color=KC.MOD,isMod=true,noRepeat=true),
+    Key("Space",code=0x2C,w=5.0f),
+    Key("AltGr",modBit=MOD_RALT,  w=1.2f,color=KC.MOD,isMod=true,noRepeat=true),
+    Key("Menu", code=0x65,w=1.0f,color=KC.MOD,noRepeat=true),
+    Key("Fn",   w=1.0f,color=KC.FN,isFn=true,noRepeat=true),
+    Key("Ctrl", modBit=MOD_RCTRL, w=1.5f,color=KC.MOD,isMod=true,noRepeat=true),
 )
-
-// Nav cluster rows
 private val NAV_ROW1 = listOf(
-    Key("Ins",  code=0x49, color=KC.SPECIAL),
-    Key("Home", code=0x4A, color=KC.SPECIAL),
-    Key("PgUp", code=0x4B, color=KC.SPECIAL),
+    Key("Ins",code=0x49,color=KC.SPECIAL),
+    Key("Home",code=0x4A,color=KC.SPECIAL),
+    Key("PgUp",code=0x4B,color=KC.SPECIAL),
 )
 private val NAV_ROW2 = listOf(
-    Key("Del",  code=0x4C, color=KC.DANGER),
-    Key("End",  code=0x4D, color=KC.SPECIAL),
-    Key("PgDn", code=0x4E, color=KC.SPECIAL),
+    Key("Del",code=0x4C,color=KC.DANGER),
+    Key("End",code=0x4D,color=KC.SPECIAL),
+    Key("PgDn",code=0x4E,color=KC.SPECIAL),
 )
-
-// Arrow keys
-private val KEY_UP    = Key("↑", code=0x52, color=KC.SPECIAL)
-private val KEY_LEFT  = Key("←", code=0x50, color=KC.SPECIAL)
-private val KEY_DOWN  = Key("↓", code=0x51, color=KC.SPECIAL)
-private val KEY_RIGHT = Key("→", code=0x4F, color=KC.SPECIAL)
-
-// ═════════════════════════════════════════════════════════════════════════════
-// Numpad
-// ═════════════════════════════════════════════════════════════════════════════
+private val KEY_UP    = Key("↑",code=0x52,color=KC.SPECIAL)
+private val KEY_LEFT  = Key("←",code=0x50,color=KC.SPECIAL)
+private val KEY_DOWN  = Key("↓",code=0x51,color=KC.SPECIAL)
+private val KEY_RIGHT = Key("→",code=0x4F,color=KC.SPECIAL)
 
 private data class NumKey(
     val onLabel  : String,
@@ -250,72 +269,58 @@ private data class NumKey(
     val isNumLock: Boolean = false,
     val noRepeat : Boolean = false,
 )
-
 private val NUMPAD_ROWS = listOf(
     listOf(
-        NumKey("NumLk", "NumLk", 0x53, color=KC.MOD, isNumLock=true, noRepeat=true),
-        NumKey("/",     "/",     0x54, color=KC.SPECIAL),
-        NumKey("*",     "*",     0x55, color=KC.SPECIAL),
-        NumKey("-",     "-",     0x56, color=KC.SPECIAL),
+        NumKey("NumLk","NumLk",0x53,color=KC.MOD,isNumLock=true,noRepeat=true),
+        NumKey("/","/",0x54,color=KC.SPECIAL),
+        NumKey("*","*",0x55,color=KC.SPECIAL),
+        NumKey("-","-",0x56,color=KC.SPECIAL),
     ),
     listOf(
-        NumKey("7", "Home", 0x5F),
-        NumKey("8", "↑",   0x60),
-        NumKey("9", "PgUp",0x61),
-        NumKey("+", "+",   0x57, color=KC.ACCENT),
+        NumKey("7","Home",0x5F), NumKey("8","↑",0x60),
+        NumKey("9","PgUp",0x61), NumKey("+","+",0x57,color=KC.ACCENT),
     ),
     listOf(
-        NumKey("4", "←",  0x5C),
-        NumKey("5", "·",  0x5D),
-        NumKey("6", "→",  0x5E),
+        NumKey("4","←",0x5C), NumKey("5","·",0x5D), NumKey("6","→",0x5E),
     ),
     listOf(
-        NumKey("1", "End", 0x59),
-        NumKey("2", "↓",  0x5A),
-        NumKey("3", "PgDn",0x5B),
-        NumKey("↵", "↵",  0x58, color=KC.ACCENT),
+        NumKey("1","End",0x59), NumKey("2","↓",0x5A),
+        NumKey("3","PgDn",0x5B), NumKey("↵","↵",0x58,color=KC.ACCENT),
     ),
     listOf(
-        NumKey("0", "Ins", 0x62, w=2f),
-        NumKey(".", "Del", 0x63),
+        NumKey("0","Ins",0x62,w=2f), NumKey(".","Del",0x63),
     ),
 )
-
-// ═════════════════════════════════════════════════════════════════════════════
-// Media keys
-// ═════════════════════════════════════════════════════════════════════════════
 
 private data class MKey(val icon: String, val label: String, val code: Int)
-
 private val MEDIA_TRANSPORT = listOf(
-    MKey("⏮", "Prev",  BleHidManager.CONSUMER_PREV_TRACK),
-    MKey("⏯", "Play",  BleHidManager.CONSUMER_PLAY_PAUSE),
-    MKey("⏭", "Next",  BleHidManager.CONSUMER_NEXT_TRACK),
-    MKey("⏹", "Stop",  BleHidManager.CONSUMER_STOP),
+    MKey("⏮","Prev", BleHidManager.CONSUMER_PREV_TRACK),
+    MKey("⏯","Play", BleHidManager.CONSUMER_PLAY_PAUSE),
+    MKey("⏭","Next", BleHidManager.CONSUMER_NEXT_TRACK),
+    MKey("⏹","Stop", BleHidManager.CONSUMER_STOP),
 )
 private val MEDIA_VOLUME = listOf(
-    MKey("🔇", "Mute",  BleHidManager.CONSUMER_MUTE),
-    MKey("🔉", "Vol -", BleHidManager.CONSUMER_VOL_DOWN),
-    MKey("🔊", "Vol +", BleHidManager.CONSUMER_VOL_UP),
+    MKey("🔇","Mute",  BleHidManager.CONSUMER_MUTE),
+    MKey("🔉","Vol -", BleHidManager.CONSUMER_VOL_DOWN),
+    MKey("🔊","Vol +", BleHidManager.CONSUMER_VOL_UP),
 )
 private val MEDIA_BRIGHT = listOf(
-    MKey("🔅", "Brt -", BleHidManager.CONSUMER_BRIGHTNESS_DOWN),
-    MKey("🔆", "Brt +", BleHidManager.CONSUMER_BRIGHTNESS_UP),
+    MKey("🔅","Brt -", BleHidManager.CONSUMER_BRIGHTNESS_DOWN),
+    MKey("🔆","Brt +", BleHidManager.CONSUMER_BRIGHTNESS_UP),
 )
-
 private val SYSTEM_ROW1 = listOf(
-    Key("Esc",   code=0x29, color=KC.DANGER,  noRepeat=true),
-    Key("Tab",   code=0x2B, color=KC.MOD),
-    Key("BkSp",  code=0x2A, color=KC.DANGER),
-    Key("Del",   code=0x4C, color=KC.DANGER),
-    Key("Enter", code=0x28, color=KC.ACCENT),
+    Key("Esc",  code=0x29,color=KC.DANGER, noRepeat=true),
+    Key("Tab",  code=0x2B,color=KC.MOD),
+    Key("BkSp", code=0x2A,color=KC.DANGER),
+    Key("Del",  code=0x4C,color=KC.DANGER),
+    Key("Enter",code=0x28,color=KC.ACCENT),
 )
 private val SYSTEM_ROW2 = listOf(
-    Key("PrtSc", code=0x46, color=KC.SPECIAL, noRepeat=true),
-    Key("ScrLk", code=0x47, color=KC.SPECIAL, noRepeat=true, isScroll=true),
-    Key("Pause", code=0x48, color=KC.SPECIAL, noRepeat=true),
-    Key("Ins",   code=0x49, color=KC.SPECIAL),
-    Key("Menu",  code=0x65, color=KC.MOD,     noRepeat=true),
+    Key("PrtSc",code=0x46,color=KC.SPECIAL,noRepeat=true),
+    Key("ScrLk",code=0x47,color=KC.SPECIAL,noRepeat=true,isScroll=true),
+    Key("Pause",code=0x48,color=KC.SPECIAL,noRepeat=true),
+    Key("Ins",  code=0x49,color=KC.SPECIAL),
+    Key("Menu", code=0x65,color=KC.MOD,    noRepeat=true),
 )
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -334,7 +339,6 @@ private fun keyBg(c: KC, active: Boolean, pressed: Boolean): Color = when {
         KC.FN      -> Color(0xFF1A2A1A)
     }
 }
-
 private fun keyFg(c: KC, active: Boolean): Color = when {
     active         -> Color(0xFF90CAF9)
     c == KC.ACCENT -> Color(0xFF64B5F6)
@@ -345,31 +349,59 @@ private fun keyFg(c: KC, active: Boolean): Color = when {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// KBtn — single key composable with repeat support
+// KBtn  (two modes: scrollable = true uses scrollSafeTap, false uses detectTapGestures)
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
 private fun KBtn(
-    key      : Key,
-    modifier : Modifier,
-    h        : Dp,
-    active   : Boolean = false,
-    topLabel : String  = "",
-    mainLabel: String,
-    subLabel : String  = "",
-    onPress  : () -> Unit,
+    key        : Key,
+    modifier   : Modifier,
+    h          : Dp,
+    active     : Boolean = false,
+    topLabel   : String  = "",
+    mainLabel  : String,
+    subLabel   : String  = "",
+    scrollable : Boolean = false,   // ← true on tabs 1 & 2 that verticalScroll
+    onPress    : () -> Unit,
 ) {
     val haptic  = LocalHapticFeedback.current
     val scope   = rememberCoroutineScope()
     var pressed by remember { mutableStateOf(false) }
     var holdJob by remember { mutableStateOf<Job?>(null) }
 
-    val bg by animateColorAsState(
-        keyBg(key.color, active, pressed), tween(70), label = "bg"
-    )
-    val sc by animateFloatAsState(
-        if (pressed) 0.93f else 1f, tween(55), label = "sc"
-    )
+    val bg by animateColorAsState(keyBg(key.color, active, pressed), tween(70), label="bg")
+    val sc by animateFloatAsState(if (pressed) 0.93f else 1f, tween(55), label="sc")
+
+    // Build the pointer handler depending on context
+    val gestureModifier = if (scrollable) {
+        // ── Scroll-safe: fire only when finger lifts without moving ───────────
+        Modifier.pointerInput(key) {
+            repeatScrollSafeTap(slopPx = 18f) {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onPress()
+            }
+        }
+    } else {
+        // ── Normal (non-scrollable tab): immediate press + key-repeat ─────────
+        Modifier.pointerInput(key) {
+            detectTapGestures(
+                onPress = {
+                    pressed = true
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onPress()
+                    if (key.shouldRepeat()) {
+                        holdJob = scope.launch {
+                            delay(400)
+                            while (isActive) { onPress(); delay(50) }
+                        }
+                    }
+                    tryAwaitRelease()
+                    pressed = false
+                    holdJob?.cancel(); holdJob = null
+                }
+            )
+        }
+    }
 
     Box(
         modifier = modifier
@@ -383,37 +415,15 @@ private fun KBtn(
                 color = if (active) Color(0xFF4A90D9) else Color.White.copy(0.08f),
                 shape = RoundedCornerShape(5.dp)
             )
-            .pointerInput(key) {
-                detectTapGestures(
-                    onPress = {
-                        pressed = true
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onPress()
-                        if (key.shouldRepeat()) {
-                            holdJob = scope.launch {
-                                delay(400)
-                                while (isActive) {
-                                    onPress()
-                                    delay(50)
-                                }
-                            }
-                        }
-                        tryAwaitRelease()
-                        pressed = false
-                        holdJob?.cancel()
-                        holdJob = null
-                    }
-                )
-            },
+            .then(gestureModifier),
         contentAlignment = Alignment.Center
     ) {
         Column(
-            modifier            = Modifier
+            modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 1.dp, vertical = 2.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // secondary char top-left
             if (topLabel.isNotEmpty()) {
                 Text(
                     topLabel,
@@ -426,11 +436,8 @@ private fun KBtn(
             } else {
                 Spacer(Modifier.height(7.sp.value.dp))
             }
-            // main label
             Box(
-                modifier         = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
+                modifier         = Modifier.weight(1f).fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -449,7 +456,6 @@ private fun KBtn(
                     overflow    = TextOverflow.Clip,
                 )
             }
-            // fn sub-label
             if (subLabel.isNotEmpty()) {
                 Text(
                     subLabel,
@@ -462,7 +468,6 @@ private fun KBtn(
                 Spacer(Modifier.height(6.sp.value.dp))
             }
         }
-        // LED dot for active toggle keys
         if (active) {
             Box(
                 Modifier
@@ -477,7 +482,7 @@ private fun KBtn(
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// ResponsiveRow — renders a list of Keys as a weight-based Row
+// ResponsiveRow — tab 0 only (not scrollable)
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
@@ -489,19 +494,16 @@ private fun ResponsiveRow(
 ) {
     Row(Modifier.fillMaxWidth()) {
         keys.forEach { k ->
-            val active    = isKeyActive(k, st)
-            val mainLabel = displayMain(k, st)
-            val topLabel  = displayTop(k, st)
-            val subLabel  = if (st.fn && k.fnLabel.isNotEmpty()) k.fnLabel else ""
             KBtn(
-                key       = k,
-                modifier  = Modifier.weight(k.w),
-                h         = height,
-                active    = active,
-                topLabel  = topLabel,
-                mainLabel = mainLabel,
-                subLabel  = subLabel,
-                onPress   = { onClick(k) },
+                key        = k,
+                modifier   = Modifier.weight(k.w),
+                h          = height,
+                active     = isKeyActive(k, st),
+                topLabel   = displayTop(k, st),
+                mainLabel  = displayMain(k, st),
+                subLabel   = if (st.fn && k.fnLabel.isNotEmpty()) k.fnLabel else "",
+                scrollable = false,
+                onPress    = { onClick(k) },
             )
         }
     }
@@ -512,10 +514,10 @@ private fun ResponsiveRow(
 // ═════════════════════════════════════════════════════════════════════════════
 
 private fun isKeyActive(k: Key, st: KbState): Boolean = when {
-    k.isCaps      -> st.caps
-    k.isNum       -> st.numLock
-    k.isFn        -> st.fn
-    k.isScroll    -> st.scrollLk
+    k.isCaps   -> st.caps
+    k.isNum    -> st.numLock
+    k.isFn     -> st.fn
+    k.isScroll -> st.scrollLk
     k.modBit == MOD_LSHIFT -> st.lShift
     k.modBit == MOD_RSHIFT -> st.rShift
     k.modBit == MOD_LCTRL  -> st.lCtrl
@@ -524,8 +526,8 @@ private fun isKeyActive(k: Key, st: KbState): Boolean = when {
     k.modBit == MOD_RALT   -> st.rAlt
     k.modBit == MOD_LGUI   -> st.lGui
     k.modBit == MOD_RGUI   -> st.rGui
-    k.code == 0x49 && !k.isMod -> !st.insertMode  // Insert overwrite active
-    else          -> false
+    k.code == 0x49 && !k.isMod -> !st.insertMode
+    else       -> false
 }
 
 private fun displayMain(k: Key, st: KbState): String {
@@ -561,7 +563,6 @@ fun KeyboardScreen(
     var typeText by remember { mutableStateOf("") }
     val scope    = rememberCoroutineScope()
 
-    // ── Core key handler ─────────────────────────────────────────────────────
     fun handleKey(key: Key) {
         when {
             key.isCaps -> {
@@ -579,18 +580,11 @@ fun KeyboardScreen(
                 onSendKey(0, listOf(0x47))
                 scope.launch { delay(60); onSendKey(0, emptyList()) }
             }
-            key.isFn -> {
-                st = st.copy(fn = !st.fn)
-            }
+            key.isFn -> { st = st.copy(fn = !st.fn) }
             key.code == 0x49 && !key.isMod -> {
-                // Insert key toggles overwrite mode
                 st = st.copy(insertMode = !st.insertMode, lastKey = "Ins")
                 onSendKey(st.modByte(), listOf(0x49))
-                scope.launch {
-                    delay(60)
-                    onSendKey(0, emptyList())
-                    st = st.releaseMods()
-                }
+                scope.launch { delay(60); onSendKey(0, emptyList()); st = st.releaseMods() }
             }
             key.isMod -> {
                 st = when (key.modBit) {
@@ -606,57 +600,34 @@ fun KeyboardScreen(
                 }
                 onSendKey(st.modByte(), emptyList())
             }
-
-            // Special case: if Tab is pressed with modifiers, release only Tab, keep modifiers held
             key.code == 0x2B -> {
                 val mod = st.modByte()
-                val keepModifiersHeld = st.anyMod
-
-                val label = buildString {
-                    append(st.modPrefix())
-                    append(key.label.ifEmpty { "Space" })
-                }
-
+                val keepMods = st.anyMod
+                val label = st.modPrefix() + key.label.ifEmpty { "Space" }
                 onSendKey(mod, listOf(key.code))
                 st = st.copy(lastKey = label)
-
                 scope.launch {
                     delay(60)
-                    if (keepModifiersHeld) {
-                        // Release only Tab, keep currently active modifiers held
-                        onSendKey(st.modByte(), emptyList())
-                    } else {
-                        // No modifier was active, behave normally
-                        onSendKey(0, emptyList())
-                        st = st.releaseMods()
-                    }
+                    if (keepMods) onSendKey(st.modByte(), emptyList())
+                    else { onSendKey(0, emptyList()); st = st.releaseMods() }
                 }
             }
-
             key.code != 0 -> {
-                var mod      = st.modByte()
+                var mod = st.modByte()
                 val isLetter = key.label.length == 1 && key.label[0].isLetter()
                 if (isLetter) {
                     val needShift = st.caps xor st.shift
                     mod = mod and (MOD_LSHIFT or MOD_RSHIFT).inv()
                     if (needShift) mod = mod or MOD_LSHIFT
                 }
-                val label = buildString {
-                    append(st.modPrefix())
-                    append(key.label.ifEmpty { "Space" })
-                }
+                val label = st.modPrefix() + key.label.ifEmpty { "Space" }
                 onSendKey(mod, listOf(key.code))
                 st = st.copy(lastKey = label)
-                scope.launch {
-                    delay(60)
-                    onSendKey(0, emptyList())
-                    st = st.releaseMods()
-                }
+                scope.launch { delay(60); onSendKey(0, emptyList()); st = st.releaseMods() }
             }
         }
     }
 
-    // ── Numpad handler ───────────────────────────────────────────────────────
     fun handleNumKey(nk: NumKey) {
         if (nk.isNumLock) {
             st = st.copy(numLock = !st.numLock, lastKey = "NumLk")
@@ -667,20 +638,12 @@ fun KeyboardScreen(
         val effective = if (st.shift) !st.numLock else st.numLock
         st = st.copy(lastKey = if (effective) nk.onLabel else nk.offLabel)
         onSendKey(st.modByte(), listOf(nk.code))
-        scope.launch {
-            delay(60)
-            onSendKey(0, emptyList())
-            st = st.releaseMods()
-        }
+        scope.launch { delay(60); onSendKey(0, emptyList()); st = st.releaseMods() }
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF080F18))
+        modifier = Modifier.fillMaxSize().background(Color(0xFF080F18))
     ) {
-
-        // ── Inner tab bar (Keys / Nav / Media) ────────────────────────────────
         val tabLabels = listOf("⌨ Keys", "↕ Nav+Num", "🎵 Media")
         TabRow(
             selectedTabIndex = st.tab,
@@ -708,32 +671,23 @@ fun KeyboardScreen(
                     text = {
                         Text(
                             title, fontSize = 12.sp,
-                            color      = if (st.tab == i) Color(0xFF90CAF9)
-                                         else Color(0xFF546E7A),
-                            fontWeight = if (st.tab == i) FontWeight.SemiBold
-                                         else FontWeight.Normal,
+                            color      = if (st.tab == i) Color(0xFF90CAF9) else Color(0xFF546E7A),
+                            fontWeight = if (st.tab == i) FontWeight.SemiBold else FontWeight.Normal,
                         )
                     }
                 )
             }
         }
 
-        // ── Status / modifier bar ─────────────────────────────────────────────
         KbStatusBar(
-            st         = st,
-            isReady    = isReady,
-            onClearMods = {
-                st = st.releaseMods().copy(lastKey = "")
-                onSendKey(0, emptyList())
-            }
+            st          = st,
+            isReady     = isReady,
+            onClearMods = { st = st.releaseMods().copy(lastKey = ""); onSendKey(0, emptyList()) }
         )
 
-        // ── Not-ready gate ────────────────────────────────────────────────────
         if (!isReady) {
             Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(Color(0xFF080F18)),
+                Modifier.fillMaxSize().background(Color(0xFF080F18)),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
@@ -742,17 +696,10 @@ fun KeyboardScreen(
                     modifier = Modifier.padding(32.dp)
                 ) {
                     Text("⏳", fontSize = 36.sp)
-                    Text(
-                        "Host not connected",
-                        color      = Color.White,
-                        fontSize   = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("Host not connected", color=Color.White, fontSize=16.sp, fontWeight=FontWeight.Bold)
                     Text(
                         "Go to Status tab → Start BLE HID\nPair from host Bluetooth settings",
-                        color     = Color.Gray,
-                        fontSize  = 13.sp,
-                        textAlign = TextAlign.Center
+                        color=Color.Gray, fontSize=13.sp, textAlign=TextAlign.Center
                     )
                 }
             }
@@ -760,18 +707,18 @@ fun KeyboardScreen(
         }
 
         // ══════════════════════════════════════════════════════════════════════
-        // TAB 0 — Full QWERTY keyboard
-        // ══════════════════════════════════════════════════════════════════════
         when (st.tab) {
+
+            // ── TAB 0: Full QWERTY (no scroll, use immediate press) ────────────
             0 -> Column(
-                modifier            = Modifier
+                modifier = Modifier
                     .fillMaxSize()
                     .background(Color(0xFF080F18))
                     .padding(horizontal = 2.dp, vertical = 3.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 ResponsiveRow(ROW_FN,     32.dp, st) { handleKey(it) }
-                HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
+                HorizontalDivider(color=Color.White.copy(0.04f), thickness=1.dp)
                 ResponsiveRow(ROW_NUM,    42.dp, st) { handleKey(it) }
                 ResponsiveRow(ROW_QWERTY, 42.dp, st) { handleKey(it) }
                 ResponsiveRow(ROW_HOME,   42.dp, st) { handleKey(it) }
@@ -779,9 +726,7 @@ fun KeyboardScreen(
                 ResponsiveRow(ROW_MODS,   42.dp, st) { handleKey(it) }
             }
 
-            // ══════════════════════════════════════════════════════════════════
-            // TAB 1 — Navigation + Numpad + Type text
-            // ══════════════════════════════════════════════════════════════════
+            // ── TAB 1: Nav + Numpad (scrollable → use scrollSafeTap) ──────────
             1 -> Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -790,73 +735,65 @@ fun KeyboardScreen(
                     .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-
-                // ── Nav cluster + Arrows side by side ─────────────────────────
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Navigation cluster
                     KbCard("Navigation", modifier = Modifier.weight(1f)) {
                         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             Row(Modifier.fillMaxWidth()) {
                                 NAV_ROW1.forEach { k ->
                                     KBtn(
-                                        key       = k,
-                                        modifier  = Modifier.weight(1f),
-                                        h         = 46.dp,
-                                        active    = isKeyActive(k, st),
-                                        mainLabel = displayMain(k, st),
-                                        onPress   = { handleKey(k) }
+                                        key        = k,
+                                        modifier   = Modifier.weight(1f),
+                                        h          = 46.dp,
+                                        active     = isKeyActive(k, st),
+                                        mainLabel  = displayMain(k, st),
+                                        scrollable = true,
+                                        onPress    = { handleKey(k) }
                                     )
                                 }
                             }
                             Row(Modifier.fillMaxWidth()) {
                                 NAV_ROW2.forEach { k ->
                                     KBtn(
-                                        key       = k,
-                                        modifier  = Modifier.weight(1f),
-                                        h         = 46.dp,
-                                        active    = isKeyActive(k, st),
-                                        mainLabel = displayMain(k, st),
-                                        onPress   = { handleKey(k) }
+                                        key        = k,
+                                        modifier   = Modifier.weight(1f),
+                                        h          = 46.dp,
+                                        active     = isKeyActive(k, st),
+                                        mainLabel  = displayMain(k, st),
+                                        scrollable = true,
+                                        onPress    = { handleKey(k) }
                                     )
                                 }
                             }
                         }
                     }
-
-                    // Arrow keys
                     KbCard("Arrows", modifier = Modifier.weight(1f)) {
                         Column(
                             modifier            = Modifier.fillMaxWidth(),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
-                            // Up arrow centred
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.Center
-                            ) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                                 KBtn(
-                                    key       = KEY_UP,
-                                    modifier  = Modifier.weight(1f),
-                                    h         = 46.dp,
-                                    active    = false,
-                                    mainLabel = "↑",
-                                    onPress   = { handleKey(KEY_UP) }
+                                    key        = KEY_UP,
+                                    modifier   = Modifier.weight(1f),
+                                    h          = 46.dp,
+                                    mainLabel  = "↑",
+                                    scrollable = true,
+                                    onPress    = { handleKey(KEY_UP) }
                                 )
                             }
-                            // Left / Down / Right
                             Row(Modifier.fillMaxWidth()) {
                                 listOf(KEY_LEFT, KEY_DOWN, KEY_RIGHT).forEach { k ->
                                     KBtn(
-                                        key       = k,
-                                        modifier  = Modifier.weight(1f),
-                                        h         = 46.dp,
-                                        active    = false,
-                                        mainLabel = k.label,
-                                        onPress   = { handleKey(k) }
+                                        key        = k,
+                                        modifier   = Modifier.weight(1f),
+                                        h          = 46.dp,
+                                        mainLabel  = k.label,
+                                        scrollable = true,
+                                        onPress    = { handleKey(k) }
                                     )
                                 }
                             }
@@ -864,17 +801,14 @@ fun KeyboardScreen(
                     }
                 }
 
-                // ── Insert mode toggle ─────────────────────────────────────────
                 Surface(
                     color    = if (st.insertMode) Color(0xFF0D1F0D) else Color(0xFF2A1800),
                     shape    = RoundedCornerShape(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            st = st.copy(insertMode = !st.insertMode)
-                            onSendKey(0, listOf(0x49))
-                            scope.launch { delay(60); onSendKey(0, emptyList()) }
-                        }
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        st = st.copy(insertMode = !st.insertMode)
+                        onSendKey(0, listOf(0x49))
+                        scope.launch { delay(60); onSendKey(0, emptyList()) }
+                    }
                 ) {
                     Row(
                         modifier              = Modifier.padding(12.dp),
@@ -883,23 +817,19 @@ fun KeyboardScreen(
                     ) {
                         Text(
                             if (st.insertMode) "INSERT" else "OVERWRITE",
-                            color      = if (st.insertMode) Color(0xFF81C784)
-                                         else Color(0xFFFFB74D),
+                            color      = if (st.insertMode) Color(0xFF81C784) else Color(0xFFFFB74D),
                             fontSize   = 13.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
                             if (st.insertMode) "Tap to switch → Overwrite mode"
                             else               "Tap to switch → Insert mode",
-                            color    = Color.Gray,
-                            fontSize = 11.sp
+                            color = Color.Gray, fontSize = 11.sp
                         )
                     }
                 }
 
-                // ── Numpad ─────────────────────────────────────────────────────
                 KbCard("Numpad") {
-                    // NumLock status
                     Surface(
                         color    = if (st.numLock) Color(0xFF1565C0) else Color(0xFF4A1800),
                         shape    = RoundedCornerShape(5.dp),
@@ -915,16 +845,12 @@ fun KeyboardScreen(
                     }
                     Spacer(Modifier.height(4.dp))
 
-                    // Numpad rows
                     NUMPAD_ROWS.forEach { row ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
+                        Row(modifier = Modifier.fillMaxWidth()) {
                             row.forEach { nk ->
                                 val effective = if (st.shift) !st.numLock else st.numLock
                                 val mainLbl   = if (nk.isNumLock) "NumLk"
-                                               else if (effective) nk.onLabel
-                                               else nk.offLabel
+                                               else if (effective) nk.onLabel else nk.offLabel
                                 val topLbl    = if (!nk.isNumLock && nk.onLabel != nk.offLabel)
                                                     if (effective) nk.offLabel else nk.onLabel
                                                else ""
@@ -937,24 +863,21 @@ fun KeyboardScreen(
                                         .padding(1.dp)
                                         .clip(RoundedCornerShape(5.dp))
                                         .background(
-                                            Brush.verticalGradient(
-                                                listOf(
-                                                    keyBg(nk.color, isActive, false).copy(0.85f),
-                                                    keyBg(nk.color, isActive, false)
-                                                )
-                                            )
+                                            Brush.verticalGradient(listOf(
+                                                keyBg(nk.color, isActive, false).copy(0.85f),
+                                                keyBg(nk.color, isActive, false)
+                                            ))
                                         )
                                         .border(
                                             if (isActive) 1.5.dp else 0.5.dp,
-                                            if (isActive) Color(0xFF4A90D9)
-                                            else Color.White.copy(0.08f),
+                                            if (isActive) Color(0xFF4A90D9) else Color.White.copy(0.08f),
                                             RoundedCornerShape(5.dp)
                                         )
+                                        // ← scroll-safe tap for numpad
                                         .pointerInput(nk) {
-                                            detectTapGestures(onPress = {
+                                            repeatScrollSafeTap(slopPx = 18f) {
                                                 handleNumKey(nk)
-                                                tryAwaitRelease()
-                                            })
+                                            }
                                         },
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -965,10 +888,10 @@ fun KeyboardScreen(
                                         if (topLbl.isNotEmpty()) {
                                             Text(
                                                 topLbl,
-                                                fontSize  = 7.sp,
-                                                color     = Color.White.copy(0.28f),
-                                                textAlign = TextAlign.Center,
-                                                lineHeight= 7.sp,
+                                                fontSize   = 7.sp,
+                                                color      = Color.White.copy(0.28f),
+                                                textAlign  = TextAlign.Center,
+                                                lineHeight = 7.sp,
                                             )
                                         }
                                         Text(
@@ -1000,13 +923,12 @@ fun KeyboardScreen(
                     }
                 }
 
-                // ── Type & Send text ───────────────────────────────────────────
                 KbCard("Type & Send Text") {
                     OutlinedTextField(
                         value         = typeText,
                         onValueChange = { typeText = it },
                         modifier      = Modifier.fillMaxWidth(),
-                        placeholder   = { Text("Enter text to send…", color = Color.Gray) },
+                        placeholder   = { Text("Enter text to send…", color=Color.Gray) },
                         maxLines      = 4,
                         colors        = OutlinedTextFieldDefaults.colors(
                             focusedTextColor     = Color.White,
@@ -1019,31 +941,22 @@ fun KeyboardScreen(
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
-                            onClick  = {
-                                if (typeText.isNotBlank()) {
-                                    onTypeText(typeText)
-                                    typeText = ""
-                                }
-                            },
+                            onClick  = { if (typeText.isNotBlank()) { onTypeText(typeText); typeText = "" } },
                             modifier = Modifier.weight(1f),
-                            colors   = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF1565C0))
+                            colors   = ButtonDefaults.buttonColors(containerColor=Color(0xFF1565C0))
                         ) { Text("Send Text") }
                         OutlinedButton(
                             onClick  = { typeText = "" },
                             modifier = Modifier.weight(0.4f),
-                            border   = androidx.compose.foundation.BorderStroke(
-                                1.dp, Color.White.copy(0.2f))
-                        ) { Text("Clear", color = Color.White) }
+                            border   = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(0.2f))
+                        ) { Text("Clear", color=Color.White) }
                     }
                 }
 
                 Spacer(Modifier.height(16.dp))
             }
 
-            // ══════════════════════════════════════════════════════════════════
-            // TAB 2 — Media + System keys
-            // ══════════════════════════════════════════════════════════════════
+            // ── TAB 2: Media (scrollable → use scrollSafeTap) ─────────────────
             2 -> Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1052,147 +965,120 @@ fun KeyboardScreen(
                     .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-
-                // ── Transport controls ─────────────────────────────────────────
                 KbCard("Transport") {
-                    Row(
-                        modifier              = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
+                    Row(modifier=Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                         MEDIA_TRANSPORT.forEach { mk ->
                             MediaKeyBtn(
                                 icon     = mk.icon,
                                 label    = mk.label,
                                 modifier = Modifier.weight(1f),
                                 h        = 64.dp,
-                                onClick  = {
-                                    onConsumerKey(mk.code)
-                                    st = st.copy(lastKey = mk.label)
-                                }
+                                onClick  = { onConsumerKey(mk.code); st = st.copy(lastKey=mk.label) }
                             )
                         }
                     }
                 }
 
-                // ── Volume ─────────────────────────────────────────────────────
                 KbCard("Volume & Brightness") {
-                    Row(
-                        modifier              = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
+                    Row(modifier=Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                         (MEDIA_VOLUME + MEDIA_BRIGHT).forEach { mk ->
                             MediaKeyBtn(
                                 icon     = mk.icon,
                                 label    = mk.label,
                                 modifier = Modifier.weight(1f),
                                 h        = 56.dp,
-                                onClick  = {
-                                    onConsumerKey(mk.code)
-                                    st = st.copy(lastKey = mk.label)
-                                }
+                                onClick  = { onConsumerKey(mk.code); st = st.copy(lastKey=mk.label) }
                             )
                         }
                     }
                 }
 
-                // ── System keys row 1 ──────────────────────────────────────────
                 KbCard("System Keys") {
                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Row(Modifier.fillMaxWidth()) {
                             SYSTEM_ROW1.forEach { k ->
                                 KBtn(
-                                    key       = k,
-                                    modifier  = Modifier.weight(1f),
-                                    h         = 46.dp,
-                                    active    = isKeyActive(k, st),
-                                    mainLabel = displayMain(k, st),
-                                    onPress   = { handleKey(k) }
+                                    key        = k,
+                                    modifier   = Modifier.weight(1f),
+                                    h          = 46.dp,
+                                    active     = isKeyActive(k, st),
+                                    mainLabel  = displayMain(k, st),
+                                    scrollable = true,
+                                    onPress    = { handleKey(k) }
                                 )
                             }
                         }
                         Row(Modifier.fillMaxWidth()) {
                             SYSTEM_ROW2.forEach { k ->
                                 KBtn(
-                                    key       = k,
-                                    modifier  = Modifier.weight(1f),
-                                    h         = 46.dp,
-                                    active    = isKeyActive(k, st),
-                                    mainLabel = displayMain(k, st),
-                                    onPress   = { handleKey(k) }
+                                    key        = k,
+                                    modifier   = Modifier.weight(1f),
+                                    h          = 46.dp,
+                                    active     = isKeyActive(k, st),
+                                    mainLabel  = displayMain(k, st),
+                                    scrollable = true,
+                                    onPress    = { handleKey(k) }
                                 )
                             }
                         }
                     }
                 }
 
-                // ── Quick modifier row ─────────────────────────────────────────
                 KbCard("Quick Modifiers") {
-                    Row(
-                        modifier              = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
+                    Row(modifier=Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(4.dp)) {
                         listOf(
-                            Key("Ctrl",  modBit=MOD_LCTRL,  color=KC.MOD, isMod=true, noRepeat=true),
-                            Key("Shift", modBit=MOD_LSHIFT, color=KC.MOD, isMod=true, noRepeat=true),
-                            Key("Alt",   modBit=MOD_LALT,   color=KC.MOD, isMod=true, noRepeat=true),
-                            Key("Win",   modBit=MOD_LGUI,   color=KC.MOD, isMod=true, noRepeat=true),
-                            Key("AltGr", modBit=MOD_RALT,   color=KC.MOD, isMod=true, noRepeat=true),
+                            Key("Ctrl", modBit=MOD_LCTRL, color=KC.MOD,isMod=true,noRepeat=true),
+                            Key("Shift",modBit=MOD_LSHIFT,color=KC.MOD,isMod=true,noRepeat=true),
+                            Key("Alt",  modBit=MOD_LALT,  color=KC.MOD,isMod=true,noRepeat=true),
+                            Key("Win",  modBit=MOD_LGUI,  color=KC.MOD,isMod=true,noRepeat=true),
+                            Key("AltGr",modBit=MOD_RALT,  color=KC.MOD,isMod=true,noRepeat=true),
                         ).forEach { k ->
                             KBtn(
-                                key       = k,
-                                modifier  = Modifier.weight(1f),
-                                h         = 44.dp,
-                                active    = isKeyActive(k, st),
-                                mainLabel = k.label,
-                                onPress   = { handleKey(k) }
+                                key        = k,
+                                modifier   = Modifier.weight(1f),
+                                h          = 44.dp,
+                                active     = isKeyActive(k, st),
+                                mainLabel  = k.label,
+                                scrollable = true,
+                                onPress    = { handleKey(k) }
                             )
                         }
                     }
-                    // Clear mods button
                     if (st.anyMod) {
                         Spacer(Modifier.height(4.dp))
                         OutlinedButton(
-                            onClick  = {
-                                st = st.releaseMods().copy(lastKey = "")
-                                onSendKey(0, emptyList())
-                            },
+                            onClick  = { st = st.releaseMods().copy(lastKey=""); onSendKey(0, emptyList()) },
                             modifier = Modifier.fillMaxWidth(),
-                            border   = androidx.compose.foundation.BorderStroke(
-                                1.dp, Color(0xFFEF9A9A).copy(0.5f))
-                        ) {
-                            Text("✕ Clear All Modifiers",
-                                color = Color(0xFFEF9A9A), fontSize = 12.sp)
-                        }
+                            border   = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF9A9A).copy(0.5f))
+                        ) { Text("✕ Clear All Modifiers", color=Color(0xFFEF9A9A), fontSize=12.sp) }
                     }
                 }
 
-                // ── Arrow keys (also on media tab for convenience) ─────────────
                 KbCard("Arrow Keys") {
                     Column(
                         modifier            = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
-                        Row(
-                            Modifier.fillMaxWidth(0.66f),
-                            horizontalArrangement = Arrangement.Center
-                        ) {
+                        Row(Modifier.fillMaxWidth(0.66f), horizontalArrangement=Arrangement.Center) {
                             KBtn(
-                                key       = KEY_UP,
-                                modifier  = Modifier.weight(1f),
-                                h         = 46.dp,
-                                mainLabel = "↑",
-                                onPress   = { handleKey(KEY_UP) }
+                                key        = KEY_UP,
+                                modifier   = Modifier.weight(1f),
+                                h          = 46.dp,
+                                mainLabel  = "↑",
+                                scrollable = true,
+                                onPress    = { handleKey(KEY_UP) }
                             )
                         }
                         Row(Modifier.fillMaxWidth(0.66f)) {
                             listOf(KEY_LEFT, KEY_DOWN, KEY_RIGHT).forEach { k ->
                                 KBtn(
-                                    key       = k,
-                                    modifier  = Modifier.weight(1f),
-                                    h         = 46.dp,
-                                    mainLabel = k.label,
-                                    onPress   = { handleKey(k) }
+                                    key        = k,
+                                    modifier   = Modifier.weight(1f),
+                                    h          = 46.dp,
+                                    mainLabel  = k.label,
+                                    scrollable = true,
+                                    onPress    = { handleKey(k) }
                                 )
                             }
                         }
@@ -1206,7 +1092,7 @@ fun KeyboardScreen(
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Status / modifier bar
+// KbStatusBar
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
@@ -1219,25 +1105,18 @@ private fun KbStatusBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color(0xFF050C14))
-            .padding(horizontal = 8.dp, vertical = 5.dp),
+            .padding(horizontal=8.dp, vertical=5.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // Badge row
         Row(
             horizontalArrangement = Arrangement.spacedBy(3.dp),
             verticalAlignment     = Alignment.CenterVertically
         ) {
             listOf(
-                "CAPS"  to st.caps,
-                "NUM"   to st.numLock,
-                "SCR"   to st.scrollLk,
-                "SHF"   to st.shift,
-                "CTL"   to st.ctrl,
-                "ALT"   to st.alt,
-                "AGR"   to st.altGr,
-                "WIN"   to st.gui,
-                "FN"    to st.fn,
-                "OVR"   to !st.insertMode,
+                "CAPS" to st.caps, "NUM"  to st.numLock, "SCR" to st.scrollLk,
+                "SHF"  to st.shift,"CTL"  to st.ctrl,    "ALT" to st.alt,
+                "AGR"  to st.altGr,"WIN"  to st.gui,     "FN"  to st.fn,
+                "OVR"  to !st.insertMode,
             ).forEach { (lbl, on) -> LedBadge(lbl, on) }
             Spacer(Modifier.weight(1f))
             Text(
@@ -1246,17 +1125,12 @@ private fun KbStatusBar(
                 color    = if (isReady) Color(0xFF81C784) else Color(0xFFEF9A9A)
             )
         }
-
-        // Combo preview
         if (st.anyMod || st.lastKey.isNotEmpty()) {
             Row(
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                val combo = buildString {
-                    append(st.modPrefix())
-                    if (st.lastKey.isNotEmpty()) append(st.lastKey)
-                }
+                val combo = st.modPrefix() + st.lastKey
                 Surface(
                     color    = Color(0xFF0A1828),
                     shape    = RoundedCornerShape(5.dp),
@@ -1270,19 +1144,16 @@ private fun KbStatusBar(
                             else            -> "⌨ $combo"
                         },
                         fontSize   = 11.sp,
-                        color      = if (combo.isEmpty()) Color(0xFF546E7A)
-                                     else Color(0xFF90CAF9),
+                        color      = if (combo.isEmpty()) Color(0xFF546E7A) else Color(0xFF90CAF9),
                         fontWeight = FontWeight.Medium,
-                        modifier   = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        modifier   = Modifier.padding(horizontal=10.dp, vertical=4.dp)
                     )
                 }
                 if (st.anyMod) {
                     TextButton(
                         onClick        = onClearMods,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text("✕ Clear", fontSize = 10.sp, color = Color(0xFFEF9A9A))
-                    }
+                        contentPadding = PaddingValues(horizontal=8.dp, vertical=2.dp)
+                    ) { Text("✕ Clear", fontSize=10.sp, color=Color(0xFFEF9A9A)) }
                 }
             }
         }
@@ -1290,28 +1161,28 @@ private fun KbStatusBar(
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// LED Badge
+// LedBadge
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
 private fun LedBadge(label: String, active: Boolean) {
     val bg by animateColorAsState(
         if (active) Color(0xFF1565C0) else Color.White.copy(0.04f),
-        tween(100), label = "led"
+        tween(100), label="led"
     )
-    Surface(shape = RoundedCornerShape(3.dp), color = bg) {
+    Surface(shape=RoundedCornerShape(3.dp), color=bg) {
         Text(
             label,
             fontSize   = 7.sp,
             color      = if (active) Color.White else Color(0xFF3A4A5A),
             fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-            modifier   = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+            modifier   = Modifier.padding(horizontal=4.dp, vertical=2.dp)
         )
     }
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// KbCard — dark themed card
+// KbCard
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
@@ -1322,26 +1193,21 @@ private fun KbCard(
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        colors   = CardDefaults.cardColors(containerColor = Color(0xFF111C28)),
+        colors   = CardDefaults.cardColors(containerColor=Color(0xFF111C28)),
         shape    = RoundedCornerShape(10.dp)
     ) {
         Column(
             modifier            = Modifier.padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Text(
-                title,
-                color      = Color(0xFF607D8B),
-                fontSize   = 10.sp,
-                fontWeight = FontWeight.SemiBold
-            )
+            Text(title, color=Color(0xFF607D8B), fontSize=10.sp, fontWeight=FontWeight.SemiBold)
             content()
         }
     }
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// MediaKeyBtn — large icon + label button for media controls
+// MediaKeyBtn  ← scroll-safe tap, fires only on clean lift
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
@@ -1356,7 +1222,7 @@ private fun MediaKeyBtn(
     var pressed by remember { mutableStateOf(false) }
     val bg by animateColorAsState(
         if (pressed) Color(0xFF1B3A5F) else Color(0xFF0E1C2A),
-        tween(60), label = "mb"
+        tween(60), label="mb"
     )
     Column(
         modifier = modifier
@@ -1365,29 +1231,22 @@ private fun MediaKeyBtn(
             .background(bg)
             .border(0.5.dp, Color.White.copy(0.08f), RoundedCornerShape(8.dp))
             .pointerInput(Unit) {
-                detectTapGestures(onPress = {
-                    pressed = true
+                repeatScrollSafeTap(slopPx = 18f) {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onClick()
-                    tryAwaitRelease()
-                    pressed = false
-                })
+                }
             },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(
-            icon,
-            fontSize  = 22.sp,
-            textAlign = TextAlign.Center,
-        )
+        Text(icon,  fontSize=22.sp, textAlign=TextAlign.Center)
         Text(
             label,
             fontSize  = 8.sp,
             color     = Color(0xFF78909C),
             textAlign = TextAlign.Center,
             maxLines  = 1,
-            modifier  = Modifier.padding(horizontal = 2.dp),
+            modifier  = Modifier.padding(horizontal=2.dp),
             overflow  = TextOverflow.Ellipsis,
         )
     }
