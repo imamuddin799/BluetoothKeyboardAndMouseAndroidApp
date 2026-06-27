@@ -32,6 +32,20 @@ import android.util.Log
  *
  *  5. On app cold-start, start() loads known hosts from prefs and immediately fires
  *     autoConnect calls in addition to advertising — no user interaction needed.
+ *
+ * COLD-START RACE CONDITION FIX:
+ *  The OS GATT stack fires autoConnect for known hosts almost immediately on start(),
+ *  but our GATT service pipeline (4 services) takes 3–5 seconds to complete. This means
+ *  onConnectionStateChange(CONNECTED) fires while mouseInputChar / keyboardInputChar are
+ *  still null — AND the host won't re-write its CCCD on reconnect (it's a bonded device).
+ *
+ *  Fix (three parts):
+ *   a. beginAddingServices() clears subscribedDevices so stale phantom subscriptions
+ *      from a prior OS GATT session don't linger while chars are null.
+ *   b. onConnectionStateChange records the known host in connectedDeviceMap + subscribedDevices
+ *      but skips the null char guard gracefully, logging that onServicesReady() will fix it.
+ *   c. onServicesReady() — called once ALL services are added — sweeps connectedDeviceMap
+ *      for known hosts and re-applies CCCD + subscription on the brand-new char instances.
  */
 @SuppressLint("MissingPermission")
 class BleHidManager(private val context: Context) {
@@ -40,14 +54,14 @@ class BleHidManager(private val context: Context) {
         private const val TAG = "BleHidManager"
 
         // SharedPreferences keys
-        private const val PREFS_NAME          = "ble_hid_prefs"
-        private const val PREFS_KNOWN_HOSTS   = "known_hosts"          // comma-separated addresses
+        private const val PREFS_NAME        = "ble_hid_prefs"
+        private const val PREFS_KNOWN_HOSTS = "known_hosts"   // comma-separated addresses
 
         // Timing
         private const val SERVICE_ADD_DELAY_MS    = 600L
         private const val SERVICE_ADD_TIMEOUT_MS  = 5_000L
-        private const val RECONNECT_INTERVAL_MS   = 8_000L             // retry autoConnect every 8 s
-        private const val INITIAL_RECONNECT_DELAY = 1_500L             // first attempt after this delay
+        private const val RECONNECT_INTERVAL_MS   = 8_000L    // retry autoConnect every 8 s
+        private const val INITIAL_RECONNECT_DELAY = 1_500L    // first attempt after this delay
 
         private const val MAX_CONNECTIONS = 4
 
@@ -421,26 +435,16 @@ class BleHidManager(private val context: Context) {
     // Bond change notification (called from MainActivity's BroadcastReceiver)
     // ═════════════════════════════════════════════════════════════════════════
 
-    /**
-     * MainActivity should call this from its BluetoothStateListener.onBondStateChanged().
-     * When a host removes the bond we forget it; when re-bonded we persist it.
-     */
     fun onBondStateChanged(device: BluetoothDevice, bondState: Int) {
         when (bondState) {
             BluetoothDevice.BOND_NONE -> {
-                // Host removed the bond — clear from our known set so we don't keep
-                // trying to autoConnect to a device that rejected us.
-                // We continue advertising so it can re-pair fresh.
                 if (knownHostAddresses.contains(device.address)) {
                     Log.d(TAG, "Bond removed by host ${device.address} — removing from known hosts")
                     removeKnownHost(device.address)
                 }
             }
             BluetoothDevice.BOND_BONDED -> {
-                // Fresh pairing completed — make sure we persist this address
                 Log.d(TAG, "New bond: ${device.address}")
-                // Actual persist happens in onDescriptorWriteRequest when CCCD is written,
-                // but adding here as an early hint is harmless.
             }
         }
     }
@@ -524,6 +528,12 @@ class BleHidManager(private val context: Context) {
         mouseInputChar    = null
         keyboardInputChar = null
 
+        // FIX (part a): Clear phantom subscriptions from any prior OS GATT session.
+        // The host may have reconnected during start() before our characteristics existed.
+        // onServicesReady() will re-populate subscribedDevices for connected known hosts
+        // once the new characteristic instances are actually ready.
+        subscribedDevices.clear()
+
         serviceQueue.addLast(buildGenericAccessService())
         serviceQueue.addLast(buildDeviceInformationService())
         serviceQueue.addLast(buildBatteryService())
@@ -534,7 +544,8 @@ class BleHidManager(private val context: Context) {
 
     private fun addNextService() {
         if (serviceQueue.isEmpty()) {
-            mainHandler.postDelayed({ startAdvertising() }, 500)
+            // All services added — call onServicesReady() instead of startAdvertising() directly
+            mainHandler.postDelayed({ onServicesReady() }, 500)
             return
         }
 
@@ -568,6 +579,49 @@ class BleHidManager(private val context: Context) {
     private fun cancelTimeout() {
         timeoutRunnable?.let { gattHandler?.removeCallbacks(it); mainHandler.removeCallbacks(it) }
         timeoutRunnable = null
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // FIX (part c): onServicesReady — called once ALL services and characteristics
+    // are fully initialised. At this point mouseInputChar and keyboardInputChar are
+    // guaranteed non-null. We start advertising and then sweep connectedDeviceMap for
+    // any known host that connected during the service setup window, re-applying their
+    // CCCD subscription on the brand-new characteristic instances.
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private fun onServicesReady() {
+        startAdvertising()
+
+        // Re-wire subscriptions for known hosts that connected while services were being added.
+        // The host won't re-write its CCCD descriptor on reconnect (it's bonded), so we must
+        // restore the subscription state manually on the freshly created characteristics.
+        val snapshot = connectedDeviceMap.values.toList()   // snapshot — avoid CME
+        for (info in snapshot) {
+            if (!knownHostAddresses.contains(info.address)) continue
+
+            Log.d(TAG, "onServicesReady: re-applying subscription for known host ${info.address}")
+
+            subscribedDevices.add(info.device)
+
+            // Update the in-memory CCCD value on the NEW characteristic instances
+            listOf(mouseInputChar, keyboardInputChar).forEach { char ->
+                char?.getDescriptor(UUID_CCCD)?.value =
+                    BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            }
+
+            // Update the map entry so UI shows "Ready"
+            connectedDeviceMap[info.address] = info.copy(isSubscribed = true)
+
+            mainHandler.post {
+                onDeviceSubscribed?.invoke(info.device)
+                notifyDeviceListChanged()
+            }
+        }
+
+        if (snapshot.any { knownHostAddresses.contains(it.address) }) {
+            Log.d(TAG, "onServicesReady: subscription restoration complete for ${
+                snapshot.count { knownHostAddresses.contains(it.address) }} host(s)")
+        }
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -731,7 +785,7 @@ class BleHidManager(private val context: Context) {
         override fun onStartFailure(errorCode: Int) {
             isAdvertising = false
             val msg = when (errorCode) {
-                ADVERTISE_FAILED_ALREADY_STARTED      -> {
+                ADVERTISE_FAILED_ALREADY_STARTED -> {
                     // Already advertising — treat as success
                     isAdvertising = true
                     currentState = BleHidState.ADVERTISING
@@ -776,34 +830,45 @@ class BleHidManager(private val context: Context) {
                     }
                     refreshBondedCache()
                     val resolvedName = resolveName(device)
+                    val isKnownHost  = knownHostAddresses.contains(device.address)
 
-                    // If this is a known host (previously subscribed), restore subscription
-                    // immediately. Bonded hosts cache their CCCD value OS-side and will NOT
-                    // re-write it on reconnect — so we must restore it ourselves.
-                    val isKnownHost = knownHostAddresses.contains(device.address)
                     if (isKnownHost) {
+                        // Always add to subscribedDevices so sendInputReport() can reach it.
                         subscribedDevices.add(device)
-                        // Also update the CCCD descriptor value in-memory so reads are correct
-                        listOf(mouseInputChar, keyboardInputChar).forEach { char ->
-                            char?.getDescriptor(UUID_CCCD)?.value =
-                                BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+
+                        // FIX (part b): Only update CCCD descriptors if characteristics exist.
+                        // If services are still being added (cold-start race), mouseInputChar
+                        // will be null here. onServicesReady() handles that case after setup.
+                        if (mouseInputChar != null && keyboardInputChar != null) {
+                            listOf(mouseInputChar, keyboardInputChar).forEach { char ->
+                                char?.getDescriptor(UUID_CCCD)?.value =
+                                    BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                            }
+                            Log.d(TAG, "Known host reconnected — subscription restored immediately: ${device.address}")
+                        } else {
+                            Log.d(TAG, "Known host reconnected before services ready — " +
+                                  "onServicesReady() will restore subscription: ${device.address}")
                         }
-                        Log.d(TAG, "Known host reconnected — subscription auto-restored: ${device.address}")
                     }
 
                     connectedDeviceMap[device.address] = DeviceInfo(
                         device       = device,
                         address      = device.address,
                         name         = resolvedName,
-                        isSubscribed = isKnownHost   // immediately Ready if known host
+                        isSubscribed = isKnownHost
                     )
                     Log.d(TAG, "Host connected: $resolvedName (${device.address}) knownHost=$isKnownHost")
 
                     mainHandler.post {
                         currentState = BleHidState.CONNECTED
-                        if (isKnownHost) onDeviceSubscribed?.invoke(device)
+                        // Only fire onDeviceSubscribed if chars were ready (not in cold-start race).
+                        // onServicesReady() will fire it after setup if chars were null.
+                        if (isKnownHost && mouseInputChar != null && keyboardInputChar != null) {
+                            onDeviceSubscribed?.invoke(device)
+                        }
                         notifyDeviceListChanged()
                     }
+
                     // Late name resolution
                     mainHandler.postDelayed({
                         val laterName = resolveName(device)
@@ -826,23 +891,19 @@ class BleHidManager(private val context: Context) {
                         currentState = when {
                             connectedDeviceMap.isNotEmpty() -> BleHidState.CONNECTED
                             isAdvertising                   -> BleHidState.ADVERTISING
-                            else                            -> BleHidState.ADVERTISING // keep as ADVERTISING not IDLE
+                            else                            -> BleHidState.ADVERTISING
                         }
                         notifyDeviceListChanged()
 
-                        // ── AUTO-RECONNECT: restart advertising + attempt background connect ──
-                        // Small delay so the stack settles before we hammer it
+                        // AUTO-RECONNECT: restart advertising + attempt background connect
                         mainHandler.postDelayed({
                             restartAdvertisingIfNeeded()
-                            // Immediately attempt a direct connect to this specific device
-                            // (it may still be in range)
                             try {
                                 gattServer?.connect(device, true)
                                 Log.d(TAG, "Direct autoConnect queued for ${device.address}")
                             } catch (e: Exception) {
                                 Log.w(TAG, "Direct autoConnect failed: ${e.message}")
                             }
-                            // Also start / reset the full reconnect loop for all known hosts
                             startReconnectLoop()
                         }, 800)
                     }
@@ -898,7 +959,7 @@ class BleHidManager(private val context: Context) {
                         connectedDeviceMap[device.address] = info.copy(isSubscribed = true)
                     }
 
-                    // ── PERSIST this host so we auto-reconnect next time ──────────
+                    // Persist this host so we auto-reconnect next time
                     saveKnownHost(device.address)
 
                     mainHandler.post {
