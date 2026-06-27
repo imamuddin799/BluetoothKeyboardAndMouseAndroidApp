@@ -33,6 +33,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToUp
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 
 // ═════════════════════════════════════════════════════════════════════════════
 // HID Modifier bits
@@ -350,14 +355,15 @@ private fun keyFg(c: KC, active: Boolean): Color = when {
 
 @Composable
 private fun KBtn(
-    key      : Key,
-    modifier : Modifier,
-    h        : Dp,
-    active   : Boolean = false,
-    topLabel : String  = "",
-    mainLabel: String,
-    subLabel : String  = "",
-    onPress  : () -> Unit,
+    key       : Key,
+    modifier  : Modifier,
+    h         : Dp,
+    active    : Boolean = false,
+    topLabel  : String  = "",
+    mainLabel : String,
+    subLabel  : String  = "",
+    onPress   : () -> Unit,
+    scrollable: Boolean = false,
 ) {
     val haptic  = LocalHapticFeedback.current
     val scope   = rememberCoroutineScope()
@@ -383,28 +389,84 @@ private fun KBtn(
                 color = if (active) Color(0xFF4A90D9) else Color.White.copy(0.08f),
                 shape = RoundedCornerShape(5.dp)
             )
-            .pointerInput(key) {
-                detectTapGestures(
-                    onPress = {
-                        pressed = true
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onPress()
-                        if (key.shouldRepeat()) {
-                            holdJob = scope.launch {
+            .then(
+                if (!scrollable) {
+                    Modifier.pointerInput(key) {
+                        detectTapGestures(
+                            onPress = {
+                                pressed = true
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onPress()
+                                if (key.shouldRepeat()) {
+                                    holdJob = scope.launch {
+                                        delay(400)
+                                        while (isActive) {
+                                            onPress()
+                                            delay(50)
+                                        }
+                                    }
+                                }
+                                tryAwaitRelease()
+                                pressed = false
+                                holdJob?.cancel()
+                                holdJob = null
+                            }
+                        )
+                    }
+                } else {
+                    Modifier.pointerInput(key) {
+                        val slop = viewConfiguration.touchSlop
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            val downPos = down.position
+                            var wasDrag = false
+                            var repeatJob: Job? = null
+
+                            repeatJob = scope.launch {
                                 delay(400)
-                                while (isActive) {
+                                while (isActive && !wasDrag) {
                                     onPress()
                                     delay(50)
                                 }
                             }
+
+                            var isDown = true
+                            while (isDown) {
+                                val event = awaitPointerEvent()
+                                for (change in event.changes) {
+                                    if (!change.pressed) {
+                                        isDown = false
+                                        break
+                                    }
+                                    val dist = (change.position - downPos).getDistance()
+                                    if (dist > slop) {
+                                        wasDrag = true
+                                        repeatJob?.cancel()
+                                        repeatJob = null
+                                        pressed = false
+                                        isDown = false
+                                        break
+                                    }
+                                }
+                            }
+
+                            repeatJob?.cancel()
+
+                            if (!wasDrag) {
+                                pressed = true
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onPress()
+                                scope.launch {
+                                    delay(80)
+                                    pressed = false
+                                }
+                            } else {
+                                pressed = false
+                            }
                         }
-                        tryAwaitRelease()
-                        pressed = false
-                        holdJob?.cancel()
-                        holdJob = null
                     }
-                )
-            },
+                }
+            ),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -413,7 +475,6 @@ private fun KBtn(
                 .padding(horizontal = 1.dp, vertical = 2.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // secondary char top-left
             if (topLabel.isNotEmpty()) {
                 Text(
                     topLabel,
@@ -426,7 +487,6 @@ private fun KBtn(
             } else {
                 Spacer(Modifier.height(7.sp.value.dp))
             }
-            // main label
             Box(
                 modifier         = Modifier
                     .weight(1f)
@@ -449,7 +509,6 @@ private fun KBtn(
                     overflow    = TextOverflow.Clip,
                 )
             }
-            // fn sub-label
             if (subLabel.isNotEmpty()) {
                 Text(
                     subLabel,
@@ -462,7 +521,6 @@ private fun KBtn(
                 Spacer(Modifier.height(6.sp.value.dp))
             }
         }
-        // LED dot for active toggle keys
         if (active) {
             Box(
                 Modifier
@@ -802,24 +860,26 @@ fun KeyboardScreen(
                             Row(Modifier.fillMaxWidth()) {
                                 NAV_ROW1.forEach { k ->
                                     KBtn(
-                                        key       = k,
-                                        modifier  = Modifier.weight(1f),
-                                        h         = 46.dp,
-                                        active    = isKeyActive(k, st),
-                                        mainLabel = displayMain(k, st),
-                                        onPress   = { handleKey(k) }
+                                        key        = k,
+                                        modifier   = Modifier.weight(1f),
+                                        h          = 46.dp,
+                                        active     = isKeyActive(k, st),
+                                        mainLabel  = displayMain(k, st),
+                                        onPress    = { handleKey(k) },
+                                        scrollable = true,
                                     )
                                 }
                             }
                             Row(Modifier.fillMaxWidth()) {
                                 NAV_ROW2.forEach { k ->
                                     KBtn(
-                                        key       = k,
-                                        modifier  = Modifier.weight(1f),
-                                        h         = 46.dp,
-                                        active    = isKeyActive(k, st),
-                                        mainLabel = displayMain(k, st),
-                                        onPress   = { handleKey(k) }
+                                        key        = k,
+                                        modifier   = Modifier.weight(1f),
+                                        h          = 46.dp,
+                                        active     = isKeyActive(k, st),
+                                        mainLabel  = displayMain(k, st),
+                                        onPress    = { handleKey(k) },
+                                        scrollable = true,
                                     )
                                 }
                             }
@@ -839,24 +899,26 @@ fun KeyboardScreen(
                                 horizontalArrangement = Arrangement.Center
                             ) {
                                 KBtn(
-                                    key       = KEY_UP,
-                                    modifier  = Modifier.weight(1f),
-                                    h         = 46.dp,
-                                    active    = false,
-                                    mainLabel = "↑",
-                                    onPress   = { handleKey(KEY_UP) }
+                                    key        = KEY_UP,
+                                    modifier   = Modifier.weight(1f),
+                                    h          = 46.dp,
+                                    active     = false,
+                                    mainLabel  = "↑",
+                                    onPress    = { handleKey(KEY_UP) },
+                                    scrollable = true,
                                 )
                             }
                             // Left / Down / Right
                             Row(Modifier.fillMaxWidth()) {
                                 listOf(KEY_LEFT, KEY_DOWN, KEY_RIGHT).forEach { k ->
                                     KBtn(
-                                        key       = k,
-                                        modifier  = Modifier.weight(1f),
-                                        h         = 46.dp,
-                                        active    = false,
-                                        mainLabel = k.label,
-                                        onPress   = { handleKey(k) }
+                                        key        = k,
+                                        modifier   = Modifier.weight(1f),
+                                        h          = 46.dp,
+                                        active     = false,
+                                        mainLabel  = k.label,
+                                        onPress    = { handleKey(k) },
+                                        scrollable = true,
                                     )
                                 }
                             }
@@ -951,10 +1013,33 @@ fun KeyboardScreen(
                                             RoundedCornerShape(5.dp)
                                         )
                                         .pointerInput(nk) {
-                                            detectTapGestures(onPress = {
-                                                handleNumKey(nk)
-                                                tryAwaitRelease()
-                                            })
+                                            val slop = viewConfiguration.touchSlop
+                                            awaitEachGesture {
+                                                val down = awaitFirstDown(requireUnconsumed = false)
+                                                val downPos = down.position
+                                                var wasDrag = false
+
+                                                var isDown = true
+                                                while (isDown) {
+                                                    val event = awaitPointerEvent()
+                                                    for (change in event.changes) {
+                                                        if (!change.pressed) {
+                                                            isDown = false
+                                                            break
+                                                        }
+                                                        val dist = (change.position - downPos).getDistance()
+                                                        if (dist > slop) {
+                                                            wasDrag = true
+                                                            isDown = false
+                                                            break
+                                                        }
+                                                    }
+                                                }
+
+                                                if (!wasDrag) {
+                                                    handleNumKey(nk)
+                                                }
+                                            }
                                         },
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -1101,24 +1186,26 @@ fun KeyboardScreen(
                         Row(Modifier.fillMaxWidth()) {
                             SYSTEM_ROW1.forEach { k ->
                                 KBtn(
-                                    key       = k,
-                                    modifier  = Modifier.weight(1f),
-                                    h         = 46.dp,
-                                    active    = isKeyActive(k, st),
-                                    mainLabel = displayMain(k, st),
-                                    onPress   = { handleKey(k) }
+                                    key        = k,
+                                    modifier   = Modifier.weight(1f),
+                                    h          = 46.dp,
+                                    active     = isKeyActive(k, st),
+                                    mainLabel  = displayMain(k, st),
+                                    onPress    = { handleKey(k) },
+                                    scrollable = true,
                                 )
                             }
                         }
                         Row(Modifier.fillMaxWidth()) {
                             SYSTEM_ROW2.forEach { k ->
                                 KBtn(
-                                    key       = k,
-                                    modifier  = Modifier.weight(1f),
-                                    h         = 46.dp,
-                                    active    = isKeyActive(k, st),
-                                    mainLabel = displayMain(k, st),
-                                    onPress   = { handleKey(k) }
+                                    key        = k,
+                                    modifier   = Modifier.weight(1f),
+                                    h          = 46.dp,
+                                    active     = isKeyActive(k, st),
+                                    mainLabel  = displayMain(k, st),
+                                    onPress    = { handleKey(k) },
+                                    scrollable = true,
                                 )
                             }
                         }
@@ -1139,12 +1226,13 @@ fun KeyboardScreen(
                             Key("AltGr", modBit=MOD_RALT,   color=KC.MOD, isMod=true, noRepeat=true),
                         ).forEach { k ->
                             KBtn(
-                                key       = k,
-                                modifier  = Modifier.weight(1f),
-                                h         = 44.dp,
-                                active    = isKeyActive(k, st),
-                                mainLabel = k.label,
-                                onPress   = { handleKey(k) }
+                                key        = k,
+                                modifier   = Modifier.weight(1f),
+                                h          = 44.dp,
+                                active     = isKeyActive(k, st),
+                                mainLabel  = k.label,
+                                onPress    = { handleKey(k) },
+                                scrollable = true,
                             )
                         }
                     }
@@ -1178,21 +1266,23 @@ fun KeyboardScreen(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             KBtn(
-                                key       = KEY_UP,
-                                modifier  = Modifier.weight(1f),
-                                h         = 46.dp,
-                                mainLabel = "↑",
-                                onPress   = { handleKey(KEY_UP) }
+                                key        = KEY_UP,
+                                modifier   = Modifier.weight(1f),
+                                h          = 46.dp,
+                                mainLabel  = "↑",
+                                onPress    = { handleKey(KEY_UP) },
+                                scrollable = true,
                             )
                         }
                         Row(Modifier.fillMaxWidth(0.66f)) {
                             listOf(KEY_LEFT, KEY_DOWN, KEY_RIGHT).forEach { k ->
                                 KBtn(
-                                    key       = k,
-                                    modifier  = Modifier.weight(1f),
-                                    h         = 46.dp,
-                                    mainLabel = k.label,
-                                    onPress   = { handleKey(k) }
+                                    key        = k,
+                                    modifier   = Modifier.weight(1f),
+                                    h          = 46.dp,
+                                    mainLabel  = k.label,
+                                    onPress    = { handleKey(k) },
+                                    scrollable = true,
                                 )
                             }
                         }
@@ -1346,14 +1436,15 @@ private fun KbCard(
 
 @Composable
 private fun MediaKeyBtn(
-    icon    : String,
-    label   : String,
-    modifier: Modifier,
-    h       : Dp,
-    onClick : () -> Unit,
+    icon      : String,
+    label     : String,
+    modifier  : Modifier,
+    h         : Dp,
+    onClick   : () -> Unit,
 ) {
     val haptic  = LocalHapticFeedback.current
     var pressed by remember { mutableStateOf(false) }
+    val scope   = rememberCoroutineScope()
     val bg by animateColorAsState(
         if (pressed) Color(0xFF1B3A5F) else Color(0xFF0E1C2A),
         tween(60), label = "mb"
@@ -1365,13 +1456,39 @@ private fun MediaKeyBtn(
             .background(bg)
             .border(0.5.dp, Color.White.copy(0.08f), RoundedCornerShape(8.dp))
             .pointerInput(Unit) {
-                detectTapGestures(onPress = {
-                    pressed = true
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onClick()
-                    tryAwaitRelease()
-                    pressed = false
-                })
+                val slop = viewConfiguration.touchSlop
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val downPos = down.position
+                    var wasDrag = false
+
+                    var isDown = true
+                    while (isDown) {
+                        val event = awaitPointerEvent()
+                        for (change in event.changes) {
+                            if (!change.pressed) {
+                                isDown = false
+                                break
+                            }
+                            val dist = (change.position - downPos).getDistance()
+                            if (dist > slop) {
+                                wasDrag = true
+                                isDown = false
+                                break
+                            }
+                        }
+                    }
+
+                    if (!wasDrag) {
+                        pressed = true
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onClick()
+                        scope.launch {
+                            delay(80)
+                            pressed = false
+                        }
+                    }
+                }
             },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
