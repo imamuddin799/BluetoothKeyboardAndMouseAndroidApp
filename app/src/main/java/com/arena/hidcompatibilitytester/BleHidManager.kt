@@ -237,15 +237,19 @@ class BleHidManager(private val context: Context) {
             return
         }
         if (currentState is BleHidState.ADVERTISING ||
-            currentState is BleHidState.CONNECTED) {
-            Log.w(TAG, "Already running"); return
+            currentState is BleHidState.CONNECTED   ||
+            currentState is BleHidState.STARTING) {
+            Log.w(TAG, "start() ignored — already running (state=$currentState)"); return
         }
 
         isRunning = true
         refreshBondedCache()
-        knownHostAddresses.clear()
-        knownHostAddresses.addAll(loadKnownHosts())
-        Log.d(TAG, "Known hosts loaded: ${knownHostAddresses.size} → $knownHostAddresses")
+        // Only reload known hosts on true cold-start; preserve the in-memory set across
+        // BT off/on cycles so addresses added during this session aren't lost.
+        if (knownHostAddresses.isEmpty()) {
+            knownHostAddresses.addAll(loadKnownHosts())
+        }
+        Log.d(TAG, "Known hosts: ${knownHostAddresses.size} → $knownHostAddresses")
 
         try { adapter?.name = "HID Clone" } catch (e: Exception) { Log.w(TAG, "rename: ${e.message}") }
 
@@ -257,27 +261,60 @@ class BleHidManager(private val context: Context) {
     fun stop() {
         Log.d(TAG, "stop()")
         isRunning = false
+        resetInternalState(restoreName = true)
+        currentState = BleHidState.IDLE
+        notifyDeviceListChanged()
+    }
+
+    /**
+     * Tears down the GATT server, advertiser, threads, and all device tracking — but
+     * intentionally preserves [knownHostAddresses] so auto-reconnect works after restart.
+     *
+     * Called by [stop] (user-initiated) and [onBluetoothOff] (BT stack going down).
+     * Unlike [stop], [onBluetoothOff] must NOT try to close the GATT server or cancel
+     * connections because the BT stack is already dead — those calls would throw or hang.
+     *
+     * @param restoreName  true when called from stop() so we can put the adapter name back.
+     * @param btStackAlive false when BT is turning off — skips calls into the dead stack.
+     */
+    private fun resetInternalState(restoreName: Boolean = false, btStackAlive: Boolean = true) {
         cancelReconnectLoop()
         cancelTimeout()
-        stopAdvertising()
 
-        for (info in connectedDeviceMap.values.toList()) {
-            try { gattServer?.cancelConnection(info.device) } catch (e: Exception) {}
+        if (btStackAlive) {
+            stopAdvertising()
+            for (info in connectedDeviceMap.values.toList()) {
+                try { gattServer?.cancelConnection(info.device) } catch (e: Exception) {}
+            }
+            try { gattServer?.close() } catch (e: Exception) { Log.e(TAG, "close: ${e.message}") }
         }
-        try { gattServer?.close() } catch (e: Exception) { Log.e(TAG, "close: ${e.message}") }
 
-        gattServer         = null
-        mouseInputChar     = null
-        keyboardInputChar  = null
+        gattServer        = null
+        advertiser        = null
+        isAdvertising     = false
+        mouseInputChar    = null
+        keyboardInputChar = null
         connectedDeviceMap.clear()
         subscribedDevices.clear()
         serviceQueue.clear()
 
         stopGattThread()
 
-        try { if (originalName != null) adapter?.name = originalName }
-        catch (e: Exception) { Log.w(TAG, "restore name: ${e.message}") }
+        if (restoreName) {
+            try { if (originalName != null) adapter?.name = originalName }
+            catch (e: Exception) { Log.w(TAG, "restore name: ${e.message}") }
+        }
+    }
 
+    /**
+     * Called from MainActivity's bluetoothStateReceiver when STATE_OFF is received.
+     * Resets all internal state without touching the dead BT stack, so that when BT
+     * comes back on [start] sees IDLE and runs cleanly.
+     */
+    fun onBluetoothOff() {
+        Log.d(TAG, "onBluetoothOff — resetting internal state (stack already dead)")
+        // isRunning stays true so that when BT comes back on we auto-restart
+        resetInternalState(restoreName = false, btStackAlive = false)
         currentState = BleHidState.IDLE
         notifyDeviceListChanged()
     }

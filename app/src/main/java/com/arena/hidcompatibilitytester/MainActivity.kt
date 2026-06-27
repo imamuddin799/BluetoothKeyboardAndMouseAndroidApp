@@ -52,8 +52,11 @@ class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateL
 
     // ── Bluetooth ON/OFF receiver ─────────────────────────────────────────────
     /**
-     * When the user turns Bluetooth back on, automatically restart the HID peripheral
-     * so it can reconnect without any user action.
+     * KEY FIX: When BT turns OFF, we call bleHidManager.onBluetoothOff() which resets
+     * all internal state (gattServer, advertiser, char references, device maps) to a
+     * clean IDLE without touching the dead BT stack. This ensures that when BT turns
+     * back ON, bleHidManager.start() sees IDLE and runs fully instead of hitting the
+     * "already running" guard with a stale ADVERTISING/CONNECTED state.
      */
     private val bluetoothStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -61,30 +64,30 @@ class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateL
             val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
             when (state) {
                 BluetoothAdapter.STATE_ON -> {
-                    // BT just turned on — auto-start peripheral if it was running before
-                    // (or always auto-start if we have known hosts)
-                    if (bleHidState is BleHidState.IDLE || bleHidState is BleHidState.ERROR) {
-                        statusMessage = "Bluetooth on — reconnecting..."
-                        bleHidManager.start()
-                    }
+                    // BT stack is fully up — restart the HID peripheral.
+                    // bleHidManager.onBluetoothOff() already reset state to IDLE when BT
+                    // went down, so start() will pass its guard and run cleanly.
+                    statusMessage = "Bluetooth on — reconnecting..."
+                    bleHidManager.start()
                 }
+
                 BluetoothAdapter.STATE_OFF -> {
-                    // Stack is going down; update UI state cleanly
+                    // BT stack is going down. Reset BleHidManager's internal state so it
+                    // is ready for a clean restart when BT comes back on. We must NOT
+                    // call stop() here because that tries to close the GATT server and
+                    // cancel connections through a stack that is already dead.
+                    bleHidManager.onBluetoothOff()
+
+                    // Update UI
                     bleHidState   = BleHidState.IDLE
                     statusMessage = "Bluetooth turned off"
-                    runOnUiThread {
-                        connectedHostList.clear()
-                    }
+                    runOnUiThread { connectedHostList.clear() }
                 }
             }
         }
     }
 
     // ── Bond-state receiver ───────────────────────────────────────────────────
-    /**
-     * Forward bond-state changes to BleHidManager so it can remove forgotten devices
-     * from the known-hosts list.
-     */
     private val bondStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != BluetoothDevice.ACTION_BOND_STATE_CHANGED) return
@@ -97,7 +100,6 @@ class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateL
             val bondState = intent.getIntExtra(
                 BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
 
-            // Forward to BleHidManager for known-host maintenance
             bleHidManager.onBondStateChanged(device, bondState)
         }
     }
@@ -246,8 +248,6 @@ class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateL
                             onPairClick        = { deviceManager.pairDevice(it) },
                             onUnpairClick      = {
                                 deviceManager.removePairedDevice(it)
-                                // Also remove from BLE known hosts so we don't
-                                // auto-reconnect to a device the user deliberately forgot
                                 bleHidManager.forgetDevice(it.address)
                                 refreshDeviceLists()
                             },
@@ -302,7 +302,6 @@ class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateL
         deviceManager.registerStateListener(this)
         refreshDeviceLists()
 
-        // Auto-start HID peripheral on launch if we have known hosts (seamless reconnect)
         if (bleHidManager.isSupported() &&
             (bleHidState is BleHidState.IDLE || bleHidState is BleHidState.ERROR)) {
             bleHidManager.start()
@@ -357,8 +356,6 @@ class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateL
 
     override fun onDestroy() {
         super.onDestroy()
-        // Don't stop bleHidManager — it keeps running via the foreground service.
-        // Only unregister Activity-scoped receivers.
         try { unregisterReceiver(bluetoothStateReceiver) } catch (e: Exception) {}
         try { unregisterReceiver(bondStateReceiver) }       catch (e: Exception) {}
         deviceManager.stopNearbyScanning()
@@ -367,7 +364,7 @@ class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateL
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Main Screen  (unchanged from original except onUnpairClick wiring above)
+// Main Screen
 // ═════════════════════════════════════════════════════════════════════════════
 
 @SuppressLint("MissingPermission")
