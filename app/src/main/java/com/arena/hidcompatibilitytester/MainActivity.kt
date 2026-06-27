@@ -2,8 +2,12 @@ package com.arena.hidcompatibilitytester
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -14,7 +18,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -33,19 +36,73 @@ import com.arena.hidcompatibilitytester.ui.theme.HIDCompatibilityTesterTheme
 
 class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateListener {
 
-    private lateinit var deviceManager: BluetoothDeviceManager
-    private lateinit var bleHidManager: BleHidManager
+    private lateinit var deviceManager : BluetoothDeviceManager
+    private lateinit var bleHidManager : BleHidManager
 
-    private val pairedDevices    = mutableStateListOf<BluetoothDevice>()
-    private val nearbyDevices    = mutableStateListOf<BluetoothDevice>()
-    private val bleConnectedDevices = mutableStateListOf<BluetoothDevice>()
+    // ── UI State ──────────────────────────────────────────────────────────────
+    private val pairedDevices       = mutableStateListOf<BluetoothDevice>()
+    private val nearbyDevices       = mutableStateListOf<BluetoothDevice>()
+    private val connectedHostList   = mutableStateListOf<BleHidManager.DeviceInfo>()
 
     private var isScanningState            by mutableStateOf(false)
     private var showLocationServicesDialog by mutableStateOf(false)
-    private var bleHidState: BleHidState by mutableStateOf(BleHidState.IDLE)
+    private var bleHidState                by mutableStateOf<BleHidState>(BleHidState.IDLE)
     private var statusMessage              by mutableStateOf<String?>(null)
     private var bleSupported               by mutableStateOf(false)
 
+    // ── Bluetooth ON/OFF receiver ─────────────────────────────────────────────
+    /**
+     * When the user turns Bluetooth back on, automatically restart the HID peripheral
+     * so it can reconnect without any user action.
+     */
+    private val bluetoothStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
+            val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+            when (state) {
+                BluetoothAdapter.STATE_ON -> {
+                    // BT just turned on — auto-start peripheral if it was running before
+                    // (or always auto-start if we have known hosts)
+                    if (bleHidState is BleHidState.IDLE || bleHidState is BleHidState.ERROR) {
+                        statusMessage = "Bluetooth on — reconnecting..."
+                        bleHidManager.start()
+                    }
+                }
+                BluetoothAdapter.STATE_OFF -> {
+                    // Stack is going down; update UI state cleanly
+                    bleHidState   = BleHidState.IDLE
+                    statusMessage = "Bluetooth turned off"
+                    runOnUiThread {
+                        connectedHostList.clear()
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Bond-state receiver ───────────────────────────────────────────────────
+    /**
+     * Forward bond-state changes to BleHidManager so it can remove forgotten devices
+     * from the known-hosts list.
+     */
+    private val bondStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != BluetoothDevice.ACTION_BOND_STATE_CHANGED) return
+            val device: BluetoothDevice = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+            else
+                @Suppress("DEPRECATION") intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE))
+                ?: return
+
+            val bondState = intent.getIntExtra(
+                BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
+
+            // Forward to BleHidManager for known-host maintenance
+            bleHidManager.onBondStateChanged(device, bondState)
+        }
+    }
+
+    // ── Permissions ───────────────────────────────────────────────────────────
     private fun requiredPermissions(): Array<String> =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             arrayOf(
@@ -68,36 +125,49 @@ class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateL
         ActivityResultContracts.RequestMultiplePermissions()
     ) { _ -> executeBluetoothOperations() }
 
+    // ═════════════════════════════════════════════════════════════════════════
+    // Lifecycle
+    // ═════════════════════════════════════════════════════════════════════════
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // ── BLE HID Manager setup ──────────────────────────────────────────
         bleHidManager = BleHidManager(this)
         bleSupported  = bleHidManager.isSupported()
 
         bleHidManager.onStateChanged = { state ->
             bleHidState = state
             when (state) {
-                is BleHidState.ADVERTISING -> statusMessage = "📡 Advertising as HID Mouse — waiting for host to connect"
-                is BleHidState.CONNECTED   -> statusMessage = "✓ Host connected via BLE HID"
-                is BleHidState.ERROR       -> statusMessage = "✗ Error: ${state.message}"
+                is BleHidState.ADVERTISING ->
+                    statusMessage = "📡 Advertising — waiting for host to connect"
+                is BleHidState.CONNECTED   ->
+                    statusMessage = "✓ Host connected"
+                is BleHidState.ERROR       ->
+                    statusMessage = "✗ ${state.message}"
                 else -> {}
             }
         }
-        bleHidManager.onDeviceConnected = { device ->
-            if (!bleConnectedDevices.any { it.address == device.address }) {
-                bleConnectedDevices.add(device)
+
+        bleHidManager.onDeviceListChanged = { list ->
+            runOnUiThread {
+                connectedHostList.clear()
+                connectedHostList.addAll(list)
             }
-            statusMessage = "Host connected: ${device.address}"
-        }
-        bleHidManager.onDeviceDisconnected = { device ->
-            bleConnectedDevices.removeAll { it.address == device.address }
-            statusMessage = "Host disconnected: ${device.address}"
         }
 
+        bleHidManager.onDeviceSubscribed = { device ->
+            runOnUiThread {
+                statusMessage = "✓ Host ready: ${device.address}"
+            }
+        }
+
+        // ── Classic BT Device Manager ──────────────────────────────────────
         deviceManager = BluetoothDeviceManager(this) { newDevice ->
-            val alreadyKnown = pairedDevices.any  { it.address == newDevice.address } ||
-                    nearbyDevices.any  { it.address == newDevice.address }
+            val alreadyKnown =
+                pairedDevices.any { it.address == newDevice.address } ||
+                        nearbyDevices.any { it.address == newDevice.address }
             if (!alreadyKnown) nearbyDevices.add(newDevice)
         }
         deviceManager.onScanFinished = {
@@ -110,18 +180,30 @@ class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateL
             }
         }
 
+        // ── Register system receivers ──────────────────────────────────────
+        registerReceiverCompat(
+            bluetoothStateReceiver,
+            IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
+        )
+        registerReceiverCompat(
+            bondStateReceiver,
+            IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+        )
+
         checkAndRequestPermissions()
 
+        // ── UI ─────────────────────────────────────────────────────────────
         setContent {
             HIDCompatibilityTesterTheme {
+
                 if (showLocationServicesDialog) {
                     AlertDialog(
                         onDismissRequest = { showLocationServicesDialog = false },
                         title   = { Text("Location Services Required") },
                         text    = {
                             Text(
-                                "Android requires Location Services enabled for Bluetooth " +
-                                        "device scanning.\n\nEnable Location in Settings, then scan again."
+                                "Android requires Location Services for Bluetooth scanning.\n\n" +
+                                        "Enable Location in Settings, then scan again."
                             )
                         },
                         confirmButton = {
@@ -140,30 +222,41 @@ class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateL
 
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Box(modifier = Modifier.fillMaxSize()) {
+
                         MainScreen(
-                            modifier            = Modifier.padding(innerPadding),
-                            bleHidState         = bleHidState,
-                            bleSupported        = bleSupported,
-                            bleConnectedDevices = bleConnectedDevices,
-                            pairedList          = pairedDevices,
-                            nearbyList          = nearbyDevices,
-                            isScanningState     = isScanningState,
-                            onToggleBleHid      = { toggleBleHid() },
-                            onSendMouse         = { dx, dy, buttons ->
+                            modifier           = Modifier.padding(innerPadding),
+                            bleHidState        = bleHidState,
+                            bleSupported       = bleSupported,
+                            connectedHostList  = connectedHostList,
+                            pairedList         = pairedDevices,
+                            nearbyList         = nearbyDevices,
+                            isScanningState    = isScanningState,
+                            onToggleBleHid     = { toggleBleHid() },
+                            onSendMouse        = { dx, dy, buttons ->
                                 val ok = bleHidManager.sendMouseReport(dx, dy, buttons)
-                                if (!ok) statusMessage = "✗ No host connected or not subscribed yet"
+                                if (!ok) statusMessage =
+                                    "✗ No subscribed host — complete pairing first"
                             },
-                            onSendKey           = { mod, keys ->
+                            onSendKey          = { mod, keys ->
                                 bleHidManager.sendKeyboardReport(mod, keys)
-                                // Release keys after 100ms
                                 android.os.Handler(android.os.Looper.getMainLooper())
                                     .postDelayed({ bleHidManager.releaseKeys() }, 100)
                             },
-                            onToggleScan        = { toggleScanState() },
-                            onPairClick         = { deviceManager.pairDevice(it) },
-                            onUnpairClick       = {
+                            onToggleScan       = { toggleScanState() },
+                            onPairClick        = { deviceManager.pairDevice(it) },
+                            onUnpairClick      = {
                                 deviceManager.removePairedDevice(it)
+                                // Also remove from BLE known hosts so we don't
+                                // auto-reconnect to a device the user deliberately forgot
+                                bleHidManager.forgetDevice(it.address)
                                 refreshDeviceLists()
+                            },
+                            onDisconnectHost   = { address ->
+                                bleHidManager.disconnectDevice(address)
+                            },
+                            onReconnectHost    = { device ->
+                                bleHidManager.inviteReconnect(device)
+                                statusMessage = "Inviting ${device.address} to reconnect..."
                             }
                         )
 
@@ -185,6 +278,10 @@ class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateL
         }
     }
 
+    // ═════════════════════════════════════════════════════════════════════════
+    // Actions
+    // ═════════════════════════════════════════════════════════════════════════
+
     private fun toggleBleHid() {
         when (bleHidState) {
             is BleHidState.IDLE, is BleHidState.ERROR -> bleHidManager.start()
@@ -204,6 +301,12 @@ class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateL
         startPersistentHidService()
         deviceManager.registerStateListener(this)
         refreshDeviceLists()
+
+        // Auto-start HID peripheral on launch if we have known hosts (seamless reconnect)
+        if (bleHidManager.isSupported() &&
+            (bleHidState is BleHidState.IDLE || bleHidState is BleHidState.ERROR)) {
+            bleHidManager.start()
+        }
     }
 
     private fun toggleScanState() {
@@ -223,13 +326,12 @@ class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateL
     }
 
     private fun startPersistentHidService() {
-        val serviceIntent = Intent(this, HidInputService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
-        }
+        val intent = Intent(this, HidInputService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
+        else startService(intent)
     }
+
+    // ── BluetoothStateListener (from DeviceManager bond/connection events) ──
 
     override fun onBondStateChanged(device: BluetoothDevice, state: Int) {
         runOnUiThread {
@@ -243,61 +345,78 @@ class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateL
         runOnUiThread { refreshDeviceLists() }
     }
 
+    // ── Helpers ────────────────────────────────────────────────────────────────
+
+    private fun registerReceiverCompat(receiver: BroadcastReceiver, filter: IntentFilter) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(receiver, filter)
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
-        bleHidManager.stop()
+        // Don't stop bleHidManager — it keeps running via the foreground service.
+        // Only unregister Activity-scoped receivers.
+        try { unregisterReceiver(bluetoothStateReceiver) } catch (e: Exception) {}
+        try { unregisterReceiver(bondStateReceiver) }       catch (e: Exception) {}
         deviceManager.stopNearbyScanning()
         deviceManager.unregisterStateListener()
     }
 }
 
-// ── Main Screen ───────────────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════════════
+// Main Screen  (unchanged from original except onUnpairClick wiring above)
+// ═════════════════════════════════════════════════════════════════════════════
 
 @SuppressLint("MissingPermission")
 @Composable
 fun MainScreen(
-    modifier            : Modifier,
-    bleHidState         : BleHidState,
-    bleSupported        : Boolean,
-    bleConnectedDevices : List<BluetoothDevice>,
-    pairedList          : List<BluetoothDevice>,
-    nearbyList          : List<BluetoothDevice>,
-    isScanningState     : Boolean,
-    onToggleBleHid      : () -> Unit,
-    onSendMouse         : (Int, Int, Int) -> Unit,
-    onSendKey           : (Int, List<Int>) -> Unit,
-    onToggleScan        : () -> Unit,
-    onPairClick         : (BluetoothDevice) -> Unit,
-    onUnpairClick       : (BluetoothDevice) -> Unit,
+    modifier          : Modifier,
+    bleHidState       : BleHidState,
+    bleSupported      : Boolean,
+    connectedHostList : List<BleHidManager.DeviceInfo>,
+    pairedList        : List<BluetoothDevice>,
+    nearbyList        : List<BluetoothDevice>,
+    isScanningState   : Boolean,
+    onToggleBleHid    : () -> Unit,
+    onSendMouse       : (Int, Int, Int) -> Unit,
+    onSendKey         : (Int, List<Int>) -> Unit,
+    onToggleScan      : () -> Unit,
+    onPairClick       : (BluetoothDevice) -> Unit,
+    onUnpairClick     : (BluetoothDevice) -> Unit,
+    onDisconnectHost  : (String) -> Unit,
+    onReconnectHost   : (BluetoothDevice) -> Unit,
 ) {
     LazyColumn(
-        modifier = modifier
+        modifier            = modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item { Spacer(Modifier.height(8.dp)) }
 
-        // ── BLE HID Control Panel ──────────────────────────────────────────
         item {
             BleHidControlCard(
-                state        = bleHidState,
-                supported    = bleSupported,
-                onToggle     = onToggleBleHid,
-                onSendMouse  = onSendMouse,
-                onSendKey    = onSendKey,
-                connectedDevices = bleConnectedDevices
+                state             = bleHidState,
+                supported         = bleSupported,
+                onToggle          = onToggleBleHid,
+                onSendMouse       = onSendMouse,
+                onSendKey         = onSendKey,
+                connectedHostList = connectedHostList,
+                onDisconnectHost  = onDisconnectHost,
+                onReconnectHost   = onReconnectHost
             )
         }
 
-        // ── How to connect instructions ────────────────────────────────────
         item {
-            if (bleHidState is BleHidState.ADVERTISING || bleHidState is BleHidState.CONNECTED) {
+            if (bleHidState is BleHidState.ADVERTISING ||
+                bleHidState is BleHidState.CONNECTED) {
                 InstructionsCard()
             }
         }
 
-        // ── Scan Controls ──────────────────────────────────────────────────
         item {
             Row(
                 modifier              = Modifier.fillMaxWidth(),
@@ -312,9 +431,7 @@ fun MainScreen(
                             MaterialTheme.colorScheme.error
                         else MaterialTheme.colorScheme.primary
                     )
-                ) {
-                    Text(if (isScanningState) "Stop Scan" else "Scan")
-                }
+                ) { Text(if (isScanningState) "Stop Scan" else "Scan") }
             }
         }
 
@@ -336,7 +453,6 @@ fun MainScreen(
             }
         }
 
-        // ── Paired Devices ─────────────────────────────────────────────────
         item { SectionHeader("Paired Devices") }
         if (pairedList.isEmpty()) {
             item { EmptyStateLabel("No paired devices.") }
@@ -346,7 +462,14 @@ fun MainScreen(
                     name    = device.name ?: "Unknown Device",
                     address = device.address,
                     actions = {
-                        OutlinedButton(onClick = { onUnpairClick(device) }) { Text("Forget") }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            OutlinedButton(onClick = { onReconnectHost(device) }) {
+                                Text("Connect", fontSize = 12.sp)
+                            }
+                            OutlinedButton(onClick = { onUnpairClick(device) }) {
+                                Text("Forget", fontSize = 12.sp)
+                            }
+                        }
                     }
                 )
             }
@@ -356,20 +479,24 @@ fun MainScreen(
     }
 }
 
-// ── BLE HID Control Card ──────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════════════
+// BLE HID Control Card
+// ═════════════════════════════════════════════════════════════════════════════
 
 @SuppressLint("MissingPermission")
 @Composable
 fun BleHidControlCard(
-    state            : BleHidState,
-    supported        : Boolean,
-    onToggle         : () -> Unit,
-    onSendMouse      : (Int, Int, Int) -> Unit,
-    onSendKey        : (Int, List<Int>) -> Unit,
-    connectedDevices : List<BluetoothDevice>
+    state             : BleHidState,
+    supported         : Boolean,
+    onToggle          : () -> Unit,
+    onSendMouse       : (Int, Int, Int) -> Unit,
+    onSendKey         : (Int, List<Int>) -> Unit,
+    connectedHostList : List<BleHidManager.DeviceInfo>,
+    onDisconnectHost  : (String) -> Unit,
+    onReconnectHost   : (BluetoothDevice) -> Unit,
 ) {
-    val isRunning = state is BleHidState.ADVERTISING || state is BleHidState.CONNECTED
-    val isConnected = state is BleHidState.CONNECTED
+    val isRunning     = state is BleHidState.ADVERTISING || state is BleHidState.CONNECTED
+    val anySubscribed = connectedHostList.any { it.isSubscribed }
 
     val cardBg by animateColorAsState(
         targetValue = when (state) {
@@ -387,49 +514,46 @@ fun BleHidControlCard(
         colors    = CardDefaults.cardColors(containerColor = cardBg),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)) {
-
-            // Title row
+        Column(
+            modifier            = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             Row(
                 modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment     = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("BLE HID Peripheral", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text("HOGP Mouse + Keyboard", fontSize = 12.sp, color = Color.Gray)
+                    Text("BLE HID Peripheral",
+                        fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("HOGP Mouse + Keyboard",
+                        fontSize = 12.sp, color = Color.Gray)
                 }
-                // State badge
                 val (badgeText, badgeColor) = when (state) {
-                    BleHidState.IDLE       -> "IDLE"        to Color.Gray
-                    BleHidState.STARTING   -> "STARTING…"  to Color(0xFFF57F17)
-                    BleHidState.ADVERTISING-> "ADVERTISING" to Color(0xFF1565C0)
-                    BleHidState.CONNECTED  -> "CONNECTED ✓" to Color(0xFF2E7D32)
-                    is BleHidState.ERROR   -> "ERROR"       to MaterialTheme.colorScheme.error
+                    BleHidState.IDLE        -> "IDLE"        to Color.Gray
+                    BleHidState.STARTING    -> "STARTING…"  to Color(0xFFF57F17)
+                    BleHidState.ADVERTISING -> "ADVERTISING" to Color(0xFF1565C0)
+                    BleHidState.CONNECTED   -> "CONNECTED ✓" to Color(0xFF2E7D32)
+                    is BleHidState.ERROR    -> "ERROR"       to MaterialTheme.colorScheme.error
                 }
                 Surface(
                     shape = RoundedCornerShape(20.dp),
                     color = badgeColor.copy(alpha = 0.15f)
                 ) {
                     Text(
-                        text     = badgeText,
-                        color    = badgeColor,
-                        fontSize = 11.sp,
+                        text       = badgeText,
+                        color      = badgeColor,
+                        fontSize   = 11.sp,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        modifier   = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     )
                 }
             }
 
             if (!supported) {
-                Text(
-                    "⚠ BLE peripheral mode not supported on this device.",
-                    color    = MaterialTheme.colorScheme.error,
-                    fontSize = 13.sp
-                )
+                Text("⚠ BLE peripheral not supported on this device.",
+                    color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
             } else {
-                // Start / Stop button
                 Button(
                     onClick  = onToggle,
                     modifier = Modifier.fillMaxWidth(),
@@ -442,65 +566,68 @@ fun BleHidControlCard(
                     Text(if (isRunning) "Stop BLE HID" else "Start BLE HID Peripheral")
                 }
 
-                // Connected hosts list
-                if (connectedDevices.isNotEmpty()) {
-                    Text("Connected Hosts:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                    connectedDevices.forEach { device ->
-                        Text(
-                            "• ${device.name ?: "Unknown"} (${device.address})",
-                            fontSize = 12.sp,
-                            color    = Color.Gray
+                if (connectedHostList.isNotEmpty()) {
+                    HorizontalDivider()
+                    Row(
+                        modifier              = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment     = Alignment.CenterVertically
+                    ) {
+                        Text("Connected Hosts",
+                            fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Text("${connectedHostList.size} / 4",
+                            fontSize = 12.sp, color = Color.Gray)
+                    }
+                    connectedHostList.forEach { info ->
+                        ConnectedHostRow(
+                            info         = info,
+                            onDisconnect = { onDisconnectHost(info.address) },
+                            onReconnect  = { onReconnectHost(info.device) }
                         )
+                        Spacer(Modifier.height(6.dp))
                     }
                 }
 
-                // ── Mouse controls (only when connected) ──────────────────
-                if (isConnected) {
+                if (state is BleHidState.CONNECTED && !anySubscribed) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Waiting for host to enable notifications...",
+                            fontSize = 12.sp, color = Color.Gray)
+                    }
+                }
+
+                if (anySubscribed) {
                     HorizontalDivider()
                     Text("Mouse Controls", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-
-                    // D-pad
                     Column(
-                        modifier              = Modifier.fillMaxWidth(),
-                        horizontalAlignment   = Alignment.CenterHorizontally,
-                        verticalArrangement   = Arrangement.spacedBy(4.dp)
+                        modifier            = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        // Up
                         BigMouseButton("▲") { onSendMouse(0, -40, 0) }
-                        // Left / Right
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             BigMouseButton("◀") { onSendMouse(-40, 0, 0) }
-                            BigMouseButton("●\nClick") { onSendMouse(0, 0, 1) }
+                            BigMouseButton("●") { onSendMouse(0, 0, 1) }
                             BigMouseButton("▶") { onSendMouse(40, 0, 0) }
                         }
-                        // Down
                         BigMouseButton("▼") { onSendMouse(0, 40, 0) }
                     }
-
-                    // Mouse buttons row
                     Row(
                         modifier              = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Button(
-                            onClick  = { onSendMouse(0, 0, 1) },
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Left Click") }
-                        Button(
-                            onClick  = { onSendMouse(0, 0, 2) },
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Right Click") }
+                        Button(onClick = { onSendMouse(0, 0, 1) },
+                            modifier = Modifier.weight(1f)) { Text("Left Click") }
+                        Button(onClick = { onSendMouse(0, 0, 2) },
+                            modifier = Modifier.weight(1f)) { Text("Right Click") }
                     }
-
                     HorizontalDivider()
-
-                    // ── Keyboard controls ──────────────────────────────────
-                    Text("Keyboard Controls", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text("Keyboard", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                     Row(
                         modifier              = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        // HID key codes: A=0x04, B=0x05, Space=0x2C, Enter=0x28
                         KeyButton("A")     { onSendKey(0x00, listOf(0x04)) }
                         KeyButton("B")     { onSendKey(0x00, listOf(0x05)) }
                         KeyButton("Space") { onSendKey(0x00, listOf(0x2C)) }
@@ -509,37 +636,90 @@ fun BleHidControlCard(
                 }
 
                 if (state is BleHidState.ERROR) {
-                    Text(
-                        state.message,
-                        color    = MaterialTheme.colorScheme.error,
-                        fontSize = 12.sp
-                    )
+                    Text(state.message, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                 }
             }
         }
     }
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// Connected Host Row
+// ═════════════════════════════════════════════════════════════════════════════
+
 @Composable
-fun BigMouseButton(label: String, onClick: () -> Unit) {
-    OutlinedButton(
-        onClick        = onClick,
-        modifier       = Modifier.size(64.dp),
-        contentPadding = PaddingValues(4.dp),
-        shape          = RoundedCornerShape(8.dp)
+fun ConnectedHostRow(
+    info        : BleHidManager.DeviceInfo,
+    onDisconnect: () -> Unit,
+    onReconnect : () -> Unit
+) {
+    var showActions by remember { mutableStateOf(false) }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                color = if (info.isSubscribed) Color(0xFF1B5E20).copy(alpha = 0.10f)
+                else Color(0xFFF57F17).copy(alpha = 0.08f),
+                shape = RoundedCornerShape(10.dp)
+            )
+            .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
-        Text(label, fontSize = 12.sp, textAlign = TextAlign.Center)
+        Row(
+            modifier              = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment     = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text       = info.name ?: "Device (${info.address.takeLast(8)})",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize   = 13.sp,
+                    maxLines   = 1
+                )
+                Text(text = info.address, fontSize = 11.sp, color = Color.Gray)
+            }
+            Spacer(Modifier.width(8.dp))
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = if (info.isSubscribed) Color(0xFF2E7D32).copy(alpha = 0.15f)
+                else Color(0xFFF57F17).copy(alpha = 0.15f)
+            ) {
+                Text(
+                    text       = if (info.isSubscribed) "✓ Ready" else "⏳ Pairing...",
+                    color      = if (info.isSubscribed) Color(0xFF2E7D32) else Color(0xFFF57F17),
+                    fontSize   = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier   = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                )
+            }
+            Spacer(Modifier.width(6.dp))
+            IconButton(onClick = { showActions = !showActions }, modifier = Modifier.size(28.dp)) {
+                Text(if (showActions) "▲" else "▼", fontSize = 12.sp)
+            }
+        }
+        if (showActions) {
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier              = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick  = { onReconnect(); showActions = false },
+                    modifier = Modifier.weight(1f)
+                ) { Text("Reconnect", fontSize = 12.sp) }
+                Button(
+                    onClick  = { onDisconnect(); showActions = false },
+                    modifier = Modifier.weight(1f),
+                    colors   = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Disconnect", fontSize = 12.sp, color = Color.White) }
+            }
+        }
     }
 }
 
-@Composable
-fun RowScope.KeyButton(label: String, onClick: () -> Unit) {
-    OutlinedButton(
-        onClick  = onClick,
-        modifier = Modifier.weight(1f),
-        contentPadding = PaddingValues(4.dp)
-    ) { Text(label, fontSize = 11.sp) }
-}
+// ═════════════════════════════════════════════════════════════════════════════
+// Instructions Card
+// ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
 fun InstructionsCard() {
@@ -549,20 +729,43 @@ fun InstructionsCard() {
         colors    = CardDefaults.cardColors(
             containerColor = Color(0xFF0D47A1).copy(alpha = 0.08f))
     ) {
-        Column(modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("How to connect from host (PC/Mac/Android):",
+        Column(
+            modifier            = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text("How to connect from host:",
                 fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-            Text("1. Open Bluetooth settings on host", fontSize = 12.sp)
-            Text("2. Look for \"HID Clone\" in device list", fontSize = 12.sp)
-            Text("3. Tap/Click to pair — accept pairing on both ends", fontSize = 12.sp)
-            Text("4. Host will recognize it as a mouse + keyboard", fontSize = 12.sp)
-            Text("5. Use the controls above to send input", fontSize = 12.sp)
+            Text("1. Open Bluetooth settings on host (PC/Mac/Android)", fontSize = 12.sp)
+            Text("2. Look for \"HID Clone\" in device list",             fontSize = 12.sp)
+            Text("3. Click/Tap to pair — accept on both ends",           fontSize = 12.sp)
+            Text("4. Host recognises it as mouse + keyboard",            fontSize = 12.sp)
+            Text("5. Next time: app auto-reconnects on BT enable",       fontSize = 12.sp)
         }
     }
 }
 
-// ── Shared composables (unchanged from original) ──────────────────────────────
+// ═════════════════════════════════════════════════════════════════════════════
+// Reusable Composables
+// ═════════════════════════════════════════════════════════════════════════════
+
+@Composable
+fun BigMouseButton(label: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick        = onClick,
+        modifier       = Modifier.size(64.dp),
+        contentPadding = PaddingValues(4.dp),
+        shape          = RoundedCornerShape(8.dp)
+    ) { Text(label, fontSize = 12.sp, textAlign = TextAlign.Center) }
+}
+
+@Composable
+fun RowScope.KeyButton(label: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick        = onClick,
+        modifier       = Modifier.weight(1f),
+        contentPadding = PaddingValues(4.dp)
+    ) { Text(label, fontSize = 11.sp) }
+}
 
 @Composable
 fun SectionHeader(title: String) {
@@ -577,17 +780,28 @@ fun SectionHeader(title: String) {
 
 @Composable
 fun EmptyStateLabel(text: String) {
-    Text(text = text, fontSize = 13.sp, color = Color.Gray,
-        modifier = Modifier.padding(start = 8.dp, bottom = 8.dp))
+    Text(
+        text     = text,
+        fontSize = 13.sp,
+        color    = Color.Gray,
+        modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
+    )
 }
 
 @SuppressLint("MissingPermission")
 @Composable
-fun DeviceRow(name: String, address: String, actions: @Composable () -> Unit) {
+fun DeviceRow(
+    name    : String,
+    address : String,
+    actions : @Composable () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp))
+            .background(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(10.dp)
+            )
             .padding(12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment     = Alignment.CenterVertically
@@ -600,1220 +814,3 @@ fun DeviceRow(name: String, address: String, actions: @Composable () -> Unit) {
         actions()
     }
 }
-
-
-//package com.arena.hidcompatibilitytester
-//
-//import android.Manifest
-//import android.annotation.SuppressLint
-//import android.bluetooth.BluetoothDevice
-//import android.content.Intent
-//import android.content.pm.PackageManager
-//import android.os.Build
-//import android.os.Bundle
-//import android.provider.Settings
-//import androidx.activity.ComponentActivity
-//import androidx.activity.compose.setContent
-//import androidx.activity.enableEdgeToEdge
-//import androidx.activity.result.contract.ActivityResultContracts
-//import androidx.compose.foundation.background
-//import androidx.compose.foundation.border
-//import androidx.compose.foundation.layout.*
-//import androidx.compose.foundation.lazy.LazyColumn
-//import androidx.compose.foundation.lazy.items
-//import androidx.compose.foundation.shape.RoundedCornerShape
-//import androidx.compose.material3.*
-//import androidx.compose.runtime.*
-//import androidx.compose.ui.Alignment
-//import androidx.compose.ui.Modifier
-//import androidx.compose.ui.graphics.Color
-//import androidx.compose.ui.text.font.FontWeight
-//import androidx.compose.ui.unit.dp
-//import androidx.compose.ui.unit.sp
-//import androidx.core.content.ContextCompat
-//import com.arena.hidcompatibilitytester.ui.theme.HIDCompatibilityTesterTheme
-//
-//class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateListener {
-//
-//    private lateinit var deviceManager: BluetoothDeviceManager
-//
-//    private val pairedDevices    = mutableStateListOf<BluetoothDevice>()
-//    private val connectedDevices = mutableStateListOf<BluetoothDevice>()
-//    private val nearbyDevices    = mutableStateListOf<BluetoothDevice>()
-//
-//    private var isScanningState            by mutableStateOf(false)
-//    private var showLocationServicesDialog by mutableStateOf(false)
-//    private var hidStatus by mutableStateOf<BluetoothDeviceManager.HidSupportStatus?>(null)
-//
-//    // ── Toast-like snackbar message ────────────────────────────────────────
-//    private var statusMessage by mutableStateOf<String?>(null)
-//
-//    private fun requiredPermissions(): Array<String> =
-//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-//            arrayOf(
-//                Manifest.permission.BLUETOOTH_SCAN,
-//                Manifest.permission.BLUETOOTH_CONNECT,
-//                Manifest.permission.ACCESS_FINE_LOCATION,
-//                Manifest.permission.ACCESS_COARSE_LOCATION
-//            )
-//        } else {
-//            arrayOf(
-//                Manifest.permission.ACCESS_FINE_LOCATION,
-//                Manifest.permission.ACCESS_COARSE_LOCATION,
-//                Manifest.permission.BLUETOOTH,
-//                Manifest.permission.BLUETOOTH_ADMIN
-//            )
-//        }
-//
-//    private val requestPermissionLauncher = registerForActivityResult(
-//        ActivityResultContracts.RequestMultiplePermissions()
-//    ) { _ -> executeBluetoothOperations() }
-//
-//    override fun onCreate(savedInstanceState: Bundle?) {
-//        super.onCreate(savedInstanceState)
-//        enableEdgeToEdge()
-//
-//        deviceManager = BluetoothDeviceManager(this) { newDevice ->
-//            val alreadyKnown = pairedDevices.any  { it.address == newDevice.address } ||
-//                    nearbyDevices.any  { it.address == newDevice.address }
-//            if (!alreadyKnown) nearbyDevices.add(newDevice)
-//        }
-//
-//        deviceManager.onScanFinished = {
-//            runOnUiThread { isScanningState = false }
-//        }
-//        deviceManager.onLocationServicesRequired = {
-//            runOnUiThread {
-//                isScanningState = false
-//                showLocationServicesDialog = true
-//            }
-//        }
-//        // ── Key callback: refresh HID status whenever app registration changes ──
-//        deviceManager.onHidAppRegistered = { registered ->
-//            runOnUiThread {
-//                statusMessage = if (registered)
-//                    "✓ HID app registered — device is FUNCTIONAL"
-//                else
-//                    "✗ HID app registration FAILED — device NOT supported"
-//                refreshHidStatus()
-//            }
-//        }
-//
-//        checkAndRequestPermissions()
-//
-//        setContent {
-//            HIDCompatibilityTesterTheme {
-//
-//                if (showLocationServicesDialog) {
-//                    AlertDialog(
-//                        onDismissRequest = { showLocationServicesDialog = false },
-//                        title   = { Text("Location Services Required") },
-//                        text    = {
-//                            Text(
-//                                "Android requires Location Services to be ON for Bluetooth " +
-//                                        "scanning to find nearby devices.\n\nPlease enable Location " +
-//                                        "in Settings, then tap Scan again."
-//                            )
-//                        },
-//                        confirmButton = {
-//                            TextButton(onClick = {
-//                                showLocationServicesDialog = false
-//                                startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-//                            }) { Text("Open Location Settings") }
-//                        },
-//                        dismissButton = {
-//                            TextButton(onClick = { showLocationServicesDialog = false }) {
-//                                Text("Cancel")
-//                            }
-//                        }
-//                    )
-//                }
-//
-//                Scaffold(
-//                    modifier = Modifier.fillMaxSize(),
-//                    topBar = {
-//                        Row(
-//                            modifier = Modifier
-//                                .fillMaxWidth()
-//                                .statusBarsPadding()
-//                                .padding(16.dp),
-//                            horizontalArrangement = Arrangement.SpaceBetween,
-//                            verticalAlignment     = Alignment.CenterVertically
-//                        ) {
-//                            Text("HID Clone", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-//                            Button(
-//                                onClick = { toggleScanState() },
-//                                colors  = ButtonDefaults.buttonColors(
-//                                    containerColor = if (isScanningState)
-//                                        MaterialTheme.colorScheme.error
-//                                    else
-//                                        MaterialTheme.colorScheme.primary
-//                                )
-//                            ) {
-//                                Text(if (isScanningState) "Stop Scan" else "Scan Devices")
-//                            }
-//                        }
-//                    }
-//                ) { innerPadding ->
-//
-//                    Box(modifier = Modifier.fillMaxSize()) {
-//                        DeviceManagerScreen(
-//                            modifier         = Modifier.padding(innerPadding),
-//                            hidStatus        = hidStatus,
-//                            connectedList    = connectedDevices,
-//                            pairedList       = pairedDevices,
-//                            nearbyList       = nearbyDevices,
-//                            onRefreshHid     = { refreshHidStatus() },
-//                            onRetryRegister  = { deviceManager.registerHidApp() },
-//                            onPairClick      = { deviceManager.pairDevice(it) },
-//                            onUnpairClick    = {
-//                                deviceManager.removePairedDevice(it)
-//                                refreshDeviceLists()
-//                            },
-//                            onConnectClick   = { deviceManager.connectToDevice(it) },
-//                            onDisconnectClick= { deviceManager.disconnectFromDevice(it) },
-//                            onSendMouseReport= { device, dx, dy ->
-//                                val ok = deviceManager.sendMouseReport(device, dx, dy)
-//                                statusMessage = if (ok) "Mouse report sent ✓" else "Failed to send report ✗"
-//                            }
-//                        )
-//
-//                        // ── Status snackbar ───────────────────────────────
-//                        statusMessage?.let { msg ->
-//                            Snackbar(
-//                                modifier = Modifier
-//                                    .align(Alignment.BottomCenter)
-//                                    .padding(16.dp),
-//                                action = {
-//                                    TextButton(onClick = { statusMessage = null }) {
-//                                        Text("OK")
-//                                    }
-//                                }
-//                            ) { Text(msg) }
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//    }
-//
-//    private fun refreshHidStatus() {
-//        hidStatus = null
-//        Thread {
-//            val result = deviceManager.checkHidSupport()
-//            runOnUiThread { hidStatus = result }
-//        }.start()
-//    }
-//
-//    private fun checkAndRequestPermissions() {
-//        val allGranted = requiredPermissions().all {
-//            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
-//        }
-//        if (allGranted) executeBluetoothOperations()
-//        else requestPermissionLauncher.launch(requiredPermissions())
-//    }
-//
-//    private fun executeBluetoothOperations() {
-//        startPersistentHidService()
-//        deviceManager.registerStateListener(this)
-//        refreshDeviceLists()
-//        // Delay initial status check slightly so proxy has time to bind
-//        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-//            refreshHidStatus()
-//        }, 1500)
-//    }
-//
-//    private fun toggleScanState() {
-//        if (isScanningState) {
-//            deviceManager.stopNearbyScanning()
-//            isScanningState = false
-//        } else {
-//            nearbyDevices.clear()
-//            val started = deviceManager.startNearbyScanning()
-//            if (started) isScanningState = true
-//        }
-//    }
-//
-//    private fun refreshDeviceLists() {
-//        pairedDevices.clear()
-//        pairedDevices.addAll(deviceManager.getPairedDevices())
-//        connectedDevices.clear()
-//        connectedDevices.addAll(deviceManager.getConnectedDevices())
-//    }
-//
-//    private fun startPersistentHidService() {
-//        val serviceIntent = Intent(this, HidInputService::class.java)
-//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-//            startForegroundService(serviceIntent)
-//        } else {
-//            startService(serviceIntent)
-//        }
-//    }
-//
-//    override fun onBondStateChanged(device: BluetoothDevice, state: Int) {
-//        runOnUiThread {
-//            refreshDeviceLists()
-//            if (state == BluetoothDevice.BOND_BONDED)
-//                nearbyDevices.removeAll { it.address == device.address }
-//        }
-//    }
-//
-//    override fun onConnectionStateChanged(device: BluetoothDevice, state: Int) {
-//        runOnUiThread { refreshDeviceLists() }
-//    }
-//
-//    override fun onDestroy() {
-//        super.onDestroy()
-//        deviceManager.stopNearbyScanning()
-//        deviceManager.unregisterStateListener()
-//    }
-//}
-//
-//// ── Screens ────────────────────────────────────────────────────────────────
-//
-//@SuppressLint("MissingPermission")
-//@Composable
-//fun DeviceManagerScreen(
-//    modifier          : Modifier = Modifier,
-//    hidStatus         : BluetoothDeviceManager.HidSupportStatus?,
-//    connectedList     : List<BluetoothDevice>,
-//    pairedList        : List<BluetoothDevice>,
-//    nearbyList        : List<BluetoothDevice>,
-//    onRefreshHid      : () -> Unit,
-//    onRetryRegister   : () -> Unit,
-//    onPairClick       : (BluetoothDevice) -> Unit,
-//    onUnpairClick     : (BluetoothDevice) -> Unit,
-//    onConnectClick    : (BluetoothDevice) -> Unit,
-//    onDisconnectClick : (BluetoothDevice) -> Unit,
-//    onSendMouseReport : (BluetoothDevice, Int, Int) -> Unit
-//) {
-//    LazyColumn(
-//        modifier = modifier
-//            .fillMaxSize()
-//            .padding(horizontal = 16.dp),
-//        verticalArrangement = Arrangement.spacedBy(12.dp)
-//    ) {
-//
-//        item { HidStatusCard(status = hidStatus, onRefresh = onRefreshHid, onRetryRegister = onRetryRegister) }
-//
-//        // ── Active Connections ─────────────────────────────────────────────
-//        item { SectionHeader("Active Connections (${connectedList.size})") }
-//        if (connectedList.isEmpty()) {
-//            item { EmptyStateLabel("No active connection targets detected.") }
-//        } else {
-//            items(connectedList) { device ->
-//                DeviceRow(
-//                    name    = device.name ?: "Unknown Host",
-//                    address = device.address,
-//                    actions = {
-//                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-//                            // ── Mouse test controls ────────────────────────
-//                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-//                                SmallButton("↑") { onSendMouseReport(device,  0, -30) }
-//                                SmallButton("↓") { onSendMouseReport(device,  0,  30) }
-//                                SmallButton("←") { onSendMouseReport(device, -30, 0) }
-//                                SmallButton("→") { onSendMouseReport(device,  30, 0) }
-//                            }
-//                            Button(
-//                                onClick = { onDisconnectClick(device) },
-//                                colors  = ButtonDefaults.buttonColors(
-//                                    containerColor = MaterialTheme.colorScheme.error),
-//                                modifier = Modifier.fillMaxWidth()
-//                            ) { Text("Disconnect", color = Color.White) }
-//                        }
-//                    }
-//                )
-//            }
-//        }
-//
-//        // ── Paired Devices ─────────────────────────────────────────────────
-//        item { SectionHeader("Saved / Paired Devices") }
-//        if (pairedList.isEmpty()) {
-//            item { EmptyStateLabel("No paired host systems found.") }
-//        } else {
-//            items(pairedList) { device ->
-//                val isConnected = connectedList.any { it.address == device.address }
-//                DeviceRow(
-//                    name    = device.name ?: "Unknown Host",
-//                    address = device.address,
-//                    actions = {
-//                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-//                            if (!isConnected) {
-//                                Button(onClick = { onConnectClick(device) }) { Text("Connect") }
-//                            }
-//                            OutlinedButton(onClick = { onUnpairClick(device) }) { Text("Forget") }
-//                        }
-//                    }
-//                )
-//            }
-//        }
-//
-//        // ── Nearby Scan ────────────────────────────────────────────────────
-//        item { SectionHeader("Scanned Nearby Targets") }
-//        if (nearbyList.isEmpty()) {
-//            item { EmptyStateLabel("Click Scan Devices to discover nearby devices.") }
-//        } else {
-//            items(nearbyList) { device ->
-//                DeviceRow(
-//                    name    = device.name ?: "Generic Peripheral Target",
-//                    address = device.address,
-//                    actions = {
-//                        Button(
-//                            onClick = { onPairClick(device) },
-//                            colors  = ButtonDefaults.buttonColors(
-//                                containerColor = MaterialTheme.colorScheme.secondary)
-//                        ) { Text("Pair", color = Color.White) }
-//                    }
-//                )
-//            }
-//        }
-//
-//        item { Spacer(modifier = Modifier.height(16.dp)) }
-//    }
-//}
-//
-//// ── HID Status Card ────────────────────────────────────────────────────────
-//
-//@Composable
-//fun HidStatusCard(
-//    status          : BluetoothDeviceManager.HidSupportStatus?,
-//    onRefresh       : () -> Unit,
-//    onRetryRegister : () -> Unit
-//) {
-//    Card(
-//        modifier = Modifier
-//            .fillMaxWidth()
-//            .padding(top = 4.dp),
-//        shape     = RoundedCornerShape(12.dp),
-//        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-//        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-//    ) {
-//        Column(modifier = Modifier.padding(14.dp)) {
-//
-//            Row(
-//                modifier            = Modifier.fillMaxWidth(),
-//                horizontalArrangement = Arrangement.SpaceBetween,
-//                verticalAlignment   = Alignment.CenterVertically
-//            ) {
-//                Text("HID Support Status", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-//                OutlinedButton(
-//                    onClick        = onRefresh,
-//                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-//                    modifier       = Modifier.height(32.dp)
-//                ) { Text("Refresh", fontSize = 12.sp) }
-//            }
-//
-//            Spacer(modifier = Modifier.height(10.dp))
-//
-//            when {
-//                status == null -> {
-//                    Row(verticalAlignment = Alignment.CenterVertically) {
-//                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-//                        Spacer(modifier = Modifier.width(8.dp))
-//                        Text("Checking capabilities...", fontSize = 13.sp, color = Color.Gray)
-//                    }
-//                }
-//                !status.bluetoothEnabled -> {
-//                    Text(
-//                        "⚠ Bluetooth is disabled. Enable it to run the HID check.",
-//                        fontSize = 13.sp,
-//                        color    = MaterialTheme.colorScheme.error
-//                    )
-//                }
-//                else -> {
-//                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-//
-//                        HidStatusRow(
-//                            label       = "HID Host (receive input)",
-//                            description = "Can receive keyboards/mice input",
-//                            supported   = status.hidHostSupported
-//                        )
-//
-//                        // Proxy-bound row — note the caveat
-//                        HidStatusRow(
-//                            label       = "HID Device — proxy bound",
-//                            description = "System accepted proxy request (may be false positive)",
-//                            supported   = status.hidDeviceProxyConnected
-//                        )
-//
-//                        // Functional row — this is the REAL test
-//                        HidStatusRow(
-//                            label       = "HID Device — FUNCTIONAL ★",
-//                            description = "App registered & ready to send reports (true capability)",
-//                            supported   = status.hidDeviceFunctional
-//                        )
-//
-//                        HidStatusRow(
-//                            label       = "BLE Peripheral",
-//                            description = "Can advertise as a BLE peripheral (HOGP)",
-//                            supported   = status.blePeripheralSupported
-//                        )
-//
-//                        // If proxy bound but app not registered, offer retry
-//                        if (status.hidDeviceProxyConnected && !status.hidDeviceFunctional) {
-//                            Spacer(modifier = Modifier.height(4.dp))
-//                            Text(
-//                                "⚠ Proxy bound but app registration failed — this means your " +
-//                                        "device's Bluetooth stack is blocking HID Device mode. " +
-//                                        "Check Logcat for \"registerApp\" errors.",
-//                                fontSize = 12.sp,
-//                                color    = MaterialTheme.colorScheme.error
-//                            )
-//                            Spacer(modifier = Modifier.height(4.dp))
-//                            OutlinedButton(onClick = onRetryRegister, modifier = Modifier.fillMaxWidth()) {
-//                                Text("Retry HID App Registration")
-//                            }
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//    }
-//}
-//
-//@Composable
-//fun HidStatusRow(label: String, description: String, supported: Boolean) {
-//    val bgColor    = if (supported) Color(0xFF1B5E20).copy(alpha = 0.12f)
-//    else           Color(0xFFB71C1C).copy(alpha = 0.10f)
-//    val badgeColor = if (supported) Color(0xFF2E7D32) else Color(0xFFC62828)
-//    val badgeText  = if (supported) "✓  Supported" else "✗  Not Supported"
-//
-//    Row(
-//        modifier = Modifier
-//            .fillMaxWidth()
-//            .background(bgColor, RoundedCornerShape(8.dp))
-//            .border(1.dp, badgeColor.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-//            .padding(horizontal = 10.dp, vertical = 8.dp),
-//        horizontalArrangement = Arrangement.SpaceBetween,
-//        verticalAlignment     = Alignment.CenterVertically
-//    ) {
-//        Column(modifier = Modifier.weight(1f)) {
-//            Text(label,       fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-//            Text(description, fontSize   = 11.sp, color = Color.Gray)
-//        }
-//        Spacer(modifier = Modifier.width(8.dp))
-//        Text(badgeText, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = badgeColor)
-//    }
-//}
-//
-//// ── Shared composables ─────────────────────────────────────────────────────
-//
-//@Composable
-//fun SmallButton(label: String, onClick: () -> Unit) {
-//    OutlinedButton(
-//        onClick        = onClick,
-//        contentPadding = PaddingValues(4.dp),
-//        modifier       = Modifier.size(36.dp)
-//    ) { Text(label, fontSize = 14.sp) }
-//}
-//
-//@Composable
-//fun SectionHeader(title: String) {
-//    Text(
-//        text           = title,
-//        fontSize       = 15.sp,
-//        fontWeight     = FontWeight.SemiBold,
-//        color          = MaterialTheme.colorScheme.primary,
-//        modifier       = Modifier.padding(top = 4.dp, bottom = 4.dp)
-//    )
-//}
-//
-//@Composable
-//fun EmptyStateLabel(text: String) {
-//    Text(
-//        text     = text,
-//        fontSize = 13.sp,
-//        color    = Color.Gray,
-//        modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
-//    )
-//}
-//
-//@Composable
-//fun DeviceRow(
-//    name    : String,
-//    address : String,
-//    actions : @Composable () -> Unit
-//) {
-//    Row(
-//        modifier = Modifier
-//            .fillMaxWidth()
-//            .background(
-//                color  = MaterialTheme.colorScheme.surfaceVariant,
-//                shape  = RoundedCornerShape(10.dp)
-//            )
-//            .padding(12.dp),
-//        horizontalArrangement = Arrangement.SpaceBetween,
-//        verticalAlignment     = Alignment.CenterVertically
-//    ) {
-//        Column(modifier = Modifier.weight(1f)) {
-//            Text(text = name,    fontWeight = FontWeight.Medium, fontSize = 16.sp, maxLines = 1)
-//            Text(text = address, fontSize   = 12.sp, color = Color.Gray)
-//        }
-//        Spacer(modifier = Modifier.width(8.dp))
-//        actions()
-//    }
-//}
-
-
-//package com.arena.hidcompatibilitytester
-//
-//import android.Manifest
-//import android.annotation.SuppressLint
-//import android.bluetooth.BluetoothDevice
-//import android.content.Intent
-//import android.content.pm.PackageManager
-//import android.os.Build
-//import android.os.Bundle
-//import android.util.Log
-//import androidx.activity.ComponentActivity
-//import androidx.activity.compose.setContent
-//import androidx.activity.enableEdgeToEdge
-//import androidx.activity.result.contract.ActivityResultContracts
-//import androidx.compose.foundation.background
-//import androidx.compose.foundation.layout.*
-//import androidx.compose.foundation.lazy.LazyColumn
-//import androidx.compose.foundation.lazy.items
-//import androidx.compose.foundation.shape.RoundedCornerShape
-//import androidx.compose.material3.*
-//import androidx.compose.runtime.*
-//import androidx.compose.ui.Alignment
-//import androidx.compose.ui.Modifier
-//import androidx.compose.ui.graphics.Color
-//import androidx.compose.ui.text.font.FontWeight
-//import androidx.compose.ui.unit.dp
-//import androidx.compose.ui.unit.sp
-//import androidx.core.content.ContextCompat
-//import com.arena.hidcompatibilitytester.ui.theme.HIDCompatibilityTesterTheme
-//
-//class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateListener {
-//
-//    private lateinit var deviceManager: BluetoothDeviceManager
-//
-//    private val pairedDevices = mutableStateListOf<BluetoothDevice>()
-//    private val connectedDevices = mutableStateListOf<BluetoothDevice>()
-//    private val nearbyDevices = mutableStateListOf<BluetoothDevice>()
-//
-//    private var isScanningState by mutableStateOf(false)
-//
-//    private val requestPermissionLauncher = registerForActivityResult(
-//        ActivityResultContracts.RequestMultiplePermissions()
-//    ) { permissions ->
-//        if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
-//            executeBluetoothOperations()
-//        }
-//    }
-//
-//    override fun onCreate(savedInstanceState: Bundle?) {
-//        super.onCreate(savedInstanceState)
-//        enableEdgeToEdge()
-//
-//        deviceManager = BluetoothDeviceManager(this) { newDevice ->
-//            val isAlreadyPaired = pairedDevices.any { it.address == newDevice.address }
-//            val isAlreadyNearby = nearbyDevices.any { it.address == newDevice.address }
-//            if (!isAlreadyPaired && !isAlreadyNearby) {
-//                nearbyDevices.add(newDevice)
-//            }
-//        }
-//
-//        checkAndRequestPermissions()
-//
-//        setContent {
-//            HIDCompatibilityTesterTheme {
-//                Scaffold(
-//                    modifier = Modifier.fillMaxSize(),
-//                    topBar = {
-//                        Row(
-//                            modifier = Modifier
-//                                .fillMaxWidth()
-//                                .statusBarsPadding()
-//                                .padding(16.dp),
-//                            horizontalArrangement = Arrangement.SpaceBetween,
-//                            verticalAlignment = Alignment.CenterVertically
-//                        ) {
-//                            Text(
-//                                text = "HID Clone",
-//                                fontSize = 22.sp,
-//                                fontWeight = FontWeight.Bold
-//                            )
-//
-//                            // TOOGLABLE SCAN BUTTON SWITCHER LAYER
-//                            Button(
-//                                onClick = { toggleScanState() },
-//                                colors = ButtonDefaults.buttonColors(
-//                                    containerColor = if (isScanningState) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-//                                )
-//                            ) {
-//                                Text(if (isScanningState) "Stop Scan" else "Scan Devices")
-//                            }
-//                        }
-//                    }
-//                ) { innerPadding ->
-//                    DeviceManagerScreen(
-//                        modifier = Modifier.padding(innerPadding),
-//                        connectedList = connectedDevices,
-//                        pairedList = pairedDevices,
-//                        nearbyList = nearbyDevices,
-//                        onPairClick = { deviceManager.pairDevice(it) },
-//                        onUnpairClick = {
-//                            deviceManager.removePairedDevice(it)
-//                            refreshDeviceLists()
-//                        },
-//                        onConnectClick = { deviceManager.connectToDevice(it) },
-//                        onDisconnectClick = { deviceManager.disconnectFromDevice(it) }
-//                    )
-//                }
-//            }
-//        }
-//    }
-//
-//    private fun checkAndRequestPermissions() {
-//        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-//            == PackageManager.PERMISSION_GRANTED) {
-//            executeBluetoothOperations()
-//        } else {
-//            requestPermissionLauncher.launch(
-//                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-//            )
-//        }
-//    }
-//
-//    private fun executeBluetoothOperations() {
-//        startPersistentHidService()
-//        deviceManager.registerStateListener(this)
-//        refreshDeviceLists()
-//    }
-//
-//    private fun startScanningSequence() {
-//        nearbyDevices.clear()
-//        deviceManager.startNearbyScanning()
-//        isScanningState = true
-//    }
-//
-//    private fun toggleScanState() {
-//        if (isScanningState) {
-//            deviceManager.stopNearbyScanning()
-//            isScanningState = false
-//        } else {
-//            startScanningSequence()
-//        }
-//    }
-//
-//    private fun refreshDeviceLists() {
-//        pairedDevices.clear()
-//        pairedDevices.addAll(deviceManager.getPairedDevices())
-//
-//        connectedDevices.clear()
-//        connectedDevices.addAll(deviceManager.getConnectedDevices())
-//    }
-//
-//    private fun startPersistentHidService() {
-//        val serviceIntent = Intent(this, HidInputService::class.java)
-//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-//            startForegroundService(serviceIntent)
-//        } else {
-//            startService(serviceIntent)
-//        }
-//    }
-//
-//    override fun onBondStateChanged(device: BluetoothDevice, state: Int) {
-//        runOnUiThread {
-//            refreshDeviceLists()
-//            if (state == BluetoothDevice.BOND_BONDED) {
-//                nearbyDevices.removeAll { it.address == device.address }
-//            }
-//        }
-//    }
-//
-//    override fun onConnectionStateChanged(device: BluetoothDevice, state: Int) {
-//        runOnUiThread {
-//            refreshDeviceLists()
-//        }
-//    }
-//
-//    override fun onDestroy() {
-//        super.onDestroy()
-//        deviceManager.stopNearbyScanning()
-//        deviceManager.unregisterStateListener()
-//    }
-//}
-//
-//@SuppressLint("MissingPermission")
-//@Composable
-//fun DeviceManagerScreen(
-//    modifier: Modifier = Modifier,
-//    connectedList: List<BluetoothDevice>,
-//    pairedList: List<BluetoothDevice>,
-//    nearbyList: List<BluetoothDevice>,
-//    onPairClick: (BluetoothDevice) -> Unit,
-//    onUnpairClick: (BluetoothDevice) -> Unit,
-//    onConnectClick: (BluetoothDevice) -> Unit,
-//    onDisconnectClick: (BluetoothDevice) -> Unit
-//) {
-//    LazyColumn(
-//        modifier = modifier
-//            .fillMaxSize()
-//            .padding(horizontal = 16.dp),
-//        verticalArrangement = Arrangement.spacedBy(12.dp)
-//    ) {
-//        item { SectionHeader("Active Connections (${connectedList.size})") }
-//        if (connectedList.isEmpty()) {
-//            item { EmptyStateLabel("No active connection targets detected.") }
-//        } else {
-//            items(connectedList) { device ->
-//                DeviceRow(
-//                    name = device.name ?: "Unknown Laptop Host",
-//                    address = device.address,
-//                    actions = {
-//                        Button(
-//                            onClick = { onDisconnectClick(device) },
-//                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-//                        ) {
-//                            Text("Disconnect", color = Color.White)
-//                        }
-//                    }
-//                )
-//            }
-//        }
-//
-//        item { SectionHeader("Saved / Paired Devices") }
-//        if (pairedList.isEmpty()) {
-//            item { EmptyStateLabel("No paired host systems found.") }
-//        } else {
-//            items(pairedList) { device ->
-//                val isConnected = connectedList.any { it.address == device.address }
-//                DeviceRow(
-//                    name = device.name ?: "Unknown Laptop Host",
-//                    address = device.address,
-//                    actions = {
-//                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-//                            if (!isConnected) {
-//                                Button(onClick = { onConnectClick(device) }) {
-//                                    Text("Connect")
-//                                }
-//                            }
-//                            OutlinedButton(onClick = { onUnpairClick(device) }) {
-//                                Text("Forget")
-//                            }
-//                        }
-//                    }
-//                )
-//            }
-//        }
-//
-//        item { SectionHeader("Scanned Nearby Targets") }
-//
-//        if (nearbyList.isEmpty()) {
-//            item {
-//                EmptyStateLabel("Click Scan Devices to discover laptop targets.")
-//            }
-//        } else {
-//            items(nearbyList) { device ->
-//                DeviceRow(
-//                    name = device.name ?: "Generic Peripheral Target",
-//                    address = device.address,
-//                    actions = {
-//                        Button(
-//                            onClick = { onPairClick(device) },
-//                            colors = ButtonDefaults.buttonColors(
-//                                containerColor = MaterialTheme.colorScheme.secondary
-//                            )
-//                        ) {
-//                            Text(
-//                                text = "Pair",
-//                                color = Color.White
-//                            )
-//                        }
-//                    }
-//                )
-//            }
-//        }
-//    }
-//}
-//
-//@Composable
-//fun SectionHeader(title: String) {
-//    Text(
-//        text = title,
-//        fontSize = 15.sp,
-//        fontWeight = FontWeight.SemiBold,
-//        color = MaterialTheme.colorScheme.primary,
-//        modifier = Modifier.padding(
-//            top = 12.dp,
-//            bottom = 4.dp
-//        )
-//    )
-//}
-//
-//@Composable
-//fun EmptyStateLabel(text: String) {
-//    Text(
-//        text = text,
-//        fontSize = 13.sp,
-//        color = Color.Gray,
-//        modifier = Modifier.padding(
-//            start = 8.dp,
-//            bottom = 8.dp
-//        )
-//    )
-//}
-//
-//@Composable
-//fun DeviceRow(
-//    name: String,
-//    address: String,
-//    actions: @Composable () -> Unit
-//) {
-//    Row(
-//        modifier = Modifier
-//            .fillMaxWidth()
-//            .background(
-//                color = MaterialTheme.colorScheme.surfaceVariant,
-//                shape = RoundedCornerShape(10.dp)
-//            )
-//            .padding(12.dp),
-//        horizontalArrangement = Arrangement.SpaceBetween,
-//        verticalAlignment = Alignment.CenterVertically
-//    ) {
-//        Column(
-//            modifier = Modifier.weight(1f)
-//        ) {
-//            Text(
-//                text = name,
-//                fontWeight = FontWeight.Medium,
-//                fontSize = 16.sp,
-//                maxLines = 1
-//            )
-//
-//            Text(
-//                text = address,
-//                fontSize = 12.sp,
-//                color = Color.Gray
-//            )
-//        }
-//
-//        Spacer(modifier = Modifier.width(8.dp))
-//
-//        actions()
-//    }
-//}
-
-
-
-//package com.arena.hidcompatibilitytester
-//
-//import android.Manifest
-//import android.annotation.SuppressLint
-//import android.bluetooth.BluetoothDevice
-//import android.content.Intent
-//import android.content.pm.PackageManager
-//import android.os.Build
-//import android.os.Bundle
-//import android.util.Log
-//import androidx.activity.ComponentActivity
-//import androidx.activity.compose.setContent
-//import androidx.activity.enableEdgeToEdge
-//import androidx.activity.result.contract.ActivityResultContracts
-//import androidx.compose.foundation.background
-//import androidx.compose.foundation.clickable
-//import androidx.compose.foundation.layout.*
-//import androidx.compose.foundation.lazy.LazyColumn
-//import androidx.compose.foundation.lazy.items
-//import androidx.compose.foundation.shape.RoundedCornerShape
-//import androidx.compose.material3.*
-//import androidx.compose.runtime.*
-//import androidx.compose.ui.Alignment
-//import androidx.compose.ui.Modifier
-//import androidx.compose.ui.graphics.Color
-//import androidx.compose.ui.text.font.FontWeight
-//import androidx.compose.ui.unit.dp
-//import androidx.compose.ui.unit.sp
-//import androidx.core.content.ContextCompat
-//import com.arena.hidcompatibilitytester.ui.theme.HIDCompatibilityTesterTheme
-//
-//class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateListener {
-//
-//    private lateinit var deviceManager: BluetoothDeviceManager
-//
-//    // Jetpack Compose reactive state lists
-//    private val pairedDevices = mutableStateListOf<BluetoothDevice>()
-//    private val connectedDevices = mutableStateListOf<BluetoothDevice>()
-//    private val nearbyDevices = mutableStateListOf<BluetoothDevice>()
-//
-//    // Scan button toggle reactive status tracking
-//    private var isScanningState by mutableStateOf(false)
-//
-//    private val requestPermissionLauncher = registerForActivityResult(
-//        ActivityResultContracts.RequestMultiplePermissions()
-//    ) { permissions ->
-//        if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
-//            executeBluetoothOperations()
-//        } else {
-//            Log.e("MAIN", "Location permissions rejected.")
-//        }
-//    }
-//
-//    override fun onCreate(savedInstanceState: Bundle?) {
-//        super.onCreate(savedInstanceState)
-//        enableEdgeToEdge()
-//
-//        // Initialize Device Manager with scan callback handling duplicates
-//        deviceManager = BluetoothDeviceManager(this) { newDevice ->
-//            val isAlreadyPaired = pairedDevices.any { it.address == newDevice.address }
-//            val isAlreadyNearby = nearbyDevices.any { it.address == newDevice.address }
-//            if (!isAlreadyPaired && !isAlreadyNearby) {
-//                nearbyDevices.add(newDevice)
-//            }
-//        }
-//
-//        checkAndRequestPermissions()
-//
-//        setContent {
-//            HIDCompatibilityTesterTheme {
-//                Scaffold(
-//                    modifier = Modifier.fillMaxSize(),
-//                    topBar = {
-//                        Box(
-//                            modifier = Modifier
-//                                .fillMaxWidth()
-//                                .statusBarsPadding()
-//                                .padding(16.dp),
-//                            contentAlignment = Alignment.CenterStart
-//                        ) {
-//                            Text(
-//                                text = "HID Clone Controller",
-//                                fontSize = 22.sp,
-//                                fontWeight = FontWeight.Bold
-//                            )
-//                            // --- ADDED SYSTEM RE-SCAN BUTTON LAYER ---
-//                            Button(
-//                                onClick = { toggleScanState() }
-//                            ) {
-//                                Text(if (isScanningState) "Scanning..." else "Scan Devices")
-//                            }
-//                        }
-//                    }
-//                ) { innerPadding ->
-//                    DeviceManagerScreen(
-//                        modifier = Modifier.padding(innerPadding),
-//                        connectedList = connectedDevices,
-//                        pairedList = pairedDevices,
-//                        nearbyList = nearbyDevices,
-//                        onPairClick = { deviceManager.pairDevice(it) },
-//                        onUnpairClick = {
-//                            deviceManager.removePairedDevice(it)
-//                            refreshDeviceLists()
-//                        },
-//                        onConnectClick = {
-//                            // SAFETY INJECTION: Force hardware profile declaration to OS before triggering socket binding
-//                            deviceManager.registerHidAppConfig()
-//                            deviceManager.connectToDevice(it)
-//                        },
-//                        onDisconnectClick = { deviceManager.disconnectFromDevice(it) }
-//                    )
-//                }
-//            }
-//        }
-//    }
-//
-//    private fun checkAndRequestPermissions() {
-//        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-//            == PackageManager.PERMISSION_GRANTED) {
-//            executeBluetoothOperations()
-//        } else {
-//            requestPermissionLauncher.launch(
-//                arrayOf(
-//                    Manifest.permission.ACCESS_FINE_LOCATION,
-//                    Manifest.permission.ACCESS_COARSE_LOCATION
-//                )
-//            )
-//        }
-//    }
-//
-//    private fun executeBluetoothOperations() {
-//        startPersistentHidService()
-//        deviceManager.registerStateListener(this)
-//        refreshDeviceLists()
-//        deviceManager.startNearbyScanning()
-//    }
-//
-//    private fun startScanningSequence() {
-//        nearbyDevices.clear()
-//        deviceManager.startNearbyScanning()
-//        isScanningState = true
-//    }
-//
-//    private fun toggleScanState() {
-//        if (deviceManager.isCurrentlyScanning()) {
-//            deviceManager.stopNearbyScanning()
-//            isScanningState = false
-//        } else {
-//            startScanningSequence()
-//        }
-//    }
-//
-//    private fun refreshDeviceLists() {
-//        // Sync lists safely from current system memory states
-//        pairedDevices.clear()
-//        pairedDevices.addAll(deviceManager.getPairedDevices())
-//
-//        connectedDevices.clear()
-//        connectedDevices.addAll(deviceManager.getConnectedDevices())
-//    }
-//
-//    private fun startPersistentHidService() {
-//        val serviceIntent = Intent(this, HidInputService::class.java)
-//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-//            startForegroundService(serviceIntent)
-//        } else {
-//            startService(serviceIntent)
-//        }
-//    }
-//
-//    // Bluetooth Broadcast Receiver State Changes Listener Hooks
-//    override fun onBondStateChanged(device: BluetoothDevice, state: Int) {
-//        runOnUiThread {
-//            refreshDeviceLists()
-//            // Remove from nearby if it just got paired
-//            if (state == BluetoothDevice.BOND_BONDED) {
-//                nearbyDevices.removeAll { it.address == device.address }
-//            }
-//        }
-//    }
-//
-//    override fun onConnectionStateChanged(device: BluetoothDevice, state: Int) {
-//        runOnUiThread {
-//            refreshDeviceLists()
-//        }
-//    }
-//
-//    override fun onDestroy() {
-//        super.onDestroy()
-//        deviceManager.stopNearbyScanning()
-//        deviceManager.unregisterStateListener()
-//    }
-//}
-//
-//@SuppressLint("MissingPermission")
-//@Composable
-//fun DeviceManagerScreen(
-//    modifier: Modifier = Modifier,
-//    connectedList: List<BluetoothDevice>,
-//    pairedList: List<BluetoothDevice>,
-//    nearbyList: List<BluetoothDevice>,
-//    onPairClick: (BluetoothDevice) -> Unit,
-//    onUnpairClick: (BluetoothDevice) -> Unit,
-//    onConnectClick: (BluetoothDevice) -> Unit,
-//    onDisconnectClick: (BluetoothDevice) -> Unit
-//) {
-//    LazyColumn(
-//        modifier = modifier
-//            .fillMaxSize()
-//            .padding(horizontal = 16.dp),
-//        verticalArrangement = Arrangement.spacedBy(12.dp)
-//    ) {
-//        // SECTION 1: CONNECTED
-//        item { SectionHeader("Active Connections (${connectedList.size})") }
-//        if (connectedList.isEmpty()) {
-//            item { EmptyStateLabel("No active input connection targets detected.") }
-//        } else {
-//            items(connectedList) { device ->
-//                DeviceRow(
-//                    name = device.name ?: "Unknown Device",
-//                    address = device.address,
-//                    actions = {
-//                        Button(
-//                            onClick = { onDisconnectClick(device) },
-//                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-//                        ) {
-//                            Text("Disconnect", color = Color.White)
-//                        }
-//                    }
-//                )
-//            }
-//        }
-//
-//        // SECTION 2: SAVED/PAIRED
-//        item { SectionHeader("Saved / Paired Devices") }
-//        if (pairedList.isEmpty()) {
-//            item { EmptyStateLabel("No paired host systems found.") }
-//        } else {
-//            items(pairedList) { device ->
-//                val isConnected = connectedList.any { it.address == device.address }
-//                DeviceRow(
-//                    name = device.name ?: "Unknown Device",
-//                    address = device.address,
-//                    actions = {
-//                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-//                            if (!isConnected) {
-//                                Button(onClick = { onConnectClick(device) }) {
-//                                    Text("Connect")
-//                                }
-//                            }
-//                            OutlinedButton(onClick = { onUnpairClick(device) }) {
-//                                Text("Forget")
-//                            }
-//                        }
-//                    }
-//                )
-//            }
-//        }
-//
-//        // SECTION 3: NEARBY
-//        item { SectionHeader("Scanned Nearby Targets") }
-//        if (nearbyList.isEmpty()) {
-//            item { EmptyStateLabel("Scanning for active hardware components...") }
-//        } else {
-//            items(nearbyList) { device ->
-//                DeviceRow(
-//                    name = device.name ?: "Generic Peripheral Target",
-//                    address = device.address,
-//                    actions = {
-//                        Button(
-//                            onClick = { onPairClick(device) },
-//                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-//                        ) {
-//                            Text("Pair Device", color = Color.White)
-//                        }
-//                    }
-//                )
-//            }
-//        }
-//    }
-//}
-//
-//@Composable
-//fun SectionHeader(title: String) {
-//    Text(
-//        text = title,
-//        fontSize = 15.sp,
-//        fontWeight = FontWeight.SemiBold,
-//        color = MaterialTheme.colorScheme.primary,
-//        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
-//    )
-//}
-//
-//@Composable
-//fun EmptyStateLabel(text: String) {
-//    Text(
-//        text = text,
-//        fontSize = 13.sp,
-//        color = Color.Gray,
-//        modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
-//    )
-//}
-//
-//@Composable fun DeviceRow(name: String,address: String,actions: @Composable () -> Unit) {
-//    Row(modifier = Modifier.fillMaxWidth()
-//                    .background(MaterialTheme
-//                        .colorScheme.surfaceVariant, shape = RoundedCornerShape(10.dp))
-//                    .padding(12.dp),
-//        horizontalArrangement = Arrangement.SpaceBetween,
-//        verticalAlignment = Alignment.CenterVertically) {
-//        Column(modifier = Modifier.weight(1f)) {
-//            Text(text = name, fontWeight = FontWeight.Medium, fontSize = 16.sp, maxLines = 1)
-//            Text(text = address, fontSize = 12.sp, color = Color.Gray)
-//        }
-//        Spacer(modifier = Modifier.width(8.dp))
-//        actions()
-//    }
-//}

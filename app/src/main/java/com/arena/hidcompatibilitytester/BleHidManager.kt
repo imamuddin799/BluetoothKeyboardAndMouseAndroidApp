@@ -4,35 +4,34 @@ import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.bluetooth.le.*
 import android.content.Context
-import android.os.Build
+import android.content.SharedPreferences
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.Looper
 import android.util.Log
 
 /**
- * HOGP (HID over GATT Profile) peripheral implementation.
+ * BleHidManager — BLE GATT peripheral that exposes a combined Mouse + Keyboard HID service.
  *
- * This class turns the Android device into a BLE HID peripheral (mouse + keyboard).
- * It works on any Android 5.0+ device that supports BLE peripheral mode
- * (isMultipleAdvertisementSupported == true).
+ * AUTO-RECONNECT BEHAVIOUR (mirrors "Bluetooth Keyboard & Mouse" by Appground):
  *
- * GATT Service layout:
- *  ├─ Generic Access (0x1800)
- *  │   ├─ Device Name (0x2A00)
- *  │   └─ Appearance (0x2A01)  → HID Mouse = 0x03C2
- *  ├─ Device Information (0x180A)
- *  │   ├─ Manufacturer Name (0x2A29)
- *  │   ├─ Model Number (0x2A24)
- *  │   └─ PnP ID (0x2A50)
- *  ├─ Battery Service (0x180F)
- *  │   └─ Battery Level (0x2A19)  → 100%
- *  └─ HID Service (0x1812)
- *      ├─ HID Information (0x2A4A)
- *      ├─ Report Map (0x2A4B)      → descriptor bytes
- *      ├─ HID Control Point (0x2A4C)
- *      ├─ Protocol Mode (0x2A4E)   → Report Protocol
- *      ├─ Mouse Input Report (0x2A4D) + CCCD + Report Reference (mouse, ID 1)
- *      └─ Keyboard Input Report (0x2A4D) + CCCD + Report Reference (kb, ID 2)
+ *  1. Every time a host successfully subscribes (enables CCCD notifications) its address
+ *     is persisted to SharedPreferences ("known hosts").
+ *
+ *  2. On ANY disconnect the manager immediately:
+ *       a. Continues / restarts BLE advertising  →  new hosts can still find "HID Clone"
+ *       b. Calls gattServer.connect(device, autoConnect=true) for EVERY known host
+ *          →  Android will reconnect the moment the host is in range, even without
+ *             advertising.  This covers the "phone BT was off, now back on" case.
+ *
+ *  3. A periodic retry loop (every RECONNECT_INTERVAL_MS) repeats step 2b so that
+ *     hosts that come back online later are still caught.
+ *
+ *  4. If the host side removes the bond (bond state → BOND_NONE) we remove that address
+ *     from known hosts AND keep advertising so the host can re-pair from scratch.
+ *
+ *  5. On app cold-start, start() loads known hosts from prefs and immediately fires
+ *     autoConnect calls in addition to advertising — no user interaction needed.
  */
 @SuppressLint("MissingPermission")
 class BleHidManager(private val context: Context) {
@@ -40,484 +39,812 @@ class BleHidManager(private val context: Context) {
     companion object {
         private const val TAG = "BleHidManager"
 
-        // ── Standard GATT UUIDs ──────────────────────────────────────────
-        private val UUID_GENERIC_ACCESS     = gattUuid(0x1800)
-        private val UUID_DEVICE_INFORMATION = gattUuid(0x180A)
-        private val UUID_BATTERY_SERVICE    = gattUuid(0x180F)
-        private val UUID_HID_SERVICE        = gattUuid(0x1812)
+        // SharedPreferences keys
+        private const val PREFS_NAME          = "ble_hid_prefs"
+        private const val PREFS_KNOWN_HOSTS   = "known_hosts"          // comma-separated addresses
 
-        private val UUID_DEVICE_NAME        = gattUuid(0x2A00)
-        private val UUID_APPEARANCE         = gattUuid(0x2A01)
-        private val UUID_MANUFACTURER_NAME  = gattUuid(0x2A29)
-        private val UUID_MODEL_NUMBER       = gattUuid(0x2A24)
-        private val UUID_PNP_ID             = gattUuid(0x2A50)
-        private val UUID_BATTERY_LEVEL      = gattUuid(0x2A19)
-        private val UUID_HID_INFORMATION    = gattUuid(0x2A4A)
-        private val UUID_REPORT_MAP         = gattUuid(0x2A4B)
-        private val UUID_HID_CONTROL_POINT  = gattUuid(0x2A4C)
-        private val UUID_PROTOCOL_MODE      = gattUuid(0x2A4E)
-        private val UUID_REPORT             = gattUuid(0x2A4D)
+        // Timing
+        private const val SERVICE_ADD_DELAY_MS    = 600L
+        private const val SERVICE_ADD_TIMEOUT_MS  = 5_000L
+        private const val RECONNECT_INTERVAL_MS   = 8_000L             // retry autoConnect every 8 s
+        private const val INITIAL_RECONNECT_DELAY = 1_500L             // first attempt after this delay
 
-        private val UUID_CCCD               = gattUuid(0x2902) // Client Characteristic Config
-        private val UUID_REPORT_REFERENCE   = gattUuid(0x2908)
+        private const val MAX_CONNECTIONS = 4
 
-        // Appearance: Generic HID = 0x03C0, Mouse = 0x03C2
-        private val APPEARANCE_MOUSE = byteArrayOf(0xC2.toByte(), 0x03)
-
-        // HID Information: bcdHID=1.11, bCountryCode=0x00, Flags=0x02 (normally connectable)
-        private val HID_INFORMATION = byteArrayOf(0x11, 0x01, 0x00, 0x02)
-
-        // Protocol Mode: Report Protocol (0x01)
-        private val PROTOCOL_MODE_REPORT = byteArrayOf(0x01)
-
-        /**
-         * Combined Mouse + Keyboard HID Report Descriptor
-         *
-         * Report ID 1 → Mouse  (3 bytes: buttons | X | Y)
-         * Report ID 2 → Keyboard (8 bytes: modifiers | reserved | key[0..5])
-         */
-        val REPORT_MAP = byteArrayOf(
-            // ── Mouse (Report ID 1) ──────────────────────────────────────
-            0x05, 0x01,        // Usage Page (Generic Desktop)
-            0x09, 0x02,        // Usage (Mouse)
-            0xA1.toByte(), 0x01, // Collection (Application)
-            0x85.toByte(), 0x01, //   Report ID (1)
-            0x09, 0x01,        //   Usage (Pointer)
-            0xA1.toByte(), 0x00, //   Collection (Physical)
-            // Buttons 1-3
-            0x05, 0x09,        //     Usage Page (Button)
-            0x19, 0x01,        //     Usage Minimum (1)
-            0x29, 0x03,        //     Usage Maximum (3)
-            0x15, 0x00,        //     Logical Minimum (0)
-            0x25, 0x01,        //     Logical Maximum (1)
-            0x95.toByte(), 0x03, //     Report Count (3)
-            0x75, 0x01,        //     Report Size (1)
-            0x81.toByte(), 0x02, //     Input (Data, Variable, Absolute)
-            // Padding
-            0x95.toByte(), 0x01, //     Report Count (1)
-            0x75, 0x05,        //     Report Size (5)
-            0x81.toByte(), 0x03, //     Input (Constant)
-            // X, Y
-            0x05, 0x01,        //     Usage Page (Generic Desktop)
-            0x09, 0x30,        //     Usage (X)
-            0x09, 0x31,        //     Usage (Y)
-            0x15, 0x81.toByte(), //   Logical Minimum (-127)
-            0x25, 0x7F,        //     Logical Maximum (127)
-            0x75, 0x08,        //     Report Size (8)
-            0x95.toByte(), 0x02, //     Report Count (2)
-            0x81.toByte(), 0x06, //     Input (Data, Variable, Relative)
-            0xC0.toByte(),     //   End Collection (Physical)
-            0xC0.toByte(),     // End Collection (Application)
-
-            // ── Keyboard (Report ID 2) ───────────────────────────────────
-            0x05, 0x01,        // Usage Page (Generic Desktop)
-            0x09, 0x06,        // Usage (Keyboard)
-            0xA1.toByte(), 0x01, // Collection (Application)
-            0x85.toByte(), 0x02, //   Report ID (2)
-            // Modifier keys
-            0x05, 0x07,        //   Usage Page (Key Codes)
-            0x19, 0xE0.toByte(), // Usage Minimum (Left Ctrl)
-            0x29, 0xE7.toByte(), // Usage Maximum (Right GUI)
-            0x15, 0x00,        //   Logical Minimum (0)
-            0x25, 0x01,        //   Logical Maximum (1)
-            0x75, 0x01,        //   Report Size (1)
-            0x95.toByte(), 0x08, //   Report Count (8)
-            0x81.toByte(), 0x02, //   Input (Data, Variable, Absolute)
-            // Reserved byte
-            0x95.toByte(), 0x01, //   Report Count (1)
-            0x75, 0x08,        //   Report Size (8)
-            0x81.toByte(), 0x01, //   Input (Constant)
-            // Key array (6 keys)
-            0x95.toByte(), 0x06, //   Report Count (6)
-            0x75, 0x08,        //   Report Size (8)
-            0x15, 0x00,        //   Logical Minimum (0)
-            0x25, 0x65,        //   Logical Maximum (101)
-            0x05, 0x07,        //   Usage Page (Key Codes)
-            0x19, 0x00,        //   Usage Minimum (0)
-            0x29, 0x65,        //   Usage Maximum (101)
-            0x81.toByte(), 0x00, //   Input (Data, Array, Absolute)
-            0xC0.toByte()      // End Collection
-        )
-
+        // ── GATT UUIDs ────────────────────────────────────────────────────────
         private fun gattUuid(short: Int) =
             java.util.UUID.fromString("0000%04x-0000-1000-8000-00805f9b34fb".format(short))
+
+        val UUID_GENERIC_ACCESS     = gattUuid(0x1800)
+        val UUID_DEVICE_INFORMATION = gattUuid(0x180A)
+        val UUID_BATTERY_SERVICE    = gattUuid(0x180F)
+        val UUID_HID_SERVICE        = gattUuid(0x1812)
+        val UUID_DEVICE_NAME        = gattUuid(0x2A00)
+        val UUID_APPEARANCE         = gattUuid(0x2A01)
+        val UUID_MANUFACTURER_NAME  = gattUuid(0x2A29)
+        val UUID_MODEL_NUMBER       = gattUuid(0x2A24)
+        val UUID_PNP_ID             = gattUuid(0x2A50)
+        val UUID_BATTERY_LEVEL      = gattUuid(0x2A19)
+        val UUID_HID_INFORMATION    = gattUuid(0x2A4A)
+        val UUID_REPORT_MAP         = gattUuid(0x2A4B)
+        val UUID_HID_CONTROL_POINT  = gattUuid(0x2A4C)
+        val UUID_PROTOCOL_MODE      = gattUuid(0x2A4E)
+        val UUID_REPORT             = gattUuid(0x2A4D)
+        val UUID_CCCD               = gattUuid(0x2902)
+        val UUID_REPORT_REFERENCE   = gattUuid(0x2908)
+
+        // ── HID constants ─────────────────────────────────────────────────────
+        val APPEARANCE_MOUSE     = byteArrayOf(0xC2.toByte(), 0x03)
+        val HID_INFORMATION      = byteArrayOf(0x11, 0x01, 0x00, 0x02)
+        val PROTOCOL_MODE_REPORT = byteArrayOf(0x01)
+
+        /** Combined Mouse (Report ID 1) + Keyboard (Report ID 2) descriptor */
+        val REPORT_MAP = byteArrayOf(
+            // ── Mouse ──────────────────────────────────────────────────────────
+            0x05, 0x01,
+            0x09, 0x02,
+            0xA1.toByte(), 0x01,
+            0x85.toByte(), 0x01,         // Report ID 1
+            0x09, 0x01,
+            0xA1.toByte(), 0x00,
+            0x05, 0x09,
+            0x19, 0x01,
+            0x29, 0x03,
+            0x15, 0x00,
+            0x25, 0x01,
+            0x95.toByte(), 0x03,
+            0x75, 0x01,
+            0x81.toByte(), 0x02,
+            0x95.toByte(), 0x01,
+            0x75, 0x05,
+            0x81.toByte(), 0x03,
+            0x05, 0x01,
+            0x09, 0x30,
+            0x09, 0x31,
+            0x15, 0x81.toByte(),
+            0x25, 0x7F,
+            0x75, 0x08,
+            0x95.toByte(), 0x02,
+            0x81.toByte(), 0x06,
+            0xC0.toByte(),
+            0xC0.toByte(),
+            // ── Keyboard ───────────────────────────────────────────────────────
+            0x05, 0x01,
+            0x09, 0x06,
+            0xA1.toByte(), 0x01,
+            0x85.toByte(), 0x02,         // Report ID 2
+            0x05, 0x07,
+            0x19, 0xE0.toByte(),
+            0x29, 0xE7.toByte(),
+            0x15, 0x00,
+            0x25, 0x01,
+            0x75, 0x01,
+            0x95.toByte(), 0x08,
+            0x81.toByte(), 0x02,
+            0x95.toByte(), 0x01,
+            0x75, 0x08,
+            0x81.toByte(), 0x01,
+            0x95.toByte(), 0x06,
+            0x75, 0x08,
+            0x15, 0x00,
+            0x25, 0x65,
+            0x05, 0x07,
+            0x19, 0x00,
+            0x29, 0x65,
+            0x81.toByte(), 0x00,
+            0xC0.toByte()
+        )
     }
 
-    // ── State ────────────────────────────────────────────────────────────────
+    // ── Bluetooth system services ─────────────────────────────────────────────
     private val bluetoothManager =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     private val adapter: BluetoothAdapter? = bluetoothManager.adapter
+    private val originalName: String? = try { adapter?.name } catch (e: Exception) { null }
 
-    private var gattServer: BluetoothGattServer? = null
-    private var advertiser: BluetoothLeAdvertiser? = null
+    // ── Persistence ───────────────────────────────────────────────────────────
+    private val prefs: SharedPreferences =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    // ── GATT + Advertiser ─────────────────────────────────────────────────────
+    private var gattServer  : BluetoothGattServer? = null
+    private var advertiser  : BluetoothLeAdvertiser? = null
     private var isAdvertising = false
 
-    // Characteristics we need to hold refs to for sending notifications
-    private var mouseInputChar: BluetoothGattCharacteristic? = null
+    // ── Report characteristics ────────────────────────────────────────────────
+    private var mouseInputChar   : BluetoothGattCharacteristic? = null
     private var keyboardInputChar: BluetoothGattCharacteristic? = null
 
-    // Connected central devices (hosts that subscribed to our reports)
-    private val subscribedDevices = mutableSetOf<BluetoothDevice>()
+    // ── Device tracking ───────────────────────────────────────────────────────
+    data class DeviceInfo(
+        val device      : BluetoothDevice,
+        val address     : String,
+        var name        : String?,
+        var isSubscribed: Boolean = false
+    )
 
-    // Public state callbacks
-    var onStateChanged: ((BleHidState) -> Unit)? = null
-    var onDeviceConnected: ((BluetoothDevice) -> Unit)? = null
-    var onDeviceDisconnected: ((BluetoothDevice) -> Unit)? = null
+    private val connectedDeviceMap = mutableMapOf<String, DeviceInfo>() // address → info
+    private val subscribedDevices  = mutableSetOf<BluetoothDevice>()
 
-    private val originalName: String? = adapter?.name
+    /**
+     * Persisted set of addresses that have ever successfully subscribed.
+     * Used to drive autoConnect on start and after any disconnect.
+     */
+    private val knownHostAddresses = mutableSetOf<String>()
 
+    private val bondedDeviceCache  = mutableMapOf<String, String>()     // address → name
+
+    // ── Public callbacks ──────────────────────────────────────────────────────
+    var onStateChanged      : ((BleHidState) -> Unit)? = null
+    var onDeviceListChanged : ((List<DeviceInfo>) -> Unit)? = null
+    var onDeviceSubscribed  : ((BluetoothDevice) -> Unit)? = null
+
+    // ── Handlers ──────────────────────────────────────────────────────────────
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var gattThread : HandlerThread? = null
+    private var gattHandler: Handler? = null
 
-    // ✅ CORRECT — Explicitly declare the type as the sealed class
+    // ── Service add queue ─────────────────────────────────────────────────────
+    private val serviceQueue    = ArrayDeque<BluetoothGattService>()
+    private var timeoutRunnable : Runnable? = null
+
+    // ── Reconnect loop ────────────────────────────────────────────────────────
+    private var reconnectRunnable: Runnable? = null
+    private var isRunning = false          // true between start() and stop()
+
+    // ── State ─────────────────────────────────────────────────────────────────
     private var currentState: BleHidState = BleHidState.IDLE
         set(value) {
             field = value
             mainHandler.post { onStateChanged?.invoke(value) }
         }
 
-    // ── Public API ───────────────────────────────────────────────────────────
+    // ═════════════════════════════════════════════════════════════════════════
+    // Public API
+    // ═════════════════════════════════════════════════════════════════════════
 
-    fun isSupported(): Boolean =
+    fun isSupported(): Boolean = try {
         adapter != null &&
-                adapter.isEnabled &&
-                adapter.isMultipleAdvertisementSupported
+        adapter.isEnabled &&
+        adapter.isMultipleAdvertisementSupported
+    } catch (e: Exception) { false }
 
-    fun getConnectedDevices(): List<BluetoothDevice> = subscribedDevices.toList()
+    fun getConnectedDeviceInfoList(): List<DeviceInfo> = connectedDeviceMap.values.toList()
+    fun getConnectionCount(): Int  = connectedDeviceMap.size
+    fun isReadyToSend(): Boolean   = subscribedDevices.isNotEmpty()
 
-    /**
-     * Start the GATT server and begin advertising as a BLE HID peripheral.
-     */
+    /** Load known hosts from prefs so callers can inspect them before start(). */
+    fun getKnownHostCount(): Int = loadKnownHosts().size
+
     fun start() {
+        Log.d(TAG, "start() — isSupported=${isSupported()}")
         if (!isSupported()) {
-            currentState = BleHidState.ERROR("BLE peripheral not supported on this device")
+            currentState = BleHidState.ERROR("BLE peripheral not supported")
             return
         }
-        if (currentState is BleHidState.ADVERTISING || currentState is BleHidState.CONNECTED) {
-            Log.w(TAG, "Already running")
-            return
+        if (currentState is BleHidState.ADVERTISING ||
+            currentState is BleHidState.CONNECTED) {
+            Log.w(TAG, "Already running"); return
         }
 
-        // Set adapter name so hosts see "HID Clone"
-        try {
-            adapter?.name = "HID Clone"
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not set adapter name: ${e.message}")
-        }
+        isRunning = true
+        refreshBondedCache()
+        knownHostAddresses.clear()
+        knownHostAddresses.addAll(loadKnownHosts())
+        Log.d(TAG, "Known hosts loaded: ${knownHostAddresses.size} → $knownHostAddresses")
+
+        try { adapter?.name = "HID Clone" } catch (e: Exception) { Log.w(TAG, "rename: ${e.message}") }
 
         currentState = BleHidState.STARTING
-        openGattServer()
+        startGattThread()
+        gattHandler?.postDelayed({ openGattServer() }, 500)
     }
 
-    /**
-     * Stop advertising and close the GATT server.
-     */
     fun stop() {
-        // Restore original adapter name
-        try {
-            adapter?.name = originalName
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not restore adapter name: ${e.message}")
-        }
-
+        Log.d(TAG, "stop()")
+        isRunning = false
+        cancelReconnectLoop()
+        cancelTimeout()
         stopAdvertising()
-        gattServer?.close()
-        gattServer = null
+
+        for (info in connectedDeviceMap.values.toList()) {
+            try { gattServer?.cancelConnection(info.device) } catch (e: Exception) {}
+        }
+        try { gattServer?.close() } catch (e: Exception) { Log.e(TAG, "close: ${e.message}") }
+
+        gattServer         = null
+        mouseInputChar     = null
+        keyboardInputChar  = null
+        connectedDeviceMap.clear()
         subscribedDevices.clear()
-        mouseInputChar = null
-        keyboardInputChar = null
+        serviceQueue.clear()
+
+        stopGattThread()
+
+        try { if (originalName != null) adapter?.name = originalName }
+        catch (e: Exception) { Log.w(TAG, "restore name: ${e.message}") }
+
         currentState = BleHidState.IDLE
-        Log.d(TAG, "BLE HID stopped")
+        notifyDeviceListChanged()
+    }
+
+    /** Disconnect a specific device (user-initiated). Does NOT remove from knownHosts. */
+    fun disconnectDevice(address: String) {
+        val info = connectedDeviceMap[address] ?: return
+        try { gattServer?.cancelConnection(info.device) }
+        catch (e: Exception) { Log.e(TAG, "disconnectDevice: ${e.message}") }
+        // onConnectionStateChange will clean up the map and trigger reconnect loop
     }
 
     /**
-     * Send a mouse movement/click report.
-     * @param dx      X delta (-127..127)
-     * @param dy      Y delta (-127..127)
-     * @param buttons Bitmask: bit0=left, bit1=right, bit2=middle
+     * Remove a host from knownHosts AND disconnect it.
+     * Call this only when the user explicitly "forgets" a device.
      */
+    fun forgetDevice(address: String) {
+        removeKnownHost(address)
+        disconnectDevice(address)
+        Log.d(TAG, "Forgot device $address — will no longer auto-reconnect to it")
+    }
+
+    /**
+     * Invite a previously bonded device to reconnect.
+     * The GATT server will accept the connection as soon as the device is in range.
+     */
+    fun inviteReconnect(device: BluetoothDevice) {
+        try {
+            gattServer?.connect(device, true)
+            Log.d(TAG, "inviteReconnect (autoConnect=true): ${device.address}")
+        } catch (e: Exception) {
+            Log.e(TAG, "inviteReconnect: ${e.message}")
+        }
+    }
+
+    // ── HID report senders ────────────────────────────────────────────────────
+
     fun sendMouseReport(dx: Int, dy: Int, buttons: Int = 0): Boolean {
-        val char = mouseInputChar ?: return false
-        if (subscribedDevices.isEmpty()) return false
-
-        val report = byteArrayOf(
-            buttons.and(0x07).toByte(),
-            dx.coerceIn(-127, 127).toByte(),
-            dy.coerceIn(-127, 127).toByte()
+        val char = mouseInputChar ?: return false.also { Log.w(TAG, "mouseChar null") }
+        if (subscribedDevices.isEmpty()) return false.also { Log.w(TAG, "no subscribers") }
+        return sendInputReport(
+            char,
+            byteArrayOf(
+                buttons.and(0x07).toByte(),
+                dx.coerceIn(-127, 127).toByte(),
+                dy.coerceIn(-127, 127).toByte()
+            )
         )
-        return sendInputReport(char, report)
     }
 
-    /**
-     * Send a keyboard report.
-     * @param modifiers  Modifier bitmask (Ctrl=0x01, Shift=0x02, Alt=0x04, GUI=0x08, etc.)
-     * @param keyCodes   Up to 6 HID key codes (USB HID Usage Table page 0x07)
-     */
     fun sendKeyboardReport(modifiers: Int = 0, keyCodes: List<Int> = emptyList()): Boolean {
         val char = keyboardInputChar ?: return false
         if (subscribedDevices.isEmpty()) return false
-
-        val report = ByteArray(8)
-        report[0] = modifiers.toByte()
-        report[1] = 0x00 // reserved
-        keyCodes.take(6).forEachIndexed { i, code -> report[2 + i] = code.toByte() }
+        val report = ByteArray(8).also { r ->
+            r[0] = modifiers.toByte()
+            keyCodes.take(6).forEachIndexed { i, c -> r[2 + i] = c.toByte() }
+        }
         return sendInputReport(char, report)
     }
 
-    /** Release all keys (send empty keyboard report). */
-    fun releaseKeys(): Boolean = sendKeyboardReport()
+    fun releaseKeys() = sendKeyboardReport()
 
-    // ── GATT Server Setup ────────────────────────────────────────────────────
+    // ═════════════════════════════════════════════════════════════════════════
+    // Persistence helpers
+    // ═════════════════════════════════════════════════════════════════════════
 
-    private fun openGattServer() {
-        gattServer = bluetoothManager.openGattServer(context, gattServerCallback)
-        if (gattServer == null) {
-            currentState = BleHidState.ERROR("Failed to open GATT server")
+    private fun loadKnownHosts(): Set<String> {
+        val raw = prefs.getString(PREFS_KNOWN_HOSTS, "") ?: ""
+        return if (raw.isBlank()) emptySet()
+        else raw.split(",").map { it.trim() }.filter { it.isNotBlank() }.toSet()
+    }
+
+    private fun saveKnownHost(address: String) {
+        knownHostAddresses.add(address)
+        prefs.edit().putString(PREFS_KNOWN_HOSTS, knownHostAddresses.joinToString(",")).apply()
+        Log.d(TAG, "Persisted known host: $address (total ${knownHostAddresses.size})")
+    }
+
+    private fun removeKnownHost(address: String) {
+        knownHostAddresses.remove(address)
+        prefs.edit().putString(PREFS_KNOWN_HOSTS, knownHostAddresses.joinToString(",")).apply()
+        Log.d(TAG, "Removed known host: $address (remaining ${knownHostAddresses.size})")
+    }
+
+    private fun clearAllKnownHosts() {
+        knownHostAddresses.clear()
+        prefs.edit().remove(PREFS_KNOWN_HOSTS).apply()
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Auto-reconnect logic
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Called after advertising is up (new start) OR after any host disconnects.
+     *
+     * Strategy:
+     *   • Keep advertising  →  new hosts can find "HID Clone" and pair fresh
+     *   • For every known host call gattServer.connect(device, autoConnect=true)
+     *     →  Android BT stack reconnects silently when the device is in range
+     *   • Schedule a periodic retry so devices that come online later are covered
+     */
+    private fun startReconnectLoop() {
+        cancelReconnectLoop()
+        if (knownHostAddresses.isEmpty()) {
+            Log.d(TAG, "No known hosts — skipping reconnect loop")
             return
         }
 
-        addGenericAccessService()
-        // Small delay between service additions to avoid race conditions
-        mainHandler.postDelayed({ addDeviceInformationService() }, 100)
-        mainHandler.postDelayed({ addBatteryService() }, 200)
-        mainHandler.postDelayed({ addHidService() }, 300)
-        // Start advertising after services are added
-        mainHandler.postDelayed({ startAdvertising() }, 600)
+        Log.d(TAG, "Starting reconnect loop for ${knownHostAddresses.size} known host(s)")
+
+        val runnable = object : Runnable {
+            override fun run() {
+                if (!isRunning) return
+                attemptAutoConnectAll()
+                mainHandler.postDelayed(this, RECONNECT_INTERVAL_MS)
+            }
+        }
+        reconnectRunnable = runnable
+        // First attempt after a short delay (give GATT server time to settle)
+        mainHandler.postDelayed(runnable, INITIAL_RECONNECT_DELAY)
     }
 
-    // ── Generic Access Service (0x1800) ──────────────────────────────────────
-    private fun addGenericAccessService() {
-        val service = BluetoothGattService(
-            UUID_GENERIC_ACCESS,
-            BluetoothGattService.SERVICE_TYPE_PRIMARY
-        )
-        service.addCharacteristic(
-            readChar(UUID_DEVICE_NAME, "HID Clone".toByteArray())
-        )
-        service.addCharacteristic(
-            readChar(UUID_APPEARANCE, APPEARANCE_MOUSE)
-        )
-        gattServer?.addService(service)
-    }
-
-    // ── Device Information Service (0x180A) ──────────────────────────────────
-    private fun addDeviceInformationService() {
-        val service = BluetoothGattService(
-            UUID_DEVICE_INFORMATION,
-            BluetoothGattService.SERVICE_TYPE_PRIMARY
-        )
-        service.addCharacteristic(readChar(UUID_MANUFACTURER_NAME, "Arena".toByteArray()))
-        service.addCharacteristic(readChar(UUID_MODEL_NUMBER, "HIDClone-1".toByteArray()))
-        // PnP ID: Vendor ID Source=0x02 (USB), VID=0x046D (Logitech), PID=0xC52B, Version=0x0111
-        service.addCharacteristic(
-            readChar(UUID_PNP_ID,
-                byteArrayOf(0x02, 0x6D, 0x04, 0x2B, 0xC5.toByte(), 0x11, 0x01))
-        )
-        gattServer?.addService(service)
-    }
-
-    // ── Battery Service (0x180F) ─────────────────────────────────────────────
-    private fun addBatteryService() {
-        val service = BluetoothGattService(
-            UUID_BATTERY_SERVICE,
-            BluetoothGattService.SERVICE_TYPE_PRIMARY
-        )
-        val battChar = BluetoothGattCharacteristic(
-            UUID_BATTERY_LEVEL,
-            BluetoothGattCharacteristic.PROPERTY_READ or
-                    BluetoothGattCharacteristic.PROPERTY_NOTIFY,
-            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM
-        )
-        battChar.value = byteArrayOf(100) // 100%
-        battChar.addDescriptor(cccd())
-        service.addCharacteristic(battChar)
-        gattServer?.addService(service)
-    }
-
-    // ── HID Service (0x1812) ─────────────────────────────────────────────────
-    private fun addHidService() {
-        val service = BluetoothGattService(
-            UUID_HID_SERVICE,
-            BluetoothGattService.SERVICE_TYPE_PRIMARY
-        )
-
-        // HID Information (read only)
-        service.addCharacteristic(
-            readChar(UUID_HID_INFORMATION, HID_INFORMATION,
-                BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM)
-        )
-
-        // Report Map (read only)
-        service.addCharacteristic(
-            readChar(UUID_REPORT_MAP, REPORT_MAP,
-                BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM)
-        )
-
-        // HID Control Point (write without response)
-        val ctrlPoint = BluetoothGattCharacteristic(
-            UUID_HID_CONTROL_POINT,
-            BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE,
-            BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM
-        )
-        service.addCharacteristic(ctrlPoint)
-
-        // Protocol Mode (read + write without response)
-        val protoMode = BluetoothGattCharacteristic(
-            UUID_PROTOCOL_MODE,
-            BluetoothGattCharacteristic.PROPERTY_READ or
-                    BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE,
-            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or
-                    BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM
-        )
-        protoMode.value = PROTOCOL_MODE_REPORT
-        service.addCharacteristic(protoMode)
-
-        // Mouse Input Report (Report ID 1)
-        val mouseChar = inputReportChar(reportId = 1, reportType = 0x01)
-        mouseInputChar = mouseChar
-        service.addCharacteristic(mouseChar)
-
-        // Keyboard Input Report (Report ID 2)
-        val kbChar = inputReportChar(reportId = 2, reportType = 0x01)
-        keyboardInputChar = kbChar
-        service.addCharacteristic(kbChar)
-
-        gattServer?.addService(service)
-        Log.d(TAG, "HID Service added")
-    }
-
-    // ── Characteristic factory helpers ────────────────────────────────────────
-
-    private fun readChar(
-        uuid: java.util.UUID,
-        value: ByteArray,
-        permissions: Int = BluetoothGattCharacteristic.PERMISSION_READ
-    ): BluetoothGattCharacteristic {
-        val char = BluetoothGattCharacteristic(
-            uuid,
-            BluetoothGattCharacteristic.PROPERTY_READ,
-            permissions
-        )
-        char.value = value
-        return char
+    private fun cancelReconnectLoop() {
+        reconnectRunnable?.let { mainHandler.removeCallbacks(it) }
+        reconnectRunnable = null
     }
 
     /**
-     * Creates an Input Report characteristic with CCCD (for notifications)
-     * and a Report Reference descriptor.
-     *
-     * @param reportId   HID Report ID (1 = mouse, 2 = keyboard)
-     * @param reportType 0x01 = Input, 0x02 = Output, 0x03 = Feature
+     * Issue a background autoConnect to every known host that is not already connected.
+     * This is low-power: Android will only actually connect when the device is in range.
      */
-    private fun inputReportChar(reportId: Int, reportType: Int): BluetoothGattCharacteristic {
-        val char = BluetoothGattCharacteristic(
-            UUID_REPORT,
-            BluetoothGattCharacteristic.PROPERTY_READ or
-                    BluetoothGattCharacteristic.PROPERTY_NOTIFY or
-                    BluetoothGattCharacteristic.PROPERTY_WRITE,
-            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or
-                    BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM
-        )
+    private fun attemptAutoConnectAll() {
+        val server = gattServer ?: return
+        val alreadyConnected = connectedDeviceMap.keys
 
-        // CCCD — host writes 0x0001 to enable notifications
-        char.addDescriptor(cccd())
+        for (address in knownHostAddresses.toSet()) {      // snapshot to avoid CME
+            if (address in alreadyConnected) continue      // already connected — skip
 
-        // Report Reference — tells host which report ID this characteristic maps to
-        val reportRef = BluetoothGattDescriptor(
-            UUID_REPORT_REFERENCE,
-            BluetoothGattDescriptor.PERMISSION_READ_ENCRYPTED_MITM
-        )
-        reportRef.value = byteArrayOf(reportId.toByte(), reportType.toByte())
-        char.addDescriptor(reportRef)
+            val device = try { adapter?.getRemoteDevice(address) } catch (e: Exception) { null }
+            if (device == null) {
+                Log.w(TAG, "Cannot resolve device for $address"); continue
+            }
 
-        return char
+            try {
+                val ok = server.connect(device, true)      // autoConnect = true (background)
+                Log.d(TAG, "autoConnect → $address : $ok")
+            } catch (e: Exception) {
+                Log.w(TAG, "autoConnect error for $address: ${e.message}")
+            }
+        }
     }
 
-    private fun cccd(): BluetoothGattDescriptor {
-        val descriptor = BluetoothGattDescriptor(
-            UUID_CCCD,
-            BluetoothGattDescriptor.PERMISSION_READ or
-                    BluetoothGattDescriptor.PERMISSION_WRITE
-        )
-        descriptor.value = BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE
-        return descriptor
+    // ═════════════════════════════════════════════════════════════════════════
+    // Bond change notification (called from MainActivity's BroadcastReceiver)
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /**
+     * MainActivity should call this from its BluetoothStateListener.onBondStateChanged().
+     * When a host removes the bond we forget it; when re-bonded we persist it.
+     */
+    fun onBondStateChanged(device: BluetoothDevice, bondState: Int) {
+        when (bondState) {
+            BluetoothDevice.BOND_NONE -> {
+                // Host removed the bond — clear from our known set so we don't keep
+                // trying to autoConnect to a device that rejected us.
+                // We continue advertising so it can re-pair fresh.
+                if (knownHostAddresses.contains(device.address)) {
+                    Log.d(TAG, "Bond removed by host ${device.address} — removing from known hosts")
+                    removeKnownHost(device.address)
+                }
+            }
+            BluetoothDevice.BOND_BONDED -> {
+                // Fresh pairing completed — make sure we persist this address
+                Log.d(TAG, "New bond: ${device.address}")
+                // Actual persist happens in onDescriptorWriteRequest when CCCD is written,
+                // but adding here as an early hint is harmless.
+            }
+        }
     }
 
-    // ── Advertising ──────────────────────────────────────────────────────────
+    // ═════════════════════════════════════════════════════════════════════════
+    // Device name resolution
+    // ═════════════════════════════════════════════════════════════════════════
 
-    private fun startAdvertising() {
-        advertiser = adapter?.bluetoothLeAdvertiser
-        if (advertiser == null) {
-            currentState = BleHidState.ERROR("BLE advertiser not available")
+    private fun refreshBondedCache() {
+        bondedDeviceCache.clear()
+        try {
+            adapter?.bondedDevices?.forEach { d ->
+                val n = try { d.name } catch (e: Exception) { null }
+                if (!n.isNullOrBlank()) bondedDeviceCache[d.address] = n
+            }
+        } catch (e: Exception) { Log.w(TAG, "refreshBondedCache: ${e.message}") }
+    }
+
+    private fun resolveName(device: BluetoothDevice): String {
+        val btName = try { device.name } catch (e: Exception) { null }
+        if (!btName.isNullOrBlank()) return btName
+        val cached = bondedDeviceCache[device.address]
+        if (!cached.isNullOrBlank()) return cached
+        return "Device (${device.address.takeLast(8)})"
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // UI notification
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private fun notifyDeviceListChanged() {
+        val list = connectedDeviceMap.values.toList()
+        mainHandler.post { onDeviceListChanged?.invoke(list) }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // GATT thread
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private fun startGattThread() {
+        stopGattThread()
+        gattThread = HandlerThread("BleHidGattThread").also {
+            it.start()
+            gattHandler = Handler(it.looper)
+        }
+    }
+
+    private fun stopGattThread() {
+        gattThread?.quitSafely()
+        gattThread  = null
+        gattHandler = null
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // GATT server open
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private fun openGattServer() {
+        try {
+            gattServer?.close(); gattServer = null
+            gattServer = bluetoothManager.openGattServer(context, gattServerCallback)
+
+            if (gattServer == null) {
+                currentState = BleHidState.ERROR("Could not open GATT server"); return
+            }
+            gattHandler?.postDelayed({ beginAddingServices() }, 1_000)
+
+        } catch (e: SecurityException) {
+            currentState = BleHidState.ERROR("Permission denied: ${e.message}")
+        } catch (e: Exception) {
+            currentState = BleHidState.ERROR("GATT error: ${e.message}")
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Service pipeline
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private fun beginAddingServices() {
+        serviceQueue.clear()
+        mouseInputChar    = null
+        keyboardInputChar = null
+
+        serviceQueue.addLast(buildGenericAccessService())
+        serviceQueue.addLast(buildDeviceInformationService())
+        serviceQueue.addLast(buildBatteryService())
+        serviceQueue.addLast(buildHidService())
+
+        addNextService()
+    }
+
+    private fun addNextService() {
+        if (serviceQueue.isEmpty()) {
+            mainHandler.postDelayed({ startAdvertising() }, 500)
             return
         }
 
-        val settings = AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
-            .setConnectable(true)
-            .setTimeout(0)           // advertise indefinitely
-            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
-            .build()
+        val service = serviceQueue.first()
+        armTimeout(service.uuid.toString())
 
-        // Advertise the HID service UUID so hosts know what we are
-        val data = AdvertiseData.Builder()
-            .setIncludeDeviceName(true)
-            .setIncludeTxPowerLevel(false)
-            .addServiceUuid(android.os.ParcelUuid(UUID_HID_SERVICE))
-            .build()
+        val result = try { gattServer?.addService(service) ?: false }
+                     catch (e: Exception) { false }
 
-        advertiser?.startAdvertising(settings, data, advertiseCallback)
+        if (!result) {
+            cancelTimeout()
+            gattHandler?.postDelayed({
+                val retry = try { gattServer?.addService(service) ?: false } catch (e: Exception) { false }
+                if (!retry) { serviceQueue.removeFirst(); addNextService() }
+                else armTimeout(service.uuid.toString())
+            }, 1_000)
+        }
+    }
+
+    private fun armTimeout(uuid: String) {
+        cancelTimeout()
+        val r = Runnable {
+            Log.w(TAG, "TIMEOUT for $uuid — force-advancing")
+            if (serviceQueue.isNotEmpty()) serviceQueue.removeFirst()
+            gattHandler?.post { addNextService() }
+        }
+        timeoutRunnable = r
+        gattHandler?.postDelayed(r, SERVICE_ADD_TIMEOUT_MS)
+    }
+
+    private fun cancelTimeout() {
+        timeoutRunnable?.let { gattHandler?.removeCallbacks(it); mainHandler.removeCallbacks(it) }
+        timeoutRunnable = null
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Service builders
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private fun buildGenericAccessService() = BluetoothGattService(
+        UUID_GENERIC_ACCESS, BluetoothGattService.SERVICE_TYPE_PRIMARY
+    ).also {
+        it.addCharacteristic(readChar(UUID_DEVICE_NAME, "HID Clone".toByteArray()))
+        it.addCharacteristic(readChar(UUID_APPEARANCE,  APPEARANCE_MOUSE))
+    }
+
+    private fun buildDeviceInformationService() = BluetoothGattService(
+        UUID_DEVICE_INFORMATION, BluetoothGattService.SERVICE_TYPE_PRIMARY
+    ).also {
+        it.addCharacteristic(readChar(UUID_MANUFACTURER_NAME, "Arena".toByteArray()))
+        it.addCharacteristic(readChar(UUID_MODEL_NUMBER,      "HIDClone-1".toByteArray()))
+        it.addCharacteristic(
+            readChar(UUID_PNP_ID,
+                byteArrayOf(0x02, 0x6D, 0x04, 0x2B, 0xC5.toByte(), 0x11, 0x01))
+        )
+    }
+
+    private fun buildBatteryService() = BluetoothGattService(
+        UUID_BATTERY_SERVICE, BluetoothGattService.SERVICE_TYPE_PRIMARY
+    ).also { svc ->
+        svc.addCharacteristic(
+            BluetoothGattCharacteristic(
+                UUID_BATTERY_LEVEL,
+                BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+                BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM
+            ).apply { value = byteArrayOf(100); addDescriptor(cccd()) }
+        )
+    }
+
+    private fun buildHidService() = BluetoothGattService(
+        UUID_HID_SERVICE, BluetoothGattService.SERVICE_TYPE_PRIMARY
+    ).also { svc ->
+        svc.addCharacteristic(
+            readChar(UUID_HID_INFORMATION, HID_INFORMATION,
+                BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM))
+        svc.addCharacteristic(
+            readChar(UUID_REPORT_MAP, REPORT_MAP,
+                BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM))
+        svc.addCharacteristic(
+            BluetoothGattCharacteristic(UUID_HID_CONTROL_POINT,
+                BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE,
+                BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM))
+        svc.addCharacteristic(
+            BluetoothGattCharacteristic(UUID_PROTOCOL_MODE,
+                BluetoothGattCharacteristic.PROPERTY_READ or
+                BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE,
+                BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or
+                BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM
+            ).apply { value = PROTOCOL_MODE_REPORT })
+
+        mouseInputChar    = inputReportChar(reportId = 1, reportType = 0x01)
+        keyboardInputChar = inputReportChar(reportId = 2, reportType = 0x01)
+        svc.addCharacteristic(mouseInputChar!!)
+        svc.addCharacteristic(keyboardInputChar!!)
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Characteristic / descriptor helpers
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private fun readChar(
+        uuid       : java.util.UUID,
+        value      : ByteArray,
+        permissions: Int = BluetoothGattCharacteristic.PERMISSION_READ
+    ) = BluetoothGattCharacteristic(uuid, BluetoothGattCharacteristic.PROPERTY_READ, permissions)
+            .apply { this.value = value }
+
+    private fun inputReportChar(reportId: Int, reportType: Int) =
+        BluetoothGattCharacteristic(
+            UUID_REPORT,
+            BluetoothGattCharacteristic.PROPERTY_READ or
+            BluetoothGattCharacteristic.PROPERTY_NOTIFY or
+            BluetoothGattCharacteristic.PROPERTY_WRITE,
+            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or
+            BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM
+        ).apply {
+            addDescriptor(cccd())
+            addDescriptor(
+                BluetoothGattDescriptor(
+                    UUID_REPORT_REFERENCE,
+                    BluetoothGattDescriptor.PERMISSION_READ_ENCRYPTED_MITM
+                ).apply { value = byteArrayOf(reportId.toByte(), reportType.toByte()) }
+            )
+        }
+
+    private fun cccd() = BluetoothGattDescriptor(
+        UUID_CCCD,
+        BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE
+    ).apply { value = BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Advertising
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private fun startAdvertising() {
+        try {
+            advertiser = adapter?.bluetoothLeAdvertiser
+            if (advertiser == null) {
+                currentState = BleHidState.ERROR("BLE advertiser unavailable"); return
+            }
+
+            val settings = AdvertiseSettings.Builder()
+                .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+                .setConnectable(true)
+                .setTimeout(0)
+                .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
+                .build()
+
+            val data = AdvertiseData.Builder()
+                .setIncludeDeviceName(false)
+                .setIncludeTxPowerLevel(false)
+                .addServiceUuid(android.os.ParcelUuid(UUID_HID_SERVICE))
+                .build()
+
+            val scanResponse = AdvertiseData.Builder()
+                .setIncludeDeviceName(true)
+                .setIncludeTxPowerLevel(false)
+                .build()
+
+            advertiser!!.startAdvertising(settings, data, scanResponse, advertiseCallback)
+
+        } catch (e: SecurityException) {
+            currentState = BleHidState.ERROR("Missing BLUETOOTH_ADVERTISE permission")
+        } catch (e: Exception) {
+            currentState = BleHidState.ERROR("Advertising error: ${e.message}")
+        }
     }
 
     private fun stopAdvertising() {
-        if (isAdvertising) {
-            advertiser?.stopAdvertising(advertiseCallback)
-            isAdvertising = false
-        }
+        if (!isAdvertising) return
+        try { advertiser?.stopAdvertising(advertiseCallback) } catch (e: Exception) {}
+        isAdvertising = false
+    }
+
+    /**
+     * Restart advertising after a disconnect so new hosts can still find "HID Clone",
+     * and so the host's OS sees us in the scan list and reconnects automatically.
+     */
+    private fun restartAdvertisingIfNeeded() {
+        if (isAdvertising) return          // already running — nothing to do
+        if (!isRunning)    return          // manager has been stopped
+        Log.d(TAG, "Restarting advertising after disconnect")
+        startAdvertising()
     }
 
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
             isAdvertising = true
+            Log.d(TAG, "✓ Advertising started")
             currentState = BleHidState.ADVERTISING
-            Log.d(TAG, "BLE HID advertising started")
+            // Kick the reconnect loop NOW that we're visible
+            startReconnectLoop()
         }
-
         override fun onStartFailure(errorCode: Int) {
-            val reason = when (errorCode) {
-                ADVERTISE_FAILED_ALREADY_STARTED       -> "Already started"
-                ADVERTISE_FAILED_DATA_TOO_LARGE        -> "Data too large"
-                ADVERTISE_FAILED_FEATURE_UNSUPPORTED   -> "Feature unsupported"
-                ADVERTISE_FAILED_INTERNAL_ERROR        -> "Internal error"
-                ADVERTISE_FAILED_TOO_MANY_ADVERTISERS  -> "Too many advertisers"
-                else -> "Unknown error $errorCode"
+            isAdvertising = false
+            val msg = when (errorCode) {
+                ADVERTISE_FAILED_ALREADY_STARTED      -> {
+                    // Already advertising — treat as success
+                    isAdvertising = true
+                    currentState = BleHidState.ADVERTISING
+                    startReconnectLoop()
+                    return
+                }
+                ADVERTISE_FAILED_DATA_TOO_LARGE       -> "Data too large"
+                ADVERTISE_FAILED_FEATURE_UNSUPPORTED  -> "Unsupported"
+                ADVERTISE_FAILED_INTERNAL_ERROR       -> "Internal error"
+                ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> "Too many advertisers"
+                else -> "Error $errorCode"
             }
-            Log.e(TAG, "Advertising failed: $reason")
-            currentState = BleHidState.ERROR("Advertising failed: $reason")
+            Log.e(TAG, "✗ Advertising failed: $msg")
+            currentState = BleHidState.ERROR("Advertising failed: $msg")
         }
     }
 
-    // ── GATT Server Callbacks ────────────────────────────────────────────────
+    // ═════════════════════════════════════════════════════════════════════════
+    // GATT Server Callback
+    // ═════════════════════════════════════════════════════════════════════════
 
     private val gattServerCallback = object : BluetoothGattServerCallback() {
 
-        override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
+        override fun onServiceAdded(status: Int, service: BluetoothGattService) {
+            cancelTimeout()
+            if (serviceQueue.isNotEmpty() && serviceQueue.first().uuid == service.uuid)
+                serviceQueue.removeFirst()
+            gattHandler?.postDelayed({ addNextService() }, SERVICE_ADD_DELAY_MS)
+        }
+
+        override fun onConnectionStateChange(
+            device: BluetoothDevice, status: Int, newState: Int
+        ) {
+            Log.d(TAG, "connState ${device.address} status=$status new=$newState")
             when (newState) {
+
                 BluetoothProfile.STATE_CONNECTED -> {
-                    Log.d(TAG, "Central connected: ${device.address}")
-                    // Don't add to subscribed yet — wait for CCCD write
-                    mainHandler.post { onDeviceConnected?.invoke(device) }
-                    // Update state only if not already connected to others
-                    if (currentState is BleHidState.ADVERTISING) {
-                        currentState = BleHidState.CONNECTED
+                    if (connectedDeviceMap.size >= MAX_CONNECTIONS) {
+                        Log.w(TAG, "Max connections — rejecting ${device.address}")
+                        try { gattServer?.cancelConnection(device) } catch (e: Exception) {}
+                        return
                     }
+                    refreshBondedCache()
+                    val resolvedName = resolveName(device)
+
+                    // If this is a known host (previously subscribed), restore subscription
+                    // immediately. Bonded hosts cache their CCCD value OS-side and will NOT
+                    // re-write it on reconnect — so we must restore it ourselves.
+                    val isKnownHost = knownHostAddresses.contains(device.address)
+                    if (isKnownHost) {
+                        subscribedDevices.add(device)
+                        // Also update the CCCD descriptor value in-memory so reads are correct
+                        listOf(mouseInputChar, keyboardInputChar).forEach { char ->
+                            char?.getDescriptor(UUID_CCCD)?.value =
+                                BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                        }
+                        Log.d(TAG, "Known host reconnected — subscription auto-restored: ${device.address}")
+                    }
+
+                    connectedDeviceMap[device.address] = DeviceInfo(
+                        device       = device,
+                        address      = device.address,
+                        name         = resolvedName,
+                        isSubscribed = isKnownHost   // immediately Ready if known host
+                    )
+                    Log.d(TAG, "Host connected: $resolvedName (${device.address}) knownHost=$isKnownHost")
+
+                    mainHandler.post {
+                        currentState = BleHidState.CONNECTED
+                        if (isKnownHost) onDeviceSubscribed?.invoke(device)
+                        notifyDeviceListChanged()
+                    }
+                    // Late name resolution
+                    mainHandler.postDelayed({
+                        val laterName = resolveName(device)
+                        connectedDeviceMap[device.address]?.let { info ->
+                            if (laterName != info.name) {
+                                connectedDeviceMap[device.address] = info.copy(name = laterName)
+                                notifyDeviceListChanged()
+                            }
+                        }
+                    }, 2_000)
                 }
+
                 BluetoothProfile.STATE_DISCONNECTED -> {
-                    Log.d(TAG, "Central disconnected: ${device.address}")
+                    val info = connectedDeviceMap.remove(device.address)
                     subscribedDevices.remove(device)
-                    mainHandler.post { onDeviceDisconnected?.invoke(device) }
-                    if (subscribedDevices.isEmpty()) {
-                        currentState = if (isAdvertising) BleHidState.ADVERTISING
-                        else BleHidState.IDLE
+                    Log.d(TAG, "Host disconnected: ${info?.name ?: device.address}" +
+                          " (${connectedDeviceMap.size} remaining)")
+
+                    mainHandler.post {
+                        currentState = when {
+                            connectedDeviceMap.isNotEmpty() -> BleHidState.CONNECTED
+                            isAdvertising                   -> BleHidState.ADVERTISING
+                            else                            -> BleHidState.ADVERTISING // keep as ADVERTISING not IDLE
+                        }
+                        notifyDeviceListChanged()
+
+                        // ── AUTO-RECONNECT: restart advertising + attempt background connect ──
+                        // Small delay so the stack settles before we hammer it
+                        mainHandler.postDelayed({
+                            restartAdvertisingIfNeeded()
+                            // Immediately attempt a direct connect to this specific device
+                            // (it may still be in range)
+                            try {
+                                gattServer?.connect(device, true)
+                                Log.d(TAG, "Direct autoConnect queued for ${device.address}")
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Direct autoConnect failed: ${e.message}")
+                            }
+                            // Also start / reset the full reconnect loop for all known hosts
+                            startReconnectLoop()
+                        }, 800)
                     }
                 }
             }
@@ -527,13 +854,10 @@ class BleHidManager(private val context: Context) {
             device: BluetoothDevice, requestId: Int, offset: Int,
             characteristic: BluetoothGattCharacteristic
         ) {
-            Log.d(TAG, "Read request: ${characteristic.uuid}")
-            gattServer?.sendResponse(
-                device, requestId,
-                BluetoothGatt.GATT_SUCCESS,
-                offset,
-                characteristic.value?.copyOfRange(offset, characteristic.value.size)
-            )
+            val value   = characteristic.value ?: byteArrayOf()
+            val safeOff = offset.coerceAtMost(value.size)
+            gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS,
+                safeOff, value.copyOfRange(safeOff, value.size))
         }
 
         override fun onCharacteristicWriteRequest(
@@ -543,21 +867,16 @@ class BleHidManager(private val context: Context) {
             offset: Int, value: ByteArray?
         ) {
             characteristic.value = value
-            if (responseNeeded) {
+            if (responseNeeded)
                 gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
-            }
         }
 
         override fun onDescriptorReadRequest(
             device: BluetoothDevice, requestId: Int, offset: Int,
             descriptor: BluetoothGattDescriptor
         ) {
-            gattServer?.sendResponse(
-                device, requestId,
-                BluetoothGatt.GATT_SUCCESS,
-                offset,
-                descriptor.value
-            )
+            gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS,
+                offset, descriptor.value ?: byteArrayOf())
         }
 
         override fun onDescriptorWriteRequest(
@@ -571,55 +890,69 @@ class BleHidManager(private val context: Context) {
             if (descriptor.uuid == UUID_CCCD) {
                 val enabled = value?.contentEquals(
                     BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) == true
+
                 if (enabled) {
-                    Log.d(TAG, "Notifications ENABLED by ${device.address} for ${descriptor.characteristic.uuid}")
+                    Log.d(TAG, "✓ Subscribed: ${device.address}")
                     subscribedDevices.add(device)
+                    connectedDeviceMap[device.address]?.let { info ->
+                        connectedDeviceMap[device.address] = info.copy(isSubscribed = true)
+                    }
+
+                    // ── PERSIST this host so we auto-reconnect next time ──────────
+                    saveKnownHost(device.address)
+
+                    mainHandler.post {
+                        onDeviceSubscribed?.invoke(device)
+                        notifyDeviceListChanged()
+                    }
                 } else {
-                    Log.d(TAG, "Notifications DISABLED by ${device.address}")
-                    // Only remove if no other characteristics are subscribed
-                    // (simplification: remove on any disable)
+                    Log.d(TAG, "✗ Unsubscribed: ${device.address}")
                     subscribedDevices.remove(device)
+                    connectedDeviceMap[device.address]?.let { info ->
+                        connectedDeviceMap[device.address] = info.copy(isSubscribed = false)
+                    }
+                    mainHandler.post { notifyDeviceListChanged() }
                 }
             }
 
-            if (responseNeeded) {
+            if (responseNeeded)
                 gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
-            }
-        }
-
-        override fun onServiceAdded(status: Int, service: BluetoothGattService) {
-            Log.d(TAG, "Service added: ${service.uuid}, status=$status")
         }
 
         override fun onNotificationSent(device: BluetoothDevice, status: Int) {
-            // Called after sendNotification completes
+            if (status != BluetoothGatt.GATT_SUCCESS)
+                Log.w(TAG, "notificationSent failed status=$status for ${device.address}")
         }
 
         override fun onMtuChanged(device: BluetoothDevice, mtu: Int) {
-            Log.d(TAG, "MTU changed to $mtu for ${device.address}")
+            Log.d(TAG, "MTU → $mtu for ${device.address}")
         }
     }
 
-    // ── Report sending ────────────────────────────────────────────────────────
+    // ═════════════════════════════════════════════════════════════════════════
+    // Report sending
+    // ═════════════════════════════════════════════════════════════════════════
 
     private fun sendInputReport(
         characteristic: BluetoothGattCharacteristic,
         report: ByteArray
     ): Boolean {
-        if (gattServer == null) return false
-        var success = false
-        val targets = subscribedDevices.toList()
-        for (device in targets) {
-            characteristic.value = report
-            val notified = gattServer!!.notifyCharacteristicChanged(device, characteristic, false)
-            if (notified) success = true
+        val server = gattServer ?: return false
+        var sent = false
+        for (device in subscribedDevices.toList()) {
+            try {
+                characteristic.value = report
+                val ok = server.notifyCharacteristicChanged(device, characteristic, false)
+                if (ok) sent = true
+            } catch (e: Exception) {
+                Log.e(TAG, "sendInputReport: ${e.message}")
+            }
         }
-        return success
+        return sent
     }
 }
 
-// ── State sealed class ────────────────────────────────────────────────────────
-
+// ── State ──────────────────────────────────────────────────────────────────────
 sealed class BleHidState {
     object IDLE        : BleHidState()
     object STARTING    : BleHidState()
