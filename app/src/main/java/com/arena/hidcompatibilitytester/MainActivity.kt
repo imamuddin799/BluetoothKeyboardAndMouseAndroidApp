@@ -44,6 +44,10 @@ class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateL
     private lateinit var deviceManager : BluetoothDeviceManager
     private lateinit var bleHidManager : BleHidManager
 
+    // ── STATE VARIABLES ──────────────────────────────────────────────────────
+    private var trackpadSettings     by mutableStateOf(TrackpadSettings())
+    private var showSettingsSheet    by mutableStateOf(false)
+
     private val pairedDevices     = androidx.compose.runtime.snapshots.SnapshotStateList<BluetoothDevice>()
     private val nearbyDevices     = androidx.compose.runtime.snapshots.SnapshotStateList<BluetoothDevice>()
     private val connectedHostList = androidx.compose.runtime.snapshots.SnapshotStateList<BleHidManager.DeviceInfo>()
@@ -161,6 +165,14 @@ class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateL
                     )
                 }
 
+                if (showSettingsSheet) {
+                    TrackpadSettingsSheet(
+                        settings = trackpadSettings,
+                        onDismiss = { showSettingsSheet = false },
+                        onSave = { trackpadSettings = it }
+                    )
+                }
+
                 pairRequiredAddress?.let { addr ->
                     AlertDialog(
                         onDismissRequest = { pairRequiredAddress = null },
@@ -182,6 +194,8 @@ class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateL
                             pairedList        = pairedDevices,
                             nearbyList        = nearbyDevices,
                             isScanningState   = isScanningState,
+                            trackpadSettings  = trackpadSettings,
+                            showSettingsSheet = showSettingsSheet,
                             onToggleBleHid    = { toggleBleHid() },
                             onSendMouse       = { dx, dy, buttons, wheel ->
                                 if (!bleHidManager.sendMouseReport(dx, dy, buttons, wheel))
@@ -204,7 +218,8 @@ class MainActivity : ComponentActivity(), BluetoothDeviceManager.BluetoothStateL
                             onReconnectHost   = { device ->
                                 bleHidManager.inviteReconnect(device)
                                 statusMessage = "Inviting ${device.address}…"
-                            }
+                            },
+                            onShowTrackpadSettings = { showSettingsSheet = true }
                         )
 
                         statusMessage?.let { msg ->
@@ -304,6 +319,8 @@ fun AppMainScreen(
     pairedList        : List<BluetoothDevice>,
     nearbyList        : List<BluetoothDevice>,
     isScanningState   : Boolean,
+    trackpadSettings  : TrackpadSettings,
+    showSettingsSheet : Boolean,
     onToggleBleHid    : () -> Unit,
     onSendMouse       : (Int, Int, Int, Int) -> Unit,
     onSendKey         : (Int, List<Int>) -> Unit,
@@ -315,9 +332,12 @@ fun AppMainScreen(
     onUnpairClick     : (BluetoothDevice) -> Unit,
     onDisconnectHost  : (String) -> Unit,
     onReconnectHost   : (BluetoothDevice) -> Unit,
+    onShowTrackpadSettings : () -> Unit,
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    // ── 4 TABS (Mouse = Trackpad functionality) ─────────────────────────────
     val tabs = listOf("Status", "Mouse", "Keyboard", "Devices")
+    // ─────────────────────────────────────────────────────────────────────────
     val isReady = connectedHostList.any { it.isSubscribed }
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -350,15 +370,17 @@ fun AppMainScreen(
                 onDisconnectHost  = onDisconnectHost,
                 onReconnectHost   = onReconnectHost,
             )
-            1 -> MouseTabContent(
-                isReady    = isReady,
-                onSendMouse = onSendMouse,
+            // ── MOUSE TAB (Trackpad functionality) ───────────────────────────
+            1 -> TrackpadScreen(
+                isReady        = isReady,
+                settings       = trackpadSettings,
+                onSendMouse    = onSendMouse,
+                onShowSettings = onShowTrackpadSettings,
             )
-            2 -> KeyboardScreen(        // ← our full physical keyboard
+            // ─────────────────────────────────────────────────────────────────
+            2 -> KeyboardScreen(
                 isReady       = isReady,
-                onSendKey     = { mod, keys ->
-                    onSendKey(mod, keys)
-                },
+                onSendKey     = onSendKey,
                 onConsumerKey = onConsumerKey,
                 onTypeText    = onTypeText,
             )
