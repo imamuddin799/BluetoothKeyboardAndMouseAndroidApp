@@ -37,13 +37,13 @@ import kotlin.math.abs
 import kotlin.math.hypot
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Data classes / enums
+// Data
 // ═════════════════════════════════════════════════════════════════════════════
 
 data class TrackpadSettings(
     val pointerSpeed        : Float         = 1.2f,
     val scrollSpeed         : Float         = 1.0f,
-    val invertScroll        : Boolean       = false,   // true = natural / phone-style
+    val invertScroll        : Boolean       = false,
     val tapToClick          : Boolean       = true,
     val twoFingerRightClick : Boolean       = true,
     val accelerationEnabled : Boolean       = true,
@@ -81,7 +81,6 @@ fun TrackpadScreen(
 
         TrackpadSurface(
             modifier    = Modifier.weight(1f),
-            isReady     = isReady,
             settings    = settings,
             onSendMouse = onSendMouse
         )
@@ -146,20 +145,12 @@ private fun TrackpadStatusBar(
 
 // ═════════════════════════════════════════════════════════════════════════════
 // TrackpadSurface
-//
-// KEY FIXES:
-//  1. onSendMouse wrapped in a lambdaRef (rememberUpdatedState) so the
-//     pointerInput block always calls the LATEST lambda without restarting.
-//  2. settings also via rememberUpdatedState — same reason.
-//  3. pointerInput keyed on Unit (runs once, never restarts) — stale-closure
-//     problem is solved by the rememberUpdatedState refs above.
-//  4. isReady passed so we can guard sends.
+// Complete rewrite — single pointerInput, coroutineScope for all actions
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
 private fun TrackpadSurface(
     modifier   : Modifier = Modifier,
-    isReady    : Boolean,
     settings   : TrackpadSettings,
     onSendMouse: (dx: Int, dy: Int, buttons: Int, wheel: Int) -> Unit,
 ) {
@@ -167,311 +158,313 @@ private fun TrackpadSurface(
     val scope   = rememberCoroutineScope()
     val density = LocalDensity.current
 
-    // ── Always-current refs — pointerInput block reads these, never goes stale ─
-    val latestSend     = rememberUpdatedState(onSendMouse)
-    val latestSettings = rememberUpdatedState(settings)
-    val latestReady    = rememberUpdatedState(isReady)
+    // Keep latest values without restarting pointerInput
+    val onSendRef   = rememberUpdatedState(onSendMouse)
+    val settingsRef = rememberUpdatedState(settings)
 
-    // Tap thresholds
-    val TAP_MAX_MS  = 200L
-    val TAP_SLOP_PX = with(density) { 18.dp.toPx() }
-    val DTAP_GAP_MS = 350L
+    // Tap config
+    val TAP_MS     = 200L
+    val TAP_SLOP   = with(density) { 18.dp.toPx() }
+    val DTAP_MS    = 350L
 
-    // Sub-pixel accumulators — plain arrays, no recompose on write
-    val accX = remember { floatArrayOf(0f) }
-    val accY = remember { floatArrayOf(0f) }
-    val scrA = remember { floatArrayOf(0f) }
-
-    // UI state (only what Canvas / overlays need)
-    var cursorPos      by remember { mutableStateOf<Offset?>(null) }
+    // Visual state
     var fingerCount    by remember { mutableIntStateOf(0) }
+    var cursorPos      by remember { mutableStateOf<Offset?>(null) }
+    var dragLock       by remember { mutableStateOf(false) }
     var rightFlash     by remember { mutableStateOf(false) }
     var scrollFlash    by remember { mutableStateOf(false) }
-    var dragLockActive by remember { mutableStateOf(false) }
     var scrollFlashJob by remember { mutableStateOf<Job?>(null) }
 
-    // Ripple animation
     val ripplePos    = remember { mutableStateOf<Offset?>(null) }
     val rippleRadius = remember { Animatable(0f) }
     val rippleAlpha  = remember { Animatable(0f) }
 
-    // Double-tap tracking — plain arrays (no recompose needed)
-    val lastTapUpMs    = remember { longArrayOf(0L) }
-    val doubleTapArmed = remember { booleanArrayOf(false) }
+    // Mutable gesture state — all touched only from LaunchedEffect / scope
+    // Use Ref objects so closures always see latest value
+    val dragLockRef    = remember { mutableStateOf(false) }
+    val lastTapMs      = remember { mutableLongStateOf(0L) }
+    val dtapArmed      = remember { mutableStateOf(false) }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // Sync dragLock display state
+    LaunchedEffect(dragLockRef.value) { dragLock = dragLockRef.value }
 
-    fun send(dx: Int, dy: Int, btn: Int, wheel: Int) {
-        if (latestReady.value) latestSend.value(dx, dy, btn, wheel)
-    }
+    fun send(dx: Int, dy: Int, btn: Int, w: Int) = onSendRef.value(dx, dy, btn, w)
 
-    fun fireRipple(pos: Offset) = scope.launch {
+    fun ripple(pos: Offset) = scope.launch {
         ripplePos.value = pos
         rippleRadius.snapTo(0f)
-        rippleAlpha.snapTo(0.8f)
-        rippleRadius.animateTo(110f, tween(320, easing = FastOutSlowInEasing))
+        rippleAlpha.snapTo(0.85f)
+        rippleRadius.animateTo(120f, tween(320))
         rippleAlpha.animateTo(0f, tween(200))
         ripplePos.value = null
     }
 
     fun flashScroll() {
-        scrollFlash = true
         scrollFlashJob?.cancel()
-        scrollFlashJob = scope.launch { delay(400); scrollFlash = false }
-    }
-
-    fun releaseDragLock() {
-        if (dragLockActive) {
-            dragLockActive = false
-            send(0, 0, 0, 0)
+        scrollFlashJob = scope.launch {
+            scrollFlash = true
+            delay(400)
+            scrollFlash = false
         }
     }
 
-    fun applyAccel(raw: Float, speed: Float): Float {
-        val s = latestSettings.value
-        if (!s.accelerationEnabled) return raw * speed
-        val a = abs(raw)
+    fun accel(v: Float, speed: Float): Float {
+        if (!settingsRef.value.accelerationEnabled) return v * speed
+        val a = abs(v)
         val k = when {
             a < 1f  -> 0.5f
             a < 3f  -> 0.9f
             a < 7f  -> 1.5f
-            a < 12f -> 2.0f
-            else    -> 2.6f
+            a < 12f -> 2.1f
+            else    -> 2.8f
         }
-        return raw * k * speed
+        return v * k * speed
     }
 
-    fun resetAcc() { accX[0] = 0f; accY[0] = 0f; scrA[0] = 0f }
+    Box(modifier = modifier.fillMaxWidth().background(Color(0xFF0D2B45))) {
 
-    // ── Layout ────────────────────────────────────────────────────────────────
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(Color(0xFF0D2B45))
-    ) {
-
-        // ── Main touch surface ────────────────────────────────────────────────
+        // ── Main trackpad area ────────────────────────────────────────────────
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(end = 40.dp)
-                // KEY: keyed on Unit so the block is created ONCE and never
-                // restarted. Stale-closure is avoided via latestSend /
-                // latestSettings / latestReady above.
                 .pointerInput(Unit) {
-                    val pts       = LinkedHashMap<Long, FloatArray>(8)
-                    var prevCount = 0
+
+                    // Pointer store
+                    // [0]=downX [1]=downY [2]=prevX [3]=prevY
+                    // [4]=curX  [5]=curY  [6]=downMs [7]=maxMove
+                    val pts = mutableMapOf<Long, FloatArray>()
+
+                    // Accumulators — only written here in pointer thread
+                    var accX = 0f
+                    var accY = 0f
+                    var accS = 0f
+                    var prevN = 0
+
+                    // Tap tracking
+                    var tapDownMs  = 0L
+                    var tapMaxMove = 0f
+                    var tapDownN   = 0     // finger count at tap-down
 
                     awaitPointerEventScope {
                         while (true) {
-                            val evt = awaitPointerEvent(PointerEventPass.Initial)
+                            val ev  = awaitPointerEvent(PointerEventPass.Initial)
                             val now = System.currentTimeMillis()
-                            val s   = latestSettings.value   // snapshot for this frame
+                            val s   = settingsRef.value
 
-                            var gotNewFinger = false
+                            // ── Classify ──────────────────────────────────────
+                            val pressing  = ev.changes.filter { it.pressed }
+                            val lifting   = ev.changes.filter { !it.pressed && it.previousPressed }
 
-                            // ── 1. Register / update pointers ─────────────────
-                            for (ch in evt.changes) {
+                            // ── Register new / update existing ────────────────
+                            for (ch in pressing) {
                                 val id = ch.id.value
-                                if (ch.pressed) {
-                                    val existing = pts[id]
-                                    if (existing == null) {
-                                        gotNewFinger = true
-                                        val x = ch.position.x; val y = ch.position.y
-                                        pts[id] = floatArrayOf(
-                                            x, y,               // [0,1] down pos
-                                            x, y,               // [2,3] prev pos
-                                            x, y,               // [4,5] cur  pos
-                                            now.toFloat(), 0f,  // [6] downTime [7] maxMove
-                                            x, y                // [8,9] lift pos
-                                        )
-                                    } else {
-                                        existing[2] = existing[4]
-                                        existing[3] = existing[5]
-                                        existing[4] = ch.position.x
-                                        existing[5] = ch.position.y
-                                        val dx = existing[4] - existing[0]
-                                        val dy = existing[5] - existing[1]
-                                        val d  = hypot(dx, dy)
-                                        if (d > existing[7]) existing[7] = d
-                                    }
-                                    ch.consume()
-                                } else if (ch.previousPressed) {
-                                    // Finger lifting — record lift pos
-                                    pts[id]?.let { fp ->
-                                        fp[8] = ch.position.x
-                                        fp[9] = ch.position.y
-                                        val dx = fp[8] - fp[0]; val dy = fp[9] - fp[1]
-                                        val d  = hypot(dx, dy)
-                                        if (d > fp[7]) fp[7] = d
-                                    }
-                                    ch.consume()
-                                }
-                            }
-
-                            val curCount = pts.size
-                            val all      = pts.values.toList()
-
-                            // ── 2. Reset acc on finger-count change ────────────
-                            if (curCount != prevCount) {
-                                resetAcc()
-                                prevCount = curCount
-                            }
-
-                            fingerCount = curCount
-                            cursorPos   = all.firstOrNull()?.let { Offset(it[4], it[5]) }
-
-                            // ── 3. Double-tap-drag: detect 2nd finger-down ─────
-                            if (gotNewFinger && curCount == 1 &&
-                                s.tapToClick && doubleTapArmed[0]
-                            ) {
-                                val gap = now - lastTapUpMs[0]
-                                if (gap in 30L..DTAP_GAP_MS) {
-                                    doubleTapArmed[0] = false
-                                    dragLockActive    = true
-                                    send(0, 0, 1, 0)        // hold left button
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    all.firstOrNull()?.let { fireRipple(Offset(it[4], it[5])) }
+                                ch.consume()
+                                val ex = pts[id]
+                                if (ex == null) {
+                                    val x = ch.position.x; val y = ch.position.y
+                                    pts[id] = floatArrayOf(x, y, x, y, x, y, now.toFloat(), 0f)
                                 } else {
-                                    doubleTapArmed[0] = false
+                                    ex[2] = ex[4]; ex[3] = ex[5]
+                                    ex[4] = ch.position.x; ex[5] = ch.position.y
+                                    val d = hypot(ex[4]-ex[0], ex[5]-ex[1])
+                                    if (d > ex[7]) ex[7] = d
                                 }
                             }
 
-                            // ── 4. Movement ────────────────────────────────────
-                            when (curCount) {
-                                1 -> {
+                            val n   = pts.size
+                            val all = pts.values.toList()
+
+                            // Reset acc when finger count changes
+                            if (n != prevN) {
+                                accX = 0f; accY = 0f; accS = 0f
+                                // Record tap-down state
+                                if (n > prevN) {
+                                    // New finger(s) added
+                                    tapDownMs  = now
+                                    tapMaxMove = 0f
+                                    tapDownN   = n
+                                }
+                                prevN = n
+                            }
+
+                            // Update max move every frame
+                            for (fp in all) {
+                                val d = hypot(fp[4]-fp[0], fp[5]-fp[1])
+                                if (d > tapMaxMove) tapMaxMove = d
+                            }
+
+                            // Update display
+                            scope.launch {
+                                fingerCount = n
+                                cursorPos   = all.firstOrNull()?.let { Offset(it[4], it[5]) }
+                            }
+
+                            // ── Movement ──────────────────────────────────────
+                            when {
+                                n == 1 -> {
                                     val fp  = all[0]
-                                    val rdx = fp[4] - fp[2]
-                                    val rdy = fp[5] - fp[3]
-                                    val btn = if (dragLockActive) 1 else 0
-                                    accX[0] += applyAccel(rdx, s.pointerSpeed)
-                                    accY[0] += applyAccel(rdy, s.pointerSpeed)
-                                    val ix = accX[0].toInt()
-                                    val iy = accY[0].toInt()
+                                    val dx  = fp[4] - fp[2]
+                                    val dy  = fp[5] - fp[3]
+                                    val btn = if (dragLockRef.value) 1 else 0
+                                    accX += accel(dx, s.pointerSpeed)
+                                    accY += accel(dy, s.pointerSpeed)
+                                    val ix = accX.toInt(); val iy = accY.toInt()
                                     if (ix != 0 || iy != 0) {
-                                        send(ix.coerceIn(-127, 127), iy.coerceIn(-127, 127), btn, 0)
-                                        accX[0] -= ix; accY[0] -= iy
+                                        send(ix.coerceIn(-127,127), iy.coerceIn(-127,127), btn, 0)
+                                        accX -= ix; accY -= iy
                                     }
                                 }
-                                2 -> {
-                                    if (dragLockActive) releaseDragLock()
-                                    val dy0   = all[0][5] - all[0][3]
-                                    val dy1   = all[1][5] - all[1][3]
-                                    val avgDy = (dy0 + dy1) * 0.5f
-                                    // invertScroll = natural (finger direction = content direction)
-                                    val dir   = if (s.invertScroll) 1f else -1f
-                                    scrA[0]  += avgDy * s.scrollSpeed * dir * 0.6f
-                                    val sw    = scrA[0].toInt()
+                                n == 2 -> {
+                                    if (dragLockRef.value) {
+                                        scope.launch {
+                                            dragLockRef.value = false
+                                            send(0, 0, 0, 0)
+                                        }
+                                    }
+                                    val dy0 = all[0][5] - all[0][3]
+                                    val dy1 = all[1][5] - all[1][3]
+                                    val avg = (dy0 + dy1) * 0.5f
+                                    val dir = if (s.invertScroll) 1f else -1f
+                                    accS += avg * s.scrollSpeed * dir * 0.6f
+                                    val sw = accS.toInt()
                                     if (sw != 0) {
-                                        send(0, 0, 0, sw.coerceIn(-127, 127))
-                                        scrA[0] -= sw
-                                        flashScroll()
+                                        send(0, 0, 0, sw.coerceIn(-127,127))
+                                        accS -= sw
+                                        scope.launch { flashScroll() }
                                     }
                                 }
-                                3 -> {
-                                    if (dragLockActive) releaseDragLock()
-                                    val fp  = all[0]
-                                    val rdx = fp[4] - fp[2]
-                                    val rdy = fp[5] - fp[3]
-                                    accX[0] += rdx * s.pointerSpeed * 1.8f
-                                    accY[0] += rdy * s.pointerSpeed * 1.8f
-                                    val ix  = accX[0].toInt()
-                                    val iy  = accY[0].toInt()
+                                n == 3 -> {
+                                    if (dragLockRef.value) {
+                                        scope.launch {
+                                            dragLockRef.value = false
+                                            send(0, 0, 0, 0)
+                                        }
+                                    }
+                                    val fp = all[0]
+                                    val dx = fp[4] - fp[2]
+                                    val dy = fp[5] - fp[3]
+                                    accX += dx * s.pointerSpeed * 1.8f
+                                    accY += dy * s.pointerSpeed * 1.8f
+                                    val ix = accX.toInt(); val iy = accY.toInt()
                                     if (ix != 0 || iy != 0) {
-                                        send(ix.coerceIn(-127, 127), iy.coerceIn(-127, 127), 0, 0)
-                                        accX[0] -= ix; accY[0] -= iy
+                                        send(ix.coerceIn(-127,127), iy.coerceIn(-127,127), 0, 0)
+                                        accX -= ix; accY -= iy
                                     }
                                 }
                             }
 
-                            // ── 5. Handle releases ─────────────────────────────
-                            val released = evt.changes.filter { !it.pressed && it.previousPressed }
-                            if (released.isNotEmpty()) {
-                                val totalDown = pts.size   // before removal
+                            // ── Releases ──────────────────────────────────────
+                            for (ch in lifting) {
+                                ch.consume()
+                                val id = ch.id.value
+                                pts.remove(id)
+                            }
 
-                                for (ch in released) {
-                                    val id = ch.id.value
-                                    val fp = pts[id] ?: continue
+                            if (lifting.isNotEmpty()) {
+                                val s2        = settingsRef.value
+                                val duration  = now - tapDownMs
+                                val isTap     = duration in 1L..TAP_MS &&
+                                                tapMaxMove < TAP_SLOP &&
+                                                pts.isEmpty()   // all fingers up
 
-                                    val duration = now - fp[6].toLong()
-                                    val maxMove  = fp[7]
-                                    val liftPos  = Offset(fp[8], fp[9])
-                                    val isTap    = duration in 1L..TAP_MAX_MS &&
-                                                   maxMove < TAP_SLOP_PX
+                                if (isTap) {
+                                    val liftPos = lifting.first().let {
+                                        Offset(it.position.x, it.position.y)
+                                    }
+                                    val fingers = tapDownN
 
-                                    if (isTap) {
+                                    scope.launch {
                                         when {
-                                            // 1-finger tap → left click
-                                            totalDown == 1 && s.tapToClick -> {
-                                                if (dragLockActive) {
-                                                    releaseDragLock()
+                                            // ── 1-finger tap ─────────────────
+                                            fingers == 1 && s2.tapToClick -> {
+                                                if (dragLockRef.value) {
+                                                    // Release drag lock
+                                                    dragLockRef.value = false
+                                                    send(0, 0, 0, 0)
                                                     haptic.performHapticFeedback(
                                                         HapticFeedbackType.LongPress)
-                                                    fireRipple(liftPos)
+                                                    ripple(liftPos)
+                                                    dtapArmed.value = false
                                                 } else {
-                                                    send(0, 0, 1, 0)
-                                                    scope.launch {
-                                                        delay(40)
+                                                    // Check double-tap-drag
+                                                    val gap = now - lastTapMs.longValue
+                                                    if (dtapArmed.value && gap in 30L..DTAP_MS) {
+                                                        // Double-tap drag!
+                                                        dtapArmed.value   = false
+                                                        dragLockRef.value = true
+                                                        send(0, 0, 1, 0)
+                                                        haptic.performHapticFeedback(
+                                                            HapticFeedbackType.LongPress)
+                                                        ripple(liftPos)
+                                                    } else {
+                                                        // Single click
+                                                        dtapArmed.value = false
+                                                        send(0, 0, 1, 0)
+                                                        delay(45)
                                                         send(0, 0, 0, 0)
-                                                    }
-                                                    haptic.performHapticFeedback(
-                                                        HapticFeedbackType.LongPress)
-                                                    fireRipple(liftPos)
-                                                    lastTapUpMs[0]    = now
-                                                    doubleTapArmed[0] = true
-                                                    scope.launch {
-                                                        delay(DTAP_GAP_MS + 30)
-                                                        doubleTapArmed[0] = false
+                                                        haptic.performHapticFeedback(
+                                                            HapticFeedbackType.LongPress)
+                                                        ripple(liftPos)
+                                                        // Arm for next tap
+                                                        lastTapMs.longValue = now
+                                                        dtapArmed.value     = true
+                                                        launch {
+                                                            delay(DTAP_MS + 60)
+                                                            dtapArmed.value = false
+                                                        }
                                                     }
                                                 }
                                             }
-                                            // 2-finger tap → right click
-                                            totalDown >= 2 && s.twoFingerRightClick -> {
-                                                if (dragLockActive) releaseDragLock()
-                                                doubleTapArmed[0] = false
+
+                                            // ── 2-finger tap ─────────────────
+                                            fingers >= 2 && s2.twoFingerRightClick -> {
+                                                if (dragLockRef.value) {
+                                                    dragLockRef.value = false
+                                                    send(0, 0, 0, 0)
+                                                }
+                                                dtapArmed.value = false
                                                 send(0, 0, 2, 0)
-                                                scope.launch { delay(50); send(0, 0, 0, 0) }
+                                                delay(55)
+                                                send(0, 0, 0, 0)
                                                 haptic.performHapticFeedback(
                                                     HapticFeedbackType.LongPress)
                                                 rightFlash = true
-                                                scope.launch { delay(180); rightFlash = false }
-                                                fireRipple(liftPos)
+                                                delay(200)
+                                                rightFlash = false
+                                                ripple(liftPos)
                                             }
                                         }
-                                    } else {
-                                        // Non-tap lift
-                                        doubleTapArmed[0] = false
                                     }
-
-                                    pts.remove(id)
+                                } else if (pts.isEmpty()) {
+                                    // Non-tap, all fingers up
+                                    scope.launch { dtapArmed.value = false }
                                 }
 
                                 if (pts.isEmpty()) {
-                                    resetAcc()
-                                    fingerCount = 0
-                                    cursorPos   = null
-                                    prevCount   = 0
-                                    // dragLockActive intentionally NOT cleared —
-                                    // user can re-place finger to continue drag
+                                    accX = 0f; accY = 0f; accS = 0f; prevN = 0
+                                    scope.launch {
+                                        fingerCount = 0
+                                        cursorPos   = null
+                                        tapMaxMove  = 0f
+                                    }
                                 }
                             }
                         }
                     }
                 }
         ) {
-            // ── Canvas overlays ───────────────────────────────────────────────
             Canvas(modifier = Modifier.fillMaxSize()) {
                 drawTrackpadGrid()
-                if (rightFlash) drawRect(Color(0xFF4A148C).copy(alpha = 0.20f))
-                if (dragLockActive) {
-                    drawRect(Color(0xFF1565C0).copy(alpha = 0.08f))
+                if (rightFlash) drawRect(Color(0xFF4A148C).copy(alpha = 0.22f))
+                if (dragLock) {
+                    drawRect(Color(0xFF1565C0).copy(alpha = 0.09f))
                     drawRoundRect(
-                        color        = Color(0xFF4A90D9).copy(alpha = 0.65f),
-                        topLeft      = Offset(3f, 3f),
-                        size         = Size(size.width - 6f, size.height - 6f),
-                        cornerRadius = CornerRadius(12f),
-                        style        = Stroke(3f)
+                        Color(0xFF4A90D9).copy(alpha = 0.7f),
+                        Offset(3f, 3f),
+                        Size(size.width - 6f, size.height - 6f),
+                        CornerRadius(12f),
+                        style = Stroke(3f)
                     )
                 }
                 ripplePos.value?.let { drawRipple(it, rippleRadius.value, rippleAlpha.value) }
@@ -479,12 +472,12 @@ private fun TrackpadSurface(
                 drawMouseIcon(size)
             }
 
-            if (dragLockActive) {
+            if (dragLock) {
                 Box(
-                    modifier = Modifier
+                    Modifier
                         .align(Alignment.TopCenter)
                         .padding(top = 10.dp)
-                        .background(Color(0xFF1565C0).copy(0.92f), RoundedCornerShape(20.dp))
+                        .background(Color(0xFF1565C0).copy(0.93f), RoundedCornerShape(20.dp))
                         .padding(horizontal = 14.dp, vertical = 5.dp)
                 ) {
                     Text(
@@ -498,7 +491,7 @@ private fun TrackpadSurface(
 
             if (fingerCount > 0) {
                 Box(
-                    modifier = Modifier
+                    Modifier
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 8.dp)
                         .background(Color.Black.copy(0.50f), RoundedCornerShape(20.dp))
@@ -522,7 +515,7 @@ private fun TrackpadSurface(
                 .background(Color(0xFF081929))
         ) {
             Column(
-                modifier            = Modifier.fillMaxSize(),
+                Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
@@ -535,44 +528,45 @@ private fun TrackpadSurface(
                         .background(Color(0xFF0A1F33))
                         .pointerInput(Unit) {
                             var lastY      = 0f
-                            var firstEvent = true
+                            var isFirst    = true
                             awaitPointerEventScope {
                                 while (true) {
-                                    val evt = awaitPointerEvent(PointerEventPass.Initial)
-                                    val ch  = evt.changes.firstOrNull() ?: continue
-                                    val s   = latestSettings.value
+                                    val ev = awaitPointerEvent(PointerEventPass.Initial)
+                                    val ch = ev.changes.firstOrNull() ?: continue
                                     if (ch.pressed) {
-                                        if (firstEvent) {
-                                            lastY      = ch.position.y
-                                            firstEvent = false
+                                        ch.consume()
+                                        if (isFirst) {
+                                            lastY  = ch.position.y
+                                            isFirst = false
                                         } else {
-                                            val dy    = ch.position.y - lastY
-                                            val dir   = if (s.invertScroll) 1f else -1f
-                                            val delta = (dy * s.scrollSpeed * dir * 0.5f).toInt()
-                                            if (delta != 0) {
-                                                send(0, 0, 0, delta.coerceIn(-127, 127))
-                                                flashScroll()
+                                            val s   = settingsRef.value
+                                            val dy  = ch.position.y - lastY
+                                            val dir = if (s.invertScroll) 1f else -1f
+                                            val d   = (dy * s.scrollSpeed * dir * 0.5f).toInt()
+                                            if (d != 0) {
+                                                send(0, 0, 0, d.coerceIn(-127, 127))
+                                                scope.launch { flashScroll() }
                                             }
                                             lastY = ch.position.y
                                         }
-                                        ch.consume()
                                     } else {
-                                        firstEvent = true
+                                        isFirst = true
                                     }
                                 }
                             }
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
+                    Canvas(Modifier.fillMaxSize()) {
                         val cx    = size.width / 2f
                         val alpha = if (scrollFlash) 0.55f else 0.13f
-                        val color = Color.White.copy(alpha = alpha)
+                        val col   = Color.White.copy(alpha)
                         var y = 10f
                         while (y < size.height - 10f) {
                             drawLine(
-                                color, Offset(cx, y),
-                                Offset(cx, (y + 7f).coerceAtMost(size.height - 10f)), 2.5f
+                                col, Offset(cx, y),
+                                Offset(cx, (y + 7f).coerceAtMost(size.height - 10f)),
+                                2.5f
                             )
                             y += 13f
                         }
@@ -585,8 +579,11 @@ private fun TrackpadSurface(
                             )
                         }
                     }
-                    Text("↕", fontSize = 14.sp,
-                        color = Color.White.copy(if (scrollFlash) 0.9f else 0.28f))
+                    Text(
+                        "↕",
+                        fontSize = 14.sp,
+                        color    = Color.White.copy(if (scrollFlash) 0.9f else 0.28f)
+                    )
                 }
 
                 ScrollArrowButton("▼") { send(0, 0, 0, -3) }
@@ -603,10 +600,9 @@ private fun TrackpadSurface(
 private fun TrackpadClickButtons(
     onSendMouse: (dx: Int, dy: Int, buttons: Int, wheel: Int) -> Unit,
 ) {
-    val haptic = LocalHapticFeedback.current
-    val scope  = rememberCoroutineScope()
-    // Always-current ref so buttons work immediately after connect
-    val latestSend = rememberUpdatedState(onSendMouse)
+    val haptic  = LocalHapticFeedback.current
+    val scope   = rememberCoroutineScope()
+    val sendRef = rememberUpdatedState(onSendMouse)
 
     Row(
         modifier = Modifier
@@ -615,32 +611,32 @@ private fun TrackpadClickButtons(
             .background(Color(0xFF081929))
     ) {
         ClickZoneButton("Left", Modifier.weight(1f), Color(0xFF1565C0)) {
-            latestSend.value(0, 0, 1, 0)
-            scope.launch { delay(80); latestSend.value(0, 0, 0, 0) }
+            sendRef.value(0, 0, 1, 0)
+            scope.launch { delay(80); sendRef.value(0, 0, 0, 0) }
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
         }
-        Box(Modifier.width(1.dp).fillMaxHeight().background(Color.White.copy(0.1f)))
+        Box(Modifier.width(1.dp).fillMaxHeight().background(Color.White.copy(0.10f)))
         ClickZoneButton("Mid", Modifier.weight(0.6f), Color(0xFF1B5E20)) {
-            latestSend.value(0, 0, 4, 0)
-            scope.launch { delay(80); latestSend.value(0, 0, 0, 0) }
+            sendRef.value(0, 0, 4, 0)
+            scope.launch { delay(80); sendRef.value(0, 0, 0, 0) }
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
         }
-        Box(Modifier.width(1.dp).fillMaxHeight().background(Color.White.copy(0.1f)))
+        Box(Modifier.width(1.dp).fillMaxHeight().background(Color.White.copy(0.10f)))
         ClickZoneButton("Right", Modifier.weight(1f), Color(0xFF4A148C)) {
-            latestSend.value(0, 0, 2, 0)
-            scope.launch { delay(80); latestSend.value(0, 0, 0, 0) }
+            sendRef.value(0, 0, 2, 0)
+            scope.launch { delay(80); sendRef.value(0, 0, 0, 0) }
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
         }
     }
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Scroll arrow (hold-to-repeat)
+// Scroll arrow
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
 private fun ScrollArrowButton(label: String, onScroll: () -> Unit) {
-    val scope      = rememberCoroutineScope()
+    val scope        = rememberCoroutineScope()
     val latestScroll = rememberUpdatedState(onScroll)
     Box(
         modifier = Modifier
@@ -675,7 +671,7 @@ private fun ClickZoneButton(
     tint    : Color,
     onClick : () -> Unit,
 ) {
-    var pressed    by remember { mutableStateOf(false) }
+    var pressed     by remember { mutableStateOf(false) }
     val latestClick = rememberUpdatedState(onClick)
     Box(
         modifier = modifier
@@ -706,7 +702,7 @@ private fun ClickZoneButton(
 // ═════════════════════════════════════════════════════════════════════════════
 
 private fun DrawScope.drawTrackpadGrid() {
-    val c    = Color.White.copy(alpha = 0.020f)
+    val c = Color.White.copy(alpha = 0.020f)
     val step = 44.dp.toPx()
     var x = 0f
     while (x <= size.width)  { drawLine(c, Offset(x, 0f), Offset(x, size.height), 1f); x += step }
@@ -715,13 +711,13 @@ private fun DrawScope.drawTrackpadGrid() {
 }
 
 private fun DrawScope.drawRipple(center: Offset, radius: Float, alpha: Float) {
-    drawCircle(Color.White.copy(alpha * 0.30f), radius,         center, style = Stroke(2.dp.toPx()))
-    drawCircle(Color.White.copy(alpha * 0.08f), radius * 0.40f, center)
+    drawCircle(Color.White.copy(alpha * 0.30f), radius,        center, style = Stroke(2.dp.toPx()))
+    drawCircle(Color.White.copy(alpha * 0.08f), radius * 0.4f, center)
 }
 
 private fun DrawScope.drawCursorGhost(pos: Offset) {
     drawCircle(Color.White.copy(0.22f), 14.dp.toPx(), pos, style = Stroke(1.5.dp.toPx()))
-    drawCircle(Color.White.copy(0.08f), 5.dp.toPx(),  pos)
+    drawCircle(Color.White.copy(0.08f),  5.dp.toPx(), pos)
 }
 
 private fun DrawScope.drawMouseIcon(canvasSize: Size) {
@@ -729,14 +725,14 @@ private fun DrawScope.drawMouseIcon(canvasSize: Size) {
     val cy = canvasSize.height / 2f - 20.dp.toPx()
     val w  = 30.dp.toPx(); val h = 44.dp.toPx(); val r = w / 2f
     val sc = Color.White.copy(0.13f); val sw = 1.5.dp.toPx()
-    drawRoundRect(sc, Offset(cx - r, cy - h / 2f), Size(w, h), CornerRadius(r), Stroke(sw))
-    drawLine(sc, Offset(cx, cy - h / 2f), Offset(cx, cy - h / 2f + h * 0.38f), sw)
+    drawRoundRect(sc, Offset(cx-r, cy-h/2f), Size(w, h), CornerRadius(r), Stroke(sw))
+    drawLine(sc, Offset(cx, cy-h/2f), Offset(cx, cy-h/2f+h*0.38f), sw)
     drawLine(sc,
-        Offset(cx - r + 2f, cy - h / 2f + h * 0.38f),
-        Offset(cx + r - 2f, cy - h / 2f + h * 0.38f), sw)
-    val wTop = cy - h / 2f + h * 0.07f
+        Offset(cx-r+2f, cy-h/2f+h*0.38f),
+        Offset(cx+r-2f, cy-h/2f+h*0.38f), sw)
+    val wTop = cy - h/2f + h*0.07f
     val ww   = 4.dp.toPx()
-    drawRoundRect(sc, Offset(cx - ww / 2f, wTop), Size(ww, h * 0.23f), CornerRadius(ww / 2f), Stroke(sw))
+    drawRoundRect(sc, Offset(cx-ww/2f, wTop), Size(ww, h*0.23f), CornerRadius(ww/2f), Stroke(sw))
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -759,7 +755,6 @@ fun TrackpadSettingsSheet(
         dragHandle       = null
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -800,13 +795,13 @@ fun TrackpadSettingsSheet(
 
                 TrackpadToggle(
                     "Invert Scroll",
-                    "Natural / phone-style scrolling (content follows finger)",
+                    "Natural scrolling — content follows finger direction",
                     local.invertScroll
                 ) { local = local.copy(invertScroll = it) }
 
                 TrackpadToggle(
                     "Tap to Click",
-                    "Short tap = left click",
+                    "Short tap = left click · double-tap drag = drag lock",
                     local.tapToClick
                 ) { local = local.copy(tapToClick = it) }
 
@@ -858,7 +853,6 @@ fun TrackpadSettingsSheet(
                         }
                     }
                 }
-
                 Spacer(Modifier.height(4.dp))
             }
 
@@ -874,7 +868,8 @@ fun TrackpadSettingsSheet(
                     onClick  = { onSave(local); onDismiss() },
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     shape    = RoundedCornerShape(12.dp),
-                    colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFF4A90D9))
+                    colors   = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF4A90D9))
                 ) {
                     Text(
                         "Save Settings",
@@ -890,8 +885,6 @@ fun TrackpadSettingsSheet(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
 private fun TrackpadSlider(
     label   : String,
@@ -903,8 +896,12 @@ private fun TrackpadSlider(
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(label, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = Color.White)
-            Text(display(value), fontSize = 13.sp, color = Color(0xFF90CAF9),
-                fontWeight = FontWeight.Medium)
+            Text(
+                display(value),
+                fontSize   = 13.sp,
+                color      = Color(0xFF90CAF9),
+                fontWeight = FontWeight.Medium
+            )
         }
         Slider(
             value         = value,
@@ -975,7 +972,8 @@ private fun TrackpadNotReadyCard() {
         Card(
             modifier = Modifier.padding(32.dp),
             colors   = CardDefaults.cardColors(
-                containerColor = Color(0xFFF57F17).copy(0.1f))
+                containerColor = Color(0xFFF57F17).copy(0.1f)
+            )
         ) {
             Column(
                 modifier            = Modifier.padding(24.dp),
@@ -983,8 +981,12 @@ private fun TrackpadNotReadyCard() {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("⏳", fontSize = 32.sp)
-                Text("Not Connected",
-                    fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
+                Text(
+                    "Not Connected",
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 16.sp,
+                    color      = Color.White
+                )
                 Text(
                     "Start BLE HID → pair from host Bluetooth settings → come back here.",
                     fontSize  = 13.sp,
