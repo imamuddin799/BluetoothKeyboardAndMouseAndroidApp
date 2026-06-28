@@ -744,10 +744,16 @@ private fun displayMain(k: Key, st: KbState): String {
     if (k.isMod || k.isCaps || k.isFn || k.isNum || k.isScroll) return k.label
     val isLetter = k.label.length == 1 && k.label[0].isLetter()
     return when {
+        // AltGr takes priority for special characters
         st.altGr && k.altGr.isNotEmpty() -> k.altGr
-        isLetter && st.isUpperCase()      -> k.label.uppercase()
-        st.shift && k.shift.isNotEmpty()  -> k.shift
-        else                              -> k.label
+        // LETTERS: Use caps XOR shift for case (standard keyboard behavior)
+        isLetter -> {
+            if (st.isUpperCase()) k.label.uppercase() else k.label.lowercase()
+        }
+        // NON-LETTERS: Use shift label when shift is held
+        st.shift && k.shift.isNotEmpty() -> k.shift
+        // Default: show base label
+        else -> k.label
     }
 }
 
@@ -825,9 +831,10 @@ fun KeyboardScreen(
                 var mod = st.modByte()
                 val isLetter = key.label.length==1 && key.label[0].isLetter()
                 if (isLetter) {
-                    val needShift = st.caps xor st.shift
+                    // Clear existing shift bits from modByte()
                     mod = mod and (MOD_LSHIFT or MOD_RSHIFT).inv()
-                    if (needShift) mod = mod or MOD_LSHIFT
+                    // Add shift modifier only if shift key is actually held
+                    if (st.shift) mod = mod or MOD_LSHIFT
                 }
                 val label = st.modPrefix() + key.label.ifEmpty { "Space" }
                 onSendKey(mod, listOf(key.code))
@@ -928,43 +935,92 @@ fun KeyboardScreen(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
 
-                    // Arrow Keys
-                    Text(
-                        "Arrow Keys",
-                        color = Color(0xFF607D8B),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(
-                            Modifier.fillMaxWidth(0.60f),
-                            horizontalArrangement = Arrangement.Center
+                        // ── Navigation Cluster (Left Side) ──────────────────────────────────────
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            KBtn(
-                                key = KEY_UP,
-                                modifier = Modifier.weight(1f),
-                                h = 40.dp,
-                                mainLabel = "↑",
-                                scrollable = true,
-                                onPress = { handleKey(KEY_UP) }
+                            Text(
+                                "Navigation",
+                                color = Color(0xFF607D8B),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold
                             )
+                            Row(Modifier.fillMaxWidth()) {
+                                NAV_ROW1.forEach { k ->
+                                    KBtn(
+                                        key = k,
+                                        modifier = Modifier.weight(1f),
+                                        h = 40.dp,
+                                        active = isKeyActive(k, st),
+                                        mainLabel = displayMain(k, st),
+                                        scrollable = true,
+                                        onPress = { handleKey(k) }
+                                    )
+                                }
+                            }
+                            Row(Modifier.fillMaxWidth()) {
+                                NAV_ROW2.forEach { k ->
+                                    KBtn(
+                                        key = k,
+                                        modifier = Modifier.weight(1f),
+                                        h = 40.dp,
+                                        active = isKeyActive(k, st),
+                                        mainLabel = displayMain(k, st),
+                                        scrollable = true,
+                                        onPress = { handleKey(k) }
+                                    )
+                                }
+                            }
                         }
 
-                        Row(Modifier.fillMaxWidth(0.60f)) {
-                            listOf(KEY_LEFT, KEY_DOWN, KEY_RIGHT).forEach { k ->
-                                KBtn(
-                                    key = k,
-                                    modifier = Modifier.weight(1f),
-                                    h = 40.dp,
-                                    mainLabel = k.label,
-                                    scrollable = true,
-                                    onPress = { handleKey(k) }
-                                )
+                        // ── Arrow Keys (Right Side - Full Width T-Layout) ───────────────────────
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                "Arrow Keys",
+                                color = Color(0xFF607D8B),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                // Top arrow
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    KBtn(
+                                        key = KEY_UP,
+                                        modifier = Modifier.weight(1f),
+                                        h = 40.dp,
+                                        mainLabel = "↑",
+                                        scrollable = true,
+                                        onPress = { handleKey(KEY_UP) }
+                                    )
+                                }
+                                // Bottom row (Left, Down, Right)
+                                Row(Modifier.fillMaxWidth()) {
+                                    listOf(KEY_LEFT, KEY_DOWN, KEY_RIGHT).forEach { k ->
+                                        KBtn(
+                                            key = k,
+                                            modifier = Modifier.weight(1f),
+                                            h = 40.dp,
+                                            mainLabel = k.label,
+                                            scrollable = true,
+                                            onPress = { handleKey(k) }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
