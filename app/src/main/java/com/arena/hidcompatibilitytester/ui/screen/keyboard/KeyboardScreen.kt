@@ -1,5 +1,4 @@
-// KeyboardScreen.kt
-package com.arena.hidcompatibilitytester
+package com.arena.hidcompatibilitytester.ui.screen.keyboard
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -42,6 +41,7 @@ import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import com.arena.hidcompatibilitytester.bluetooth.BleHidManager
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Scroll-safe tap with optional key-repeat.

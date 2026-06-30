@@ -1,10 +1,5 @@
-// HidKeyCodes.kt
-package com.arena.hidcompatibilitytester
+package com.arena.hidcompatibilitytester.hid
 
-/**
- * Standard HID keyboard usage IDs (USB HID Usage Tables §10)
- * These are the values you pass as keyCodes to sendKeyboardReport().
- */
 object HidKeyCodes {
     // Letters
     const val KEY_A = 0x04; const val KEY_B = 0x05; const val KEY_C = 0x06
@@ -17,22 +12,22 @@ object HidKeyCodes {
     const val KEY_V = 0x19; const val KEY_W = 0x1A; const val KEY_X = 0x1B
     const val KEY_Y = 0x1C; const val KEY_Z = 0x1D
 
-    // Numbers (top row)
+    // Numbers
     const val KEY_1 = 0x1E; const val KEY_2 = 0x1F; const val KEY_3 = 0x20
     const val KEY_4 = 0x21; const val KEY_5 = 0x22; const val KEY_6 = 0x23
     const val KEY_7 = 0x24; const val KEY_8 = 0x25; const val KEY_9 = 0x26
     const val KEY_0 = 0x27
 
     // Special
-    const val KEY_ENTER     = 0x28; const val KEY_ESCAPE    = 0x29
-    const val KEY_BACKSPACE = 0x2A; const val KEY_TAB       = 0x2B
-    const val KEY_SPACE     = 0x2C; const val KEY_MINUS     = 0x2D
-    const val KEY_EQUALS    = 0x2E; const val KEY_LBRACKET  = 0x2F
-    const val KEY_RBRACKET  = 0x30; const val KEY_BACKSLASH = 0x31
-    const val KEY_SEMICOLON = 0x33; const val KEY_APOSTROPHE= 0x34
-    const val KEY_GRAVE     = 0x35; const val KEY_COMMA     = 0x36
-    const val KEY_PERIOD    = 0x37; const val KEY_SLASH     = 0x38
-    const val KEY_CAPS_LOCK = 0x39
+    const val KEY_ENTER      = 0x28; const val KEY_ESCAPE     = 0x29
+    const val KEY_BACKSPACE  = 0x2A; const val KEY_TAB        = 0x2B
+    const val KEY_SPACE      = 0x2C; const val KEY_MINUS      = 0x2D
+    const val KEY_EQUALS     = 0x2E; const val KEY_LBRACKET   = 0x2F
+    const val KEY_RBRACKET   = 0x30; const val KEY_BACKSLASH  = 0x31
+    const val KEY_SEMICOLON  = 0x33; const val KEY_APOSTROPHE = 0x34
+    const val KEY_GRAVE      = 0x35; const val KEY_COMMA      = 0x36
+    const val KEY_PERIOD     = 0x37; const val KEY_SLASH      = 0x38
+    const val KEY_CAPS_LOCK  = 0x39
 
     // Function keys
     const val KEY_F1  = 0x3A; const val KEY_F2  = 0x3B; const val KEY_F3  = 0x3C

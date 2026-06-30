@@ -1,5 +1,4 @@
-// TrackpadScreen.kt
-package com.arena.hidcompatibilitytester
+package com.arena.hidcompatibilitytester.ui.screen.trackpad
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -36,22 +35,8 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.hypot
 
-// ═════════════════════════════════════════════════════════════════════════════
-// Data
-// ═════════════════════════════════════════════════════════════════════════════
-
-data class TrackpadSettings(
-    val pointerSpeed        : Float         = 1.2f,
-    val scrollSpeed         : Float         = 1.0f,
-    val invertScroll        : Boolean       = false,
-    val tapToClick          : Boolean       = true,
-    val twoFingerRightClick : Boolean       = true,
-    val accelerationEnabled : Boolean       = true,
-    val dragLockMode        : Boolean       = true,
-    val clickPressure       : ClickPressure = ClickPressure.MEDIUM
-)
-
-enum class ClickPressure { LIGHT, MEDIUM, FIRM }
+import com.arena.hidcompatibilitytester.ui.screen.trackpad.TrackpadSettings
+import com.arena.hidcompatibilitytester.ui.screen.trackpad.ClickPressure
 
 // ═════════════════════════════════════════════════════════════════════════════
 // TrackpadScreen
@@ -1329,22 +1314,6 @@ private fun TrackpadToggle(
 }
 
 @Composable
-private fun LedBadge(label: String, active: Boolean) {
-    Surface(
-        shape = RoundedCornerShape(3.dp),
-        color = if (active) Color(0xFF1565C0) else Color.White.copy(0.04f)
-    ) {
-        Text(
-            label,
-            fontSize   = 7.sp,
-            color      = if (active) Color.White else Color(0xFF3A4A5A),
-            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-            modifier   = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-        )
-    }
-}
-
-@Composable
 private fun TrackpadNotReadyCard() {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Card(
@@ -1372,5 +1341,21 @@ private fun TrackpadNotReadyCard() {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun LedBadge(label: String, active: Boolean) {
+    Surface(
+        shape = RoundedCornerShape(3.dp),
+        color = if (active) Color(0xFF1565C0) else Color.White.copy(0.04f)
+    ) {
+        Text(
+            label,
+            fontSize   = 7.sp,
+            color      = if (active) Color.White else Color(0xFF3A4A5A),
+            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+            modifier   = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+        )
     }
 }

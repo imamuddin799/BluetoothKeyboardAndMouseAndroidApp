@@ -45,7 +45,7 @@
         </activity>
 
         <service
-            android:name=".HidInputService"
+            android:name=".service.HidInputService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />

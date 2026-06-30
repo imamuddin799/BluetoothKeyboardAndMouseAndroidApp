@@ -1,4 +1,4 @@
-package com.arena.hidcompatibilitytester
+package com.arena.hidcompatibilitytester.bluetooth
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
