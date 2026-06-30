@@ -37,7 +37,7 @@ fun AppStatusBar(
             verticalAlignment     = Alignment.CenterVertically
         ) {
             Column {
-                Text("HID Clone", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Text(android.os.Build.MODEL, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 Text("${connectedHostList.size} host(s)", fontSize = 11.sp, color = Color.Gray)
             }
             Row(

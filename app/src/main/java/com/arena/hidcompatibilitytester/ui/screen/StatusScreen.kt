@@ -87,7 +87,7 @@ private fun HowToConnectCard() {
         ) {
             Text("How to connect:", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
             Text("1. Open Bluetooth settings on host (PC / Mac / Phone)", fontSize = 12.sp)
-            Text("2. Find \"HID Clone\" in the device list",               fontSize = 12.sp)
+            Text("2. Find \"${android.os.Build.MODEL}\" in the device list", fontSize = 12.sp)
             Text("3. Tap/click to pair",                                   fontSize = 12.sp)
             Text("4. Host sees it as mouse + keyboard",                    fontSize = 12.sp)
         }

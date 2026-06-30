@@ -75,6 +75,10 @@ fun AppMainScreen(
                 settings       = trackpadSettings,
                 onSendMouse    = onSendMouse,
                 onShowSettings = onShowTrackpadSettings,
+                onSendKey      = onSendKey,
+                onReleaseKeys  = onReleaseKeys,
+                onConsumerKey  = onConsumerKey,
+                onTypeText     = onTypeText,
             )
             2 -> KeyboardScreen(
                 isReady       = isReady,

@@ -22,6 +22,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.activity.OnBackPressedCallback
+import androidx.compose.runtime.DisposableEffect
 import com.arena.hidcompatibilitytester.bluetooth.BleHidManager
 import com.arena.hidcompatibilitytester.bluetooth.BleHidState
 import com.arena.hidcompatibilitytester.bluetooth.BluetoothDeviceManager
@@ -30,14 +32,14 @@ import com.arena.hidcompatibilitytester.ui.screen.AppMainScreen
 import com.arena.hidcompatibilitytester.ui.screen.trackpad.TrackpadSettings
 import com.arena.hidcompatibilitytester.ui.screen.trackpad.TrackpadSettingsSheet
 import com.arena.hidcompatibilitytester.ui.theme.HIDCompatibilityTesterTheme
+import com.arena.hidcompatibilitytester.ui.screen.trackpad.TrackpadSettingsStore
 
 class MainActivity : ComponentActivity(),
     BluetoothDeviceManager.BluetoothStateListener {
 
     private lateinit var deviceManager: BluetoothDeviceManager
     private lateinit var bleHidManager: BleHidManager
-
-    private var trackpadSettings     by mutableStateOf(TrackpadSettings())
+    private var trackpadSettings by mutableStateOf(TrackpadSettings())
     private var showSettingsSheet    by mutableStateOf(false)
 
     private val pairedDevices     = androidx.compose.runtime.snapshots.SnapshotStateList<BluetoothDevice>()
@@ -50,6 +52,8 @@ class MainActivity : ComponentActivity(),
     private var statusMessage              by mutableStateOf<String?>(null)
     private var bleSupported               by mutableStateOf(false)
     private var pairRequiredAddress        by mutableStateOf<String?>(null)
+
+    private var showExitConfirmation by mutableStateOf(false)
 
     private val bluetoothStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -100,7 +104,7 @@ class MainActivity : ComponentActivity(),
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
+        trackpadSettings = TrackpadSettingsStore.load(this)
         bleHidManager = BleHidManager(this)
         bleSupported  = bleHidManager.isSupported()
 
@@ -138,6 +142,12 @@ class MainActivity : ComponentActivity(),
 
         checkAndRequestPermissions()
 
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                showExitConfirmation = true
+            }
+        })
+
         setContent {
             HIDCompatibilityTesterTheme {
                 MainContent()
@@ -168,7 +178,10 @@ class MainActivity : ComponentActivity(),
             TrackpadSettingsSheet(
                 settings  = trackpadSettings,
                 onDismiss = { showSettingsSheet = false },
-                onSave    = { trackpadSettings = it }
+                onSave    = { newSettings ->
+                    trackpadSettings = newSettings
+                    TrackpadSettingsStore.save(this@MainActivity, newSettings)
+                }
             )
         }
 
@@ -179,6 +192,27 @@ class MainActivity : ComponentActivity(),
                 text  = { Text("Host ($addr) removed pairing.\nRe-pair from host's Bluetooth settings.") },
                 confirmButton = {
                     TextButton(onClick = { pairRequiredAddress = null }) { Text("OK") }
+                }
+            )
+        }
+
+        if (showExitConfirmation) {
+            AlertDialog(
+                onDismissRequest = { showExitConfirmation = false },
+                title = { Text("Exit App?") },
+                text  = { Text("This will stop the HID service and disconnect all hosts. Are you sure you want to exit?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showExitConfirmation = false
+                        finish()
+                    }) {
+                        Text("Exit", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showExitConfirmation = false }) {
+                        Text("Cancel")
+                    }
                 }
             )
         }

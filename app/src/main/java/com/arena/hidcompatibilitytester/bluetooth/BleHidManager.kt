@@ -248,8 +248,6 @@ class BleHidManager(private val context: Context) {
         if (knownHostAddresses.isEmpty()) knownHostAddresses.addAll(loadKnownHosts())
         Log.d(TAG, "Known hosts: $knownHostAddresses")
 
-        try { adapter?.name = "HID Clone" } catch (e: Exception) {}
-
         currentState = BleHidState.STARTING
         startGattThread()
         gattHandler?.postDelayed({ openGattServer() }, 500)
@@ -454,7 +452,6 @@ class BleHidManager(private val context: Context) {
         mouseInputChar = null; keyboardInputChar = null; consumerInputChar = null
         connectedDeviceMap.clear(); subscribedDevices.clear(); serviceQueue.clear()
         stopGattThread()
-        if (restoreName) try { if (originalName != null) adapter?.name = originalName } catch (e: Exception) {}
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -526,7 +523,7 @@ class BleHidManager(private val context: Context) {
     private fun buildGenericAccessService() = BluetoothGattService(
         UUID_GENERIC_ACCESS, BluetoothGattService.SERVICE_TYPE_PRIMARY
     ).also {
-        it.addCharacteristic(readChar(UUID_DEVICE_NAME, "HID Clone".toByteArray()))
+        it.addCharacteristic(readChar(UUID_DEVICE_NAME, (originalName ?: android.os.Build.MODEL).toByteArray()))
         it.addCharacteristic(readChar(UUID_APPEARANCE, APPEARANCE_MOUSE))
     }
 
