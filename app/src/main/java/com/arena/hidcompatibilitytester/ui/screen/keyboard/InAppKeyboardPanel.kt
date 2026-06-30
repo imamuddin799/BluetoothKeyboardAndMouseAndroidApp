@@ -290,6 +290,9 @@ internal fun InAppKeyRow(
                 else -> Color(0xFFECEFF1)
             }
 
+            // Modifiers, Caps, Fn should NOT repeat
+            val shouldNotRepeat = k.isMod || k.isCaps || k.isFn
+
             InAppKeyButton(
                 label    = mainLabel,
                 topLabel = if (!k.isMod && !k.isCaps && !k.isFn && k.shift.isNotEmpty()
@@ -298,6 +301,7 @@ internal fun InAppKeyRow(
                 fg       = fg,
                 active   = active,
                 modifier = Modifier.weight(k.w).height(height),
+                noRepeat = shouldNotRepeat,
                 onClick  = { onClick(k) }
             )
         }
@@ -312,10 +316,13 @@ private fun InAppKeyButton(
     fg       : Color,
     active   : Boolean,
     modifier : Modifier,
+    noRepeat : Boolean = false,
     onClick  : () -> Unit,
 ) {
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val scope  = rememberCoroutineScope()
     var pressed by remember { mutableStateOf(false) }
+    var holdJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     Box(
         modifier = modifier
@@ -323,11 +330,6 @@ private fun InAppKeyButton(
             .background(
                 if (pressed) Color(0xFF3A7ABD) else bg,
                 androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
-            )
-            .then(
-                if (active) Modifier.background(Color.Transparent)
-                    .padding(0.dp) // placeholder
-                else Modifier
             )
             .pointerInput(label) {
                 detectTapGestures(
@@ -337,8 +339,22 @@ private fun InAppKeyButton(
                             androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress
                         )
                         onClick()
+
+                        // Repeat-key: hold to repeat (skip for modifiers/caps/fn)
+                        if (!noRepeat) {
+                            holdJob = scope.launch {
+                                delay(400)
+                                while (true) {
+                                    onClick()
+                                    delay(50)
+                                }
+                            }
+                        }
+
                         tryAwaitRelease()
                         pressed = false
+                        holdJob?.cancel()
+                        holdJob = null
                     }
                 )
             },

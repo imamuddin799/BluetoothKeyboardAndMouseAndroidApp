@@ -15,6 +15,7 @@ data class TrackpadSettings(
     val scrollPosition      : SidePosition  = SidePosition.RIGHT,
     val arrowPosition       : SidePosition  = SidePosition.LEFT,
     val showArrowKeys       : Boolean       = true,
+    val showScrollStrip     : Boolean       = true,
     val showSystemKeyboard  : Boolean       = true,
     val showInAppKeyboard   : Boolean       = true,
 )
@@ -41,6 +42,7 @@ object TrackpadSettingsStore {
             putString("scroll_position", s.scrollPosition.name)
             putString("arrow_position", s.arrowPosition.name)
             putBoolean("show_arrows", s.showArrowKeys)
+            putBoolean("show_scroll", s.showScrollStrip)
             putBoolean("show_system_kb", s.showSystemKeyboard)
             putBoolean("show_inapp_kb", s.showInAppKeyboard)
             apply()
@@ -61,6 +63,7 @@ object TrackpadSettingsStore {
             scrollPosition      = safeEnum(p.getString("scroll_position", null), SidePosition.RIGHT),
             arrowPosition       = safeEnum(p.getString("arrow_position", null), SidePosition.LEFT),
             showArrowKeys       = p.getBoolean("show_arrows", true),
+            showScrollStrip     = p.getBoolean("show_scroll", true),
             showSystemKeyboard  = p.getBoolean("show_system_kb", true),
             showInAppKeyboard   = p.getBoolean("show_inapp_kb", true),
         )

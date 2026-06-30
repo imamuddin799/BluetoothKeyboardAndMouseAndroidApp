@@ -96,7 +96,7 @@ private fun ToolbarIcon(
 ) {
     Box(
         modifier = Modifier
-            .height(24.dp)
+            .height(28.dp)    // was 24.dp
             .clip(RoundedCornerShape(5.dp))
             .border(
                 width = if (active) 1.dp else 0.5.dp,
@@ -107,12 +107,12 @@ private fun ToolbarIcon(
                 if (active) Color(0xFF1565C0).copy(0.25f) else Color(0xFF1A2332)
             )
             .clickable { onClick() }
-            .padding(horizontal = 6.dp),
+            .padding(horizontal = 8.dp),    // was 6.dp
         contentAlignment = Alignment.Center
     ) {
         Text(
             icon,
-            fontSize = 13.sp,
+            fontSize = 14.sp,    // was 13.sp
             color    = if (active) Color.White else Color(0xFF90CAF9)
         )
     }

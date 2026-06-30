@@ -112,7 +112,7 @@ fun TrackpadSurface(
     Box(modifier = modifier.fillMaxWidth().background(Color(0xFF0D2B45))) {
         Row(Modifier.fillMaxSize()) {
             // Scroll strip left
-            if (scrollOnLeft) {
+            if (!scrollOnLeft && settings.showScrollStrip) {
                 TrackpadScrollStrip(
                     onScrollUp = { onSendRef.value(0, 0, 0, 3) },
                     onScrollDown = { onSendRef.value(0, 0, 0, -3) },
@@ -333,13 +333,17 @@ fun TrackpadSurface(
                         modifier = Modifier
                             .align(if (arrowOnLeft) Alignment.BottomStart else Alignment.BottomEnd)
                             .padding(2.dp),
-                        onMove = { dx, dy -> onSendRef.value(dx, dy, 0, 0) }
+                        onMove = { dx, dy ->
+                            // If left button is held (physical or drag), send btn=1 with movement
+                            val btn = if (physHoldActive.value || dragActiveRef.value) 1 else 0
+                            onSendRef.value(dx, dy, btn, 0)
+                        }
                     )
                 }
             }
 
             // Scroll strip right
-            if (!scrollOnLeft) {
+            if (scrollOnLeft && settings.showScrollStrip) {
                 TrackpadScrollStrip(
                     onScrollUp = { onSendRef.value(0, 0, 0, 3) },
                     onScrollDown = { onSendRef.value(0, 0, 0, -3) },

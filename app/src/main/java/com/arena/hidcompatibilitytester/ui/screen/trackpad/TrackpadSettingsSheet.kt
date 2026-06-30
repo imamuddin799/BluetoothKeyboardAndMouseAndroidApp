@@ -99,9 +99,17 @@ fun TrackpadSettingsSheet(
                         local.arrowPosition) { local = local.copy(arrowPosition = it) }
                 }
 
-                PositionSelector("Scroll Strip Position",
-                    "Which side of the trackpad for the scroll strip",
-                    local.scrollPosition) { local = local.copy(scrollPosition = it) }
+                SettingsToggle(
+                    "Scroll Strip",
+                    "Show the scroll strip on the trackpad edge",
+                    local.showScrollStrip
+                ) { local = local.copy(showScrollStrip = it) }
+
+                if (local.showScrollStrip) {
+                    PositionSelector("Scroll Strip Position",
+                        "Which side of the trackpad for the scroll strip",
+                        local.scrollPosition) { local = local.copy(scrollPosition = it) }
+                }
 
                 SectionDivider("Keyboard Buttons")
 
