@@ -174,17 +174,6 @@ class MainActivity : ComponentActivity(),
             )
         }
 
-        if (showSettingsSheet) {
-            TrackpadSettingsSheet(
-                settings  = trackpadSettings,
-                onDismiss = { showSettingsSheet = false },
-                onSave    = { newSettings ->
-                    trackpadSettings = newSettings
-                    TrackpadSettingsStore.save(this@MainActivity, newSettings)
-                }
-            )
-        }
-
         pairRequiredAddress?.let { addr ->
             AlertDialog(
                 onDismissRequest = { pairRequiredAddress = null },
@@ -262,6 +251,18 @@ class MainActivity : ComponentActivity(),
                             TextButton(onClick = { statusMessage = null }) { Text("OK") }
                         }
                     ) { Text(msg) }
+                }
+
+                // Full-screen settings overlay
+                if (showSettingsSheet) {
+                    TrackpadSettingsSheet(
+                        settings  = trackpadSettings,
+                        onDismiss = { showSettingsSheet = false },
+                        onSave    = { newSettings ->
+                            trackpadSettings = newSettings
+                            TrackpadSettingsStore.save(this@MainActivity, newSettings)
+                        }
+                    )
                 }
             }
         }
