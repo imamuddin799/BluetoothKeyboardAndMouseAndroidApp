@@ -11,6 +11,7 @@ import com.arena.hidcompatibilitytester.bluetooth.BleHidManager
 import com.arena.hidcompatibilitytester.bluetooth.BleHidState
 import com.arena.hidcompatibilitytester.ui.components.AppStatusBar
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.KeyboardScreen
+import com.arena.hidcompatibilitytester.ui.screen.keyboard.KeyboardSettings
 import com.arena.hidcompatibilitytester.ui.screen.trackpad.TrackpadScreen
 import com.arena.hidcompatibilitytester.ui.screen.trackpad.TrackpadSettings
 
@@ -25,6 +26,7 @@ fun AppMainScreen(
     nearbyList             : List<BluetoothDevice>,
     isScanningState        : Boolean,
     trackpadSettings       : TrackpadSettings,
+    keyboardSettings       : KeyboardSettings,
     showSettingsSheet      : Boolean,
     onToggleBleHid         : () -> Unit,
     onSendMouse            : (Int, Int, Int, Int) -> Unit,
@@ -38,6 +40,7 @@ fun AppMainScreen(
     onDisconnectHost       : (String) -> Unit,
     onReconnectHost        : (BluetoothDevice) -> Unit,
     onShowTrackpadSettings : () -> Unit,
+    onShowKeyboardSettings : () -> Unit,
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs    = listOf("Status", "Mouse", "Keyboard", "Devices")
@@ -81,10 +84,12 @@ fun AppMainScreen(
                 onTypeText     = onTypeText,
             )
             2 -> KeyboardScreen(
-                isReady       = isReady,
-                onSendKey     = onSendKey,
-                onConsumerKey = onConsumerKey,
-                onTypeText    = onTypeText,
+                isReady        = isReady,
+                settings       = keyboardSettings,
+                onSendKey      = onSendKey,
+                onConsumerKey  = onConsumerKey,
+                onTypeText     = onTypeText,
+                onShowSettings = onShowKeyboardSettings,
             )
             3 -> DevicesScreen(
                 nearbyList      = nearbyList,

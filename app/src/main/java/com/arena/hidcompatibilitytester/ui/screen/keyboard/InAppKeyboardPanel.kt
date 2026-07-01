@@ -1,7 +1,10 @@
+// ui/screen/keyboard/InAppKeyboardPanel.kt
 package com.arena.hidcompatibilitytester.ui.screen.keyboard
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -9,20 +12,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.input.pointer.pointerInput
-
-// Re-use the key definitions and helpers from KeyboardScreen
-// (They are file-private there, so we duplicate the minimal needed ones here
-//  OR make them internal. For clean code, we make them internal.)
 
 @Composable
 fun InAppKeyboardPanel(
+    settings      : KeyboardSettings = KeyboardSettings(),
     onSendKey     : (Int, List<Int>) -> Unit,
     onReleaseKeys : () -> Unit,
     onConsumerKey : (Int) -> Unit,
@@ -65,7 +67,9 @@ fun InAppKeyboardPanel(
                 st = st.copy(lastKey = key.label)
                 scope.launch {
                     delay(60); onSendKey(0, emptyList())
-                    st = st.releaseMods()
+                    if (settings.autoReleaseModsAfterKey && !settings.stickyModifiers) {
+                        st = st.releaseMods()
+                    }
                 }
             }
         }
@@ -76,20 +80,21 @@ fun InAppKeyboardPanel(
             .fillMaxWidth()
             .background(Color(0xFF080F18))
             .padding(horizontal = 2.dp),
-        verticalArrangement = Arrangement.spacedBy(1.dp)
+        verticalArrangement = Arrangement.spacedBy(1.dp),
     ) {
         // Dismiss bar
         Row(
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
                 .background(Color(0xFF050C14))
                 .padding(horizontal = 8.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("In-App Keyboard", fontSize = 10.sp, color = Color(0xFF607D8B),
-                fontWeight = FontWeight.SemiBold)
-
-            // Modifier indicators
+            Text(
+                "In-App Keyboard", fontSize = 10.sp, color = Color(0xFF607D8B),
+                fontWeight = FontWeight.SemiBold,
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 if (st.caps)  MiniLed("CAP")
                 if (st.shift) MiniLed("SHF")
@@ -97,7 +102,6 @@ fun InAppKeyboardPanel(
                 if (st.alt)   MiniLed("ALT")
                 if (st.gui)   MiniLed("WIN")
             }
-
             IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
                 Text("✕", fontSize = 12.sp, color = Color(0xFFEF9A9A))
             }
@@ -105,19 +109,18 @@ fun InAppKeyboardPanel(
 
         HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
 
-        // Function row
-        InAppKeyRow(INAPP_ROW_FN, 34.dp, st) { handleKey(it) }
-        HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
-        // Number row
-        InAppKeyRow(INAPP_ROW_NUM, 36.dp, st) { handleKey(it) }
-        // QWERTY
-        InAppKeyRow(INAPP_ROW_QWERTY, 36.dp, st) { handleKey(it) }
-        // Home row
-        InAppKeyRow(INAPP_ROW_HOME, 36.dp, st) { handleKey(it) }
-        // Alpha row
-        InAppKeyRow(INAPP_ROW_ALPHA, 36.dp, st) { handleKey(it) }
-        // Modifier row
-        InAppKeyRow(INAPP_ROW_MODS, 36.dp, st) { handleKey(it) }
+        val rowH = settings.keyHeight.mainDp.dp
+        val fnH  = settings.keyHeight.fnDp.dp
+
+        if (settings.showFunctionRow) {
+            InAppKeyRow(INAPP_ROW_FN, fnH, st, settings) { handleKey(it) }
+            HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
+        }
+        InAppKeyRow(INAPP_ROW_NUM, rowH, st, settings) { handleKey(it) }
+        InAppKeyRow(INAPP_ROW_QWERTY, rowH, st, settings) { handleKey(it) }
+        InAppKeyRow(INAPP_ROW_HOME, rowH, st, settings) { handleKey(it) }
+        InAppKeyRow(INAPP_ROW_ALPHA, rowH, st, settings) { handleKey(it) }
+        InAppKeyRow(INAPP_ROW_MODS, rowH, st, settings) { handleKey(it) }
     }
 }
 
@@ -127,25 +130,28 @@ private fun MiniLed(label: String) {
         label, fontSize = 6.sp, color = Color(0xFF90CAF9),
         fontWeight = FontWeight.Bold,
         modifier = Modifier
-            .background(Color(0xFF1565C0).copy(0.3f), androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
-            .padding(horizontal = 3.dp, vertical = 1.dp)
+            .background(
+                Color(0xFF1565C0).copy(0.3f),
+                RoundedCornerShape(2.dp),
+            )
+            .padding(horizontal = 3.dp, vertical = 1.dp),
     )
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// InApp key data & state — lightweight version for the panel
+// InApp key data & state
 // ═════════════════════════════════════════════════════════════════════════════
 
 internal data class InAppKey(
     val label  : String,
-    val shift  : String = "",
-    val w      : Float  = 1f,
-    val code   : Int    = 0,
-    val modBit : Int    = 0,
+    val shift  : String  = "",
+    val w      : Float   = 1f,
+    val code   : Int     = 0,
+    val modBit : Int     = 0,
     val isMod  : Boolean = false,
     val isCaps : Boolean = false,
     val isFn   : Boolean = false,
-    val color  : Int     = 0, // 0=normal, 1=mod, 2=accent, 3=danger, 4=fn
+    val color  : Int     = 0,
 )
 
 internal data class InAppKbState(
@@ -173,14 +179,11 @@ internal data class InAppKbState(
 
     fun releaseMods() = copy(
         lCtrl = false, rCtrl = false, lShift = false, rShift = false,
-        lAlt = false, rAlt = false, lGui = false, rGui = false
+        lAlt = false, rAlt = false, lGui = false, rGui = false,
     )
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
 // Key row definitions
-// ═════════════════════════════════════════════════════════════════════════════
-
 internal val INAPP_ROW_FN = listOf(
     InAppKey("Esc", code=0x29, w=1.4f, color=3),
     InAppKey("F1", code=0x3A, color=4), InAppKey("F2", code=0x3B, color=4),
@@ -191,7 +194,6 @@ internal val INAPP_ROW_FN = listOf(
     InAppKey("F11", code=0x44, color=4), InAppKey("F12", code=0x45, color=4),
     InAppKey("Del", code=0x4C, w=1.4f, color=3),
 )
-
 internal val INAPP_ROW_NUM = listOf(
     InAppKey("`","~",code=0x35), InAppKey("1","!",code=0x1E), InAppKey("2","@",code=0x1F),
     InAppKey("3","#",code=0x20), InAppKey("4","$",code=0x21), InAppKey("5","%",code=0x22),
@@ -199,7 +201,6 @@ internal val INAPP_ROW_NUM = listOf(
     InAppKey("9","(",code=0x26), InAppKey("0",")",code=0x27), InAppKey("-","_",code=0x2D),
     InAppKey("=","+",code=0x2E), InAppKey("⌫","",code=0x2A,w=2.0f,color=3),
 )
-
 internal val INAPP_ROW_QWERTY = listOf(
     InAppKey("Tab",code=0x2B,w=1.5f,color=1),
     InAppKey("Q",code=0x14),InAppKey("W",code=0x1A),InAppKey("E",code=0x08),
@@ -208,7 +209,6 @@ internal val INAPP_ROW_QWERTY = listOf(
     InAppKey("P",code=0x13),InAppKey("[","{",code=0x2F),InAppKey("]","}",code=0x30),
     InAppKey("\\","|",code=0x31,w=1.5f),
 )
-
 internal val INAPP_ROW_HOME = listOf(
     InAppKey("Caps",code=0x39,w=1.75f,color=1,isCaps=true),
     InAppKey("A",code=0x04),InAppKey("S",code=0x16),InAppKey("D",code=0x07),
@@ -217,7 +217,6 @@ internal val INAPP_ROW_HOME = listOf(
     InAppKey(";",":",code=0x33),InAppKey("'","\"",code=0x34),
     InAppKey("↵","",code=0x28,w=2.25f,color=2),
 )
-
 internal val INAPP_ROW_ALPHA = listOf(
     InAppKey("⇧",modBit=0x02,w=2.25f,color=1,isMod=true),
     InAppKey("Z",code=0x1D),InAppKey("X",code=0x1B),InAppKey("C",code=0x06),
@@ -226,7 +225,6 @@ internal val INAPP_ROW_ALPHA = listOf(
     InAppKey("/","?",code=0x38),
     InAppKey("⇧",modBit=0x20,w=2.75f,color=1,isMod=true),
 )
-
 internal val INAPP_ROW_MODS = listOf(
     InAppKey("Ctrl",modBit=0x01,w=1.5f,color=1,isMod=true),
     InAppKey("Win",modBit=0x08,w=1.2f,color=1,isMod=true),
@@ -238,15 +236,16 @@ internal val INAPP_ROW_MODS = listOf(
 )
 
 // ═════════════════════════════════════════════════════════════════════════════
-// InAppKeyRow — renders a single row of keys
+// InAppKeyRow
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
 internal fun InAppKeyRow(
-    keys    : List<InAppKey>,
-    height  : androidx.compose.ui.unit.Dp,
-    st      : InAppKbState,
-    onClick : (InAppKey) -> Unit,
+    keys: List<InAppKey>,
+    height: androidx.compose.ui.unit.Dp,
+    st: InAppKbState,
+    settings: KeyboardSettings,
+    onClick: (InAppKey) -> Unit,
 ) {
     Row(Modifier.fillMaxWidth()) {
         keys.forEach { k ->
@@ -290,19 +289,18 @@ internal fun InAppKeyRow(
                 else -> Color(0xFFECEFF1)
             }
 
-            // Modifiers, Caps, Fn should NOT repeat
             val shouldNotRepeat = k.isMod || k.isCaps || k.isFn
 
             InAppKeyButton(
-                label    = mainLabel,
+                label = mainLabel,
                 topLabel = if (!k.isMod && !k.isCaps && !k.isFn && k.shift.isNotEmpty()
-                    && k.label.length == 1) k.shift else "",
-                bg       = bg,
-                fg       = fg,
-                active   = active,
+                    && k.label.length == 1 && settings.showKeyHints
+                ) k.shift else "",
+                bg = bg, fg = fg, active = active,
                 modifier = Modifier.weight(k.w).height(height),
-                noRepeat = shouldNotRepeat,
-                onClick  = { onClick(k) }
+                settings = settings,
+                noRepeat = shouldNotRepeat || !settings.repeatEnabled,
+                onClick = { onClick(k) },
             )
         }
     }
@@ -310,74 +308,75 @@ internal fun InAppKeyRow(
 
 @Composable
 private fun InAppKeyButton(
-    label    : String,
-    topLabel : String,
-    bg       : Color,
-    fg       : Color,
-    active   : Boolean,
-    modifier : Modifier,
-    noRepeat : Boolean = false,
-    onClick  : () -> Unit,
+    label: String,
+    topLabel: String,
+    bg: Color,
+    fg: Color,
+    active: Boolean,
+    modifier: Modifier,
+    settings: KeyboardSettings,
+    noRepeat: Boolean = false,
+    onClick: () -> Unit,
 ) {
-    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-    val scope  = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
     var pressed by remember { mutableStateOf(false) }
-    var holdJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var holdJob by remember { mutableStateOf<Job?>(null) }
 
     Box(
         modifier = modifier
             .padding(0.5.dp)
             .background(
                 if (pressed) Color(0xFF3A7ABD) else bg,
-                androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+                RoundedCornerShape(4.dp),
             )
-            .pointerInput(label) {
+            .pointerInput(label, settings.repeatInitialDelayMs, settings.repeatIntervalMs) {
                 detectTapGestures(
                     onPress = {
                         pressed = true
-                        haptic.performHapticFeedback(
-                            androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress
-                        )
+                        if (settings.hapticEnabled) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        }
                         onClick()
-
-                        // Repeat-key: hold to repeat (skip for modifiers/caps/fn)
                         if (!noRepeat) {
                             holdJob = scope.launch {
-                                delay(400)
+                                delay(settings.repeatInitialDelayMs)
                                 while (true) {
                                     onClick()
-                                    delay(50)
+                                    delay(settings.repeatIntervalMs)
                                 }
                             }
                         }
-
                         tryAwaitRelease()
                         pressed = false
-                        holdJob?.cancel()
-                        holdJob = null
-                    }
+                        holdJob?.cancel(); holdJob = null
+                    },
                 )
             },
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.Center,
     ) {
+        val baseFontSp = settings.keyFontSize.baseSp
+
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(horizontal = 1.dp, vertical = 1.dp)
+            modifier = Modifier.padding(horizontal = 1.dp, vertical = 1.dp),
         ) {
             if (topLabel.isNotEmpty()) {
-                Text(topLabel, fontSize = 6.sp, color = Color.White.copy(0.25f),
-                    lineHeight = 6.sp)
+                Text(
+                    topLabel, fontSize = 6.sp,
+                    color = Color.White.copy(0.25f), lineHeight = 6.sp,
+                )
             }
             Text(
                 label,
                 color = fg,
                 fontSize = when {
-                    label.length > 4 -> 7.sp
-                    label.length > 2 -> 9.sp
-                    else -> 11.sp
+                    label.length > 4 -> (baseFontSp - 4).coerceAtLeast(6).sp
+                    label.length > 2 -> (baseFontSp - 2).coerceAtLeast(7).sp
+                    else -> (baseFontSp - 1).sp
                 },
                 fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-                maxLines = 1
+                maxLines = 1,
             )
         }
     }

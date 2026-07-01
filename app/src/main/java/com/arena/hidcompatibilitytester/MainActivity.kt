@@ -23,24 +23,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.activity.OnBackPressedCallback
-import androidx.compose.runtime.DisposableEffect
 import com.arena.hidcompatibilitytester.bluetooth.BleHidManager
 import com.arena.hidcompatibilitytester.bluetooth.BleHidState
 import com.arena.hidcompatibilitytester.bluetooth.BluetoothDeviceManager
 import com.arena.hidcompatibilitytester.service.HidInputService
 import com.arena.hidcompatibilitytester.ui.screen.AppMainScreen
+import com.arena.hidcompatibilitytester.ui.screen.keyboard.KeyboardSettings
+import com.arena.hidcompatibilitytester.ui.screen.keyboard.KeyboardSettingsSheet
+import com.arena.hidcompatibilitytester.ui.screen.keyboard.KeyboardSettingsStore
 import com.arena.hidcompatibilitytester.ui.screen.trackpad.TrackpadSettings
 import com.arena.hidcompatibilitytester.ui.screen.trackpad.TrackpadSettingsSheet
-import com.arena.hidcompatibilitytester.ui.theme.HIDCompatibilityTesterTheme
 import com.arena.hidcompatibilitytester.ui.screen.trackpad.TrackpadSettingsStore
+import com.arena.hidcompatibilitytester.ui.theme.HIDCompatibilityTesterTheme
 
 class MainActivity : ComponentActivity(),
     BluetoothDeviceManager.BluetoothStateListener {
 
     private lateinit var deviceManager: BluetoothDeviceManager
     private lateinit var bleHidManager: BleHidManager
-    private var trackpadSettings by mutableStateOf(TrackpadSettings())
-    private var showSettingsSheet    by mutableStateOf(false)
+    private var trackpadSettings  by mutableStateOf(TrackpadSettings())
+    private var keyboardSettings  by mutableStateOf(KeyboardSettings())
+    private var showTrackpadSettingsSheet  by mutableStateOf(false)
+    private var showKeyboardSettingsSheet by mutableStateOf(false)
 
     private val pairedDevices     = androidx.compose.runtime.snapshots.SnapshotStateList<BluetoothDevice>()
     private val nearbyDevices     = androidx.compose.runtime.snapshots.SnapshotStateList<BluetoothDevice>()
@@ -52,8 +56,7 @@ class MainActivity : ComponentActivity(),
     private var statusMessage              by mutableStateOf<String?>(null)
     private var bleSupported               by mutableStateOf(false)
     private var pairRequiredAddress        by mutableStateOf<String?>(null)
-
-    private var showExitConfirmation by mutableStateOf(false)
+    private var showExitConfirmation       by mutableStateOf(false)
 
     private val bluetoothStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -104,7 +107,10 @@ class MainActivity : ComponentActivity(),
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        trackpadSettings = TrackpadSettingsStore.load(this)
+
+        trackpadSettings  = TrackpadSettingsStore.load(this)
+        keyboardSettings  = KeyboardSettingsStore.load(this)
+
         bleHidManager = BleHidManager(this)
         bleSupported  = bleHidManager.isSupported()
 
@@ -217,7 +223,8 @@ class MainActivity : ComponentActivity(),
                     nearbyList             = nearbyDevices,
                     isScanningState        = isScanningState,
                     trackpadSettings       = trackpadSettings,
-                    showSettingsSheet      = showSettingsSheet,
+                    keyboardSettings       = keyboardSettings,
+                    showSettingsSheet      = showTrackpadSettingsSheet,
                     onToggleBleHid         = { toggleBleHid() },
                     onSendMouse            = { dx, dy, buttons, wheel ->
                         if (!bleHidManager.sendMouseReport(dx, dy, buttons, wheel))
@@ -239,7 +246,8 @@ class MainActivity : ComponentActivity(),
                         bleHidManager.inviteReconnect(device)
                         statusMessage = "Inviting ${device.address}…"
                     },
-                    onShowTrackpadSettings = { showSettingsSheet = true }
+                    onShowTrackpadSettings = { showTrackpadSettingsSheet = true },
+                    onShowKeyboardSettings = { showKeyboardSettingsSheet = true },
                 )
 
                 statusMessage?.let { msg ->
@@ -253,14 +261,26 @@ class MainActivity : ComponentActivity(),
                     ) { Text(msg) }
                 }
 
-                // Full-screen settings overlay
-                if (showSettingsSheet) {
+                // Trackpad settings overlay
+                if (showTrackpadSettingsSheet) {
                     TrackpadSettingsSheet(
                         settings  = trackpadSettings,
-                        onDismiss = { showSettingsSheet = false },
+                        onDismiss = { showTrackpadSettingsSheet = false },
                         onSave    = { newSettings ->
                             trackpadSettings = newSettings
                             TrackpadSettingsStore.save(this@MainActivity, newSettings)
+                        }
+                    )
+                }
+
+                // Keyboard settings overlay
+                if (showKeyboardSettingsSheet) {
+                    KeyboardSettingsSheet(
+                        settings  = keyboardSettings,
+                        onDismiss = { showKeyboardSettingsSheet = false },
+                        onSave    = { newSettings ->
+                            keyboardSettings = newSettings
+                            KeyboardSettingsStore.save(this@MainActivity, newSettings)
                         }
                     )
                 }

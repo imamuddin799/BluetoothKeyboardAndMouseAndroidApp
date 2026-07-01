@@ -1,6 +1,7 @@
 package com.arena.hidcompatibilitytester.ui.screen.trackpad
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,8 +14,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.arena.hidcompatibilitytester.ui.components.AdaptiveSpacing
+import com.arena.hidcompatibilitytester.ui.components.rememberAdaptiveSpacing
 
 private enum class SettingsSection(val title: String) {
     POINTER("Pointer"),
@@ -32,6 +36,7 @@ fun TrackpadSettingsSheet(
 ) {
     var local by remember(settings) { mutableStateOf(settings) }
     var selectedSection by remember { mutableStateOf(SettingsSection.POINTER) }
+    val spacing = rememberAdaptiveSpacing()
 
     Scaffold(
         containerColor = Color(0xFF111C28),
@@ -42,7 +47,8 @@ fun TrackpadSettingsSheet(
                         "Trackpad Settings",
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp,
-                        color = Color.White
+                        color = Color.White,
+                        maxLines = 1
                     )
                 },
                 navigationIcon = {
@@ -74,7 +80,7 @@ fun TrackpadSettingsSheet(
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 14.dp)
+                        .padding(horizontal = spacing.horizontal, vertical = 14.dp)
                 ) {
                     Button(
                         onClick = {
@@ -106,56 +112,59 @@ fun TrackpadSettingsSheet(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Section tabs — same style as main app tabs
             TabRow(
                 selectedTabIndex = selectedSection.ordinal,
                 containerColor = Color(0xFF111C28),
                 contentColor = Color.White,
                 divider = { HorizontalDivider(color = Color.White.copy(0.08f)) }
             ) {
-                SettingsSection.values().forEachIndexed { index, section ->
+                SettingsSection.entries.forEach { section ->
+                    val isSelected = selectedSection == section
                     Tab(
-                        selected = selectedSection == section,
+                        selected = isSelected,
                         onClick = { selectedSection = section },
-                        text = {
-                            Text(
-                                section.title,
-                                fontSize = 13.sp,
-                                fontWeight = if (selectedSection == section)
-                                    FontWeight.Bold else FontWeight.Normal
-                            )
-                        },
                         selectedContentColor = Color(0xFF4A90D9),
                         unselectedContentColor = Color(0xFFB0BEC5)
-                    )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    horizontal = 2.dp,
+                                    vertical = 14.dp
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = section.title,
+                                fontSize = if (isSelected) 13.sp else 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold
+                                else FontWeight.Normal,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                 }
             }
 
-            // Section content
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(22.dp)
+                    .padding(
+                        horizontal = spacing.horizontal,
+                        vertical = spacing.vertical
+                    ),
+                verticalArrangement = Arrangement.spacedBy(spacing.cardSpacing)
             ) {
                 when (selectedSection) {
-                    SettingsSection.POINTER -> PointerSection(local) {
-                        local = it
-                    }
-
-                    SettingsSection.KEYBOARD -> KeyboardSection(local) {
-                        local = it
-                    }
-
-                    SettingsSection.LAYOUT -> LayoutSection(local) {
-                        local = it
-                    }
-
-                    SettingsSection.GESTURES -> GesturesSection(local) {
-                        local = it
-                    }
+                    SettingsSection.POINTER -> PointerSection(local, spacing) { local = it }
+                    SettingsSection.KEYBOARD -> KeyboardSection(local, spacing) { local = it }
+                    SettingsSection.LAYOUT -> LayoutSection(local, spacing) { local = it }
+                    SettingsSection.GESTURES -> GesturesSection(local, spacing) { local = it }
                 }
 
                 Spacer(Modifier.height(4.dp))
@@ -169,103 +178,118 @@ fun TrackpadSettingsSheet(
 @Composable
 private fun PointerSection(
     settings: TrackpadSettings,
+    spacing: AdaptiveSpacing,
     onChange: (TrackpadSettings) -> Unit,
 ) {
-    SettingsSlider(
-        label = "Pointer Speed",
-        value = settings.pointerSpeed,
-        range = 0.3f..3.0f,
-        display = { "%.1fx".format(it) }
-    ) {
-        onChange(settings.copy(pointerSpeed = it))
+    SettingsCard("Speed", spacing) {
+        SettingsSlider(
+            label = "Pointer Speed",
+            value = settings.pointerSpeed,
+            range = 0.3f..3.0f,
+            display = { "%.1fx".format(it) }
+        ) {
+            onChange(settings.copy(pointerSpeed = it))
+        }
+
+        SettingsSlider(
+            label = "Scroll Speed",
+            value = settings.scrollSpeed,
+            range = 0.3f..3.0f,
+            display = { "%.1fx".format(it) }
+        ) {
+            onChange(settings.copy(scrollSpeed = it))
+        }
     }
 
-    SettingsSlider(
-        label = "Scroll Speed",
-        value = settings.scrollSpeed,
-        range = 0.3f..3.0f,
-        display = { "%.1fx".format(it) }
-    ) {
-        onChange(settings.copy(scrollSpeed = it))
-    }
+    SettingsCard("Behavior", spacing) {
+        SettingsToggle(
+            "Invert Scroll",
+            "Natural scrolling — content follows finger direction",
+            settings.invertScroll
+        ) {
+            onChange(settings.copy(invertScroll = it))
+        }
 
-    SettingsToggle(
-        "Invert Scroll",
-        "Natural scrolling — content follows finger direction",
-        settings.invertScroll
-    ) {
-        onChange(settings.copy(invertScroll = it))
-    }
-
-    SettingsToggle(
-        "Pointer Acceleration",
-        "Slow = precise · Fast = covers distance",
-        settings.accelerationEnabled
-    ) {
-        onChange(settings.copy(accelerationEnabled = it))
+        SettingsToggle(
+            "Pointer Acceleration",
+            "Slow = precise · Fast = covers distance",
+            settings.accelerationEnabled
+        ) {
+            onChange(settings.copy(accelerationEnabled = it))
+        }
     }
 }
 
 @Composable
 private fun KeyboardSection(
     settings: TrackpadSettings,
+    spacing: AdaptiveSpacing,
     onChange: (TrackpadSettings) -> Unit,
 ) {
-    SettingsToggle(
-        "System Keyboard  🌐",
-        "Show toggle button for Android system keyboard — typed text is sent to host",
-        settings.showSystemKeyboard
-    ) {
-        onChange(settings.copy(showSystemKeyboard = it))
-    }
+    SettingsCard("Keyboard Overlays", spacing) {
+        SettingsToggle(
+            "System Keyboard  🌐",
+            "Show toggle button for Android system keyboard — typed text is sent to host",
+            settings.showSystemKeyboard
+        ) {
+            onChange(settings.copy(showSystemKeyboard = it))
+        }
 
-    SettingsToggle(
-        "In-App Keyboard  ⌨",
-        "Show toggle button for built-in HID keyboard overlay",
-        settings.showInAppKeyboard
-    ) {
-        onChange(settings.copy(showInAppKeyboard = it))
+        SettingsToggle(
+            "In-App Keyboard  ⌨",
+            "Show toggle button for built-in HID keyboard overlay",
+            settings.showInAppKeyboard
+        ) {
+            onChange(settings.copy(showInAppKeyboard = it))
+        }
     }
 }
 
 @Composable
 private fun LayoutSection(
     settings: TrackpadSettings,
+    spacing: AdaptiveSpacing,
     onChange: (TrackpadSettings) -> Unit,
 ) {
-    SettingsToggle(
-        "Arrow Keys",
-        "Show directional arrow buttons for precise cursor movement",
-        settings.showArrowKeys
-    ) {
-        onChange(settings.copy(showArrowKeys = it))
-    }
-
-    if (settings.showArrowKeys) {
-        PositionSelector(
-            title = "Arrow Keys Position",
-            subtitle = "Choose which side shows the arrow keys",
-            selected = settings.arrowPosition
+    SettingsCard("Arrow Keys", spacing) {
+        SettingsToggle(
+            "Arrow Keys",
+            "Show directional arrow buttons for precise cursor movement",
+            settings.showArrowKeys
         ) {
-            onChange(settings.copy(arrowPosition = it))
+            onChange(settings.copy(showArrowKeys = it))
+        }
+
+        if (settings.showArrowKeys) {
+            PositionSelector(
+                title = "Arrow Keys Position",
+                subtitle = "Choose which side shows the arrow keys",
+                selected = settings.arrowPosition,
+                spacing = spacing
+            ) {
+                onChange(settings.copy(arrowPosition = it))
+            }
         }
     }
 
-    SettingsToggle(
-        "Scroll Strip",
-        "Show the scroll strip on the trackpad edge",
-        settings.showScrollStrip
-    ) {
-        onChange(settings.copy(showScrollStrip = it))
-    }
-
-    if (settings.showScrollStrip) {
-        PositionSelector(
-            title = "Scroll Strip Position",
-            subtitle = "Choose which side shows the scroll strip",
-            selected = settings.scrollPosition
+    SettingsCard("Scroll Strip", spacing) {
+        SettingsToggle(
+            "Scroll Strip",
+            "Show the scroll strip on the trackpad edge",
+            settings.showScrollStrip
         ) {
-            onChange(settings.copy(scrollPosition = it))
+            onChange(settings.copy(showScrollStrip = it))
+        }
+
+        if (settings.showScrollStrip) {
+            PositionSelector(
+                title = "Scroll Strip Position",
+                subtitle = "Choose which side shows the scroll strip",
+                selected = settings.scrollPosition,
+                spacing = spacing
+            ) {
+                onChange(settings.copy(scrollPosition = it))
+            }
         }
     }
 }
@@ -273,55 +297,69 @@ private fun LayoutSection(
 @Composable
 private fun GesturesSection(
     settings: TrackpadSettings,
+    spacing: AdaptiveSpacing,
     onChange: (TrackpadSettings) -> Unit,
 ) {
-    SettingsToggle(
-        "Tap to Click",
-        "Short tap = left click",
-        settings.tapToClick
-    ) {
-        onChange(settings.copy(tapToClick = it))
+    SettingsCard("Tap", spacing) {
+        SettingsToggle(
+            "Tap to Click",
+            "Short tap = left click",
+            settings.tapToClick
+        ) {
+            onChange(settings.copy(tapToClick = it))
+        }
+
+        SettingsToggle(
+            "Two-Finger Right Click",
+            "Two-finger tap = right-click menu",
+            settings.twoFingerRightClick
+        ) {
+            onChange(settings.copy(twoFingerRightClick = it))
+        }
     }
 
-    SettingsToggle(
-        "Two-Finger Right Click",
-        "Two-finger tap = right-click menu",
-        settings.twoFingerRightClick
-    ) {
-        onChange(settings.copy(twoFingerRightClick = it))
+    SettingsCard("Double-Tap Drag", spacing) {
+        SettingsToggle(
+            title = "Drag Lock Mode",
+            subtitle = if (settings.dragLockMode)
+                "ON — double-tap to start drag, tap again to release"
+            else
+                "OFF — double-tap then keep finger down, lift to release",
+            checked = settings.dragLockMode
+        ) {
+            onChange(settings.copy(dragLockMode = it))
+        }
+
+        DragModeExplainCard(settings.dragLockMode)
     }
-
-    SectionDivider("Double-Tap Drag")
-
-    SettingsToggle(
-        title = "Drag Lock Mode",
-        subtitle = if (settings.dragLockMode)
-            "ON — double-tap to start drag, tap again to release"
-        else
-            "OFF — double-tap then keep finger down, lift to release",
-        checked = settings.dragLockMode
-    ) {
-        onChange(settings.copy(dragLockMode = it))
-    }
-
-    DragModeExplainCard(settings.dragLockMode)
 }
 
 // ── Reusable setting components ───────────────────────────────────────
 
 @Composable
-private fun SectionDivider(title: String) {
-    Row(
-        Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+private fun SettingsCard(
+    title: String,
+    spacing: AdaptiveSpacing,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF0A1520)),
+        shape = RoundedCornerShape(12.dp),
     ) {
-        HorizontalDivider(Modifier.weight(1f), color = Color.White.copy(0.10f))
-        Text(
-            title, fontSize = 11.sp, color = Color(0xFF607D8B),
-            fontWeight = FontWeight.Medium
-        )
-        HorizontalDivider(Modifier.weight(1f), color = Color.White.copy(0.10f))
+        Column(
+            modifier = Modifier.padding(spacing.innerCardPadding),
+            verticalArrangement = Arrangement.spacedBy(spacing.itemSpacing),
+        ) {
+            Text(
+                title,
+                color = Color(0xFF4A90D9),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+            content()
+        }
     }
 }
 
@@ -330,33 +368,47 @@ private fun PositionSelector(
     title: String,
     subtitle: String,
     selected: SidePosition,
+    spacing: AdaptiveSpacing,
     onSelect: (SidePosition) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = Color.White)
         Text(subtitle, fontSize = 11.sp, color = Color(0xFF607D8B))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SidePosition.values().forEach { pos ->
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(spacing.chipSpacing)
+        ) {
+            SidePosition.entries.forEach { pos ->
                 val sel = selected == pos
                 val label = when (pos) {
                     SidePosition.LEFT -> "◀ Left"
                     SidePosition.RIGHT -> "Right ▶"
                 }
-                SettingsChoiceButton(label, sel) { onSelect(pos) }
+                SettingsChoiceButton(
+                    label = label,
+                    selected = sel,
+                    modifier = Modifier.widthIn(min = spacing.chipMinWidth)
+                ) {
+                    onSelect(pos)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun RowScope.SettingsChoiceButton(
+private fun SettingsChoiceButton(
     label: String,
     selected: Boolean,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     OutlinedButton(
         onClick = onClick,
-        modifier = Modifier.weight(1f),
+        modifier = modifier,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
         colors = ButtonDefaults.outlinedButtonColors(
             containerColor = if (selected) Color(0xFF4A90D9).copy(0.15f)
             else Color.Transparent
@@ -364,9 +416,17 @@ private fun RowScope.SettingsChoiceButton(
         border = androidx.compose.foundation.BorderStroke(
             if (selected) 2.dp else 1.dp,
             if (selected) Color(0xFF4A90D9) else Color.White.copy(0.2f)
-        )
+        ),
+        shape = RoundedCornerShape(10.dp)
     ) {
-        Text(label, fontSize = 12.sp, color = Color.White)
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            color = Color.White,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -384,7 +444,8 @@ private fun DragModeExplainCard(isLockMode: Boolean) {
         ) {
             Text(
                 if (isLockMode) "⬚  Drag Lock" else "✋  Hold to Drag",
-                fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White
+                fontWeight = FontWeight.Bold, fontSize = 13.sp,
+                color = Color.White, maxLines = 1
             )
             val steps = if (isLockMode) listOf(
                 "1. Double-tap anywhere",
@@ -462,9 +523,13 @@ private fun SettingsToggle(
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
             Text(
                 title, fontWeight = FontWeight.SemiBold,
-                fontSize = 14.sp, color = Color.White
+                fontSize = 14.sp, color = Color.White,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
             )
-            Text(subtitle, fontSize = 11.sp, color = Color(0xFF607D8B))
+            Text(
+                subtitle, fontSize = 11.sp, color = Color(0xFF607D8B),
+                maxLines = 2, overflow = TextOverflow.Ellipsis
+            )
         }
         Switch(
             checked = checked,
