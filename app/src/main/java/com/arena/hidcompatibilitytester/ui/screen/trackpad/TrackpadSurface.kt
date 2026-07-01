@@ -112,22 +112,18 @@ fun TrackpadSurface(
     Box(modifier = modifier.fillMaxWidth().background(Color(0xFF0D2B45))) {
         Row(Modifier.fillMaxSize()) {
             // Scroll strip left
-            if (!scrollOnLeft && settings.showScrollStrip) {
+            if (scrollOnLeft && settings.showScrollStrip) {
                 TrackpadScrollStrip(
                     onScrollUp = { onSendRef.value(0, 0, 0, 3) },
                     onScrollDown = { onSendRef.value(0, 0, 0, -3) },
-                    onSendRef = onSendRef, settingsRef = settingsRef,
-                    scrollFlash = scrollFlash, onFlash = { flashScroll() }, scope = scope
+                    onSendRef = onSendRef,
+                    settingsRef = settingsRef,
+                    scrollFlash = scrollFlash,
+                    onFlash = { flashScroll() },
+                    scope = scope
                 )
             }
 
-            // ── Trackpad area with overlay ────────────────────────────────
-            // We use a Box. The trackpad gesture handler is the FIRST child (fills all).
-            // The arrow overlay is the SECOND child (on top, at bottom-left/right).
-            // Because the arrow overlay is drawn AFTER the trackpad gesture Box,
-            // it receives touches FIRST (Compose z-order: last child = top).
-            // The arrow buttons use detectTapGestures which consumes the press,
-            // so the trackpad's awaitPointerEvent never sees those touches.
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -334,7 +330,6 @@ fun TrackpadSurface(
                             .align(if (arrowOnLeft) Alignment.BottomStart else Alignment.BottomEnd)
                             .padding(2.dp),
                         onMove = { dx, dy ->
-                            // If left button is held (physical or drag), send btn=1 with movement
                             val btn = if (physHoldActive.value || dragActiveRef.value) 1 else 0
                             onSendRef.value(dx, dy, btn, 0)
                         }
@@ -343,12 +338,15 @@ fun TrackpadSurface(
             }
 
             // Scroll strip right
-            if (scrollOnLeft && settings.showScrollStrip) {
+            if (!scrollOnLeft && settings.showScrollStrip) {
                 TrackpadScrollStrip(
                     onScrollUp = { onSendRef.value(0, 0, 0, 3) },
                     onScrollDown = { onSendRef.value(0, 0, 0, -3) },
-                    onSendRef = onSendRef, settingsRef = settingsRef,
-                    scrollFlash = scrollFlash, onFlash = { flashScroll() }, scope = scope
+                    onSendRef = onSendRef,
+                    settingsRef = settingsRef,
+                    scrollFlash = scrollFlash,
+                    onFlash = { flashScroll() },
+                    scope = scope
                 )
             }
         }

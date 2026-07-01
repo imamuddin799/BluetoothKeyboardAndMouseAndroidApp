@@ -30,27 +30,36 @@ object TrackpadSettingsStore {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     fun save(ctx: Context, s: TrackpadSettings) {
-        prefs(ctx).edit().apply {
-            putFloat("pointer_speed", s.pointerSpeed)
-            putFloat("scroll_speed", s.scrollSpeed)
-            putBoolean("invert_scroll", s.invertScroll)
-            putBoolean("tap_to_click", s.tapToClick)
-            putBoolean("two_finger_rc", s.twoFingerRightClick)
-            putBoolean("acceleration", s.accelerationEnabled)
-            putBoolean("drag_lock", s.dragLockMode)
-            putString("click_pressure", s.clickPressure.name)
-            putString("scroll_position", s.scrollPosition.name)
-            putString("arrow_position", s.arrowPosition.name)
-            putBoolean("show_arrows", s.showArrowKeys)
-            putBoolean("show_scroll", s.showScrollStrip)
-            putBoolean("show_system_kb", s.showSystemKeyboard)
-            putBoolean("show_inapp_kb", s.showInAppKeyboard)
-            apply()
-        }
+        prefs(ctx).edit()
+            .putFloat("pointer_speed", s.pointerSpeed)
+            .putFloat("scroll_speed", s.scrollSpeed)
+            .putBoolean("invert_scroll", s.invertScroll)
+            .putBoolean("tap_to_click", s.tapToClick)
+            .putBoolean("two_finger_rc", s.twoFingerRightClick)
+            .putBoolean("acceleration", s.accelerationEnabled)
+            .putBoolean("drag_lock", s.dragLockMode)
+            .putString("click_pressure", s.clickPressure.name)
+            .putString("scroll_position", s.scrollPosition.name)
+            .putString("arrow_position", s.arrowPosition.name)
+            .putBoolean("show_arrows", s.showArrowKeys)
+            .putBoolean("show_scroll", s.showScrollStrip)
+            .putBoolean("show_system_kb", s.showSystemKeyboard)
+            .putBoolean("show_inapp_kb", s.showInAppKeyboard)
+            .commit()   // use commit() instead of apply() to guarantee immediate write
     }
 
     fun load(ctx: Context): TrackpadSettings {
         val p = prefs(ctx)
+
+        fun loadSide(key: String, default: SidePosition): SidePosition {
+            val raw = p.getString(key, default.name) ?: default.name
+            return when (raw.uppercase()) {
+                "LEFT"  -> SidePosition.LEFT
+                "RIGHT" -> SidePosition.RIGHT
+                else    -> default
+            }
+        }
+
         return TrackpadSettings(
             pointerSpeed        = p.getFloat("pointer_speed", 1.2f),
             scrollSpeed         = p.getFloat("scroll_speed", 1.0f),
@@ -60,8 +69,8 @@ object TrackpadSettingsStore {
             accelerationEnabled = p.getBoolean("acceleration", true),
             dragLockMode        = p.getBoolean("drag_lock", false),
             clickPressure       = safeEnum(p.getString("click_pressure", null), ClickPressure.MEDIUM),
-            scrollPosition      = safeEnum(p.getString("scroll_position", null), SidePosition.RIGHT),
-            arrowPosition       = safeEnum(p.getString("arrow_position", null), SidePosition.LEFT),
+            scrollPosition      = loadSide("scroll_position", SidePosition.RIGHT),
+            arrowPosition       = loadSide("arrow_position", SidePosition.LEFT),
             showArrowKeys       = p.getBoolean("show_arrows", true),
             showScrollStrip     = p.getBoolean("show_scroll", true),
             showSystemKeyboard  = p.getBoolean("show_system_kb", true),
