@@ -1,4 +1,3 @@
-// ui/screen/keyboard/KbState.kt
 package com.arena.hidcompatibilitytester.ui.screen.keyboard
 
 internal data class KbState(
@@ -13,7 +12,6 @@ internal data class KbState(
     val caps      : Boolean = false,
     val numLock   : Boolean = true,
     val scrollLk  : Boolean = false,
-    val fn        : Boolean = false,
     val insertMode: Boolean = true,
     val tab       : Int     = 0,
     val lastKey   : String  = "",

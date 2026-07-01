@@ -227,16 +227,6 @@ private fun KeysSection(
             onChange(settings.copy(hapticEnabled = it))
         }
     }
-
-    SettingsCard("Function Row", spacing) {
-        SettingsToggle(
-            "Show Function Row",
-            "F1–F12 and Esc / Del row above number keys",
-            settings.showFunctionRow
-        ) {
-            onChange(settings.copy(showFunctionRow = it))
-        }
-    }
 }
 
 @Composable

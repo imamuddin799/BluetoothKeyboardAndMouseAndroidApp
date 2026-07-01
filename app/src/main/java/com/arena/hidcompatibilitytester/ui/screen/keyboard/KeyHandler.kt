@@ -1,13 +1,9 @@
-// ui/screen/keyboard/KeyHandler.kt
 package com.arena.hidcompatibilitytester.ui.screen.keyboard
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/**
- * Centralized key press handler — returns the new KbState.
- */
 internal fun handleKeyPress(
     key: Key,
     st: KbState,
@@ -34,15 +30,10 @@ internal fun handleKeyPress(
             st.copy(scrollLk = !st.scrollLk, lastKey = "ScrLk")
         }
 
-        key.isFn -> st.copy(fn = !st.fn)
-
         key.code == 0x49 && !key.isMod -> {
             val newSt = st.copy(insertMode = !st.insertMode, lastKey = "Ins")
             onSendKey(newSt.modByte(), listOf(0x49))
-            scope.launch {
-                delay(60)
-                onSendKey(0, emptyList())
-            }
+            scope.launch { delay(60); onSendKey(0, emptyList()) }
             if (settings.autoReleaseModsAfterKey) newSt.releaseMods() else newSt
         }
 
@@ -52,7 +43,7 @@ internal fun handleKeyPress(
             newSt
         }
 
-        key.code == 0x2B -> { // Tab
+        key.code == 0x2B -> {
             val mod = st.modByte()
             val keepMods = st.anyMod || settings.stickyModifiers
             val label = st.modPrefix() + key.label.ifEmpty { "Space" }
@@ -75,10 +66,7 @@ internal fun handleKeyPress(
             }
             val label = st.modPrefix() + key.label.ifEmpty { "Space" }
             onSendKey(mod, listOf(key.code))
-            scope.launch {
-                delay(60)
-                onSendKey(0, emptyList())
-            }
+            scope.launch { delay(60); onSendKey(0, emptyList()) }
             val newSt = st.copy(lastKey = label)
             if (settings.autoReleaseModsAfterKey && !settings.stickyModifiers) {
                 newSt.releaseMods()
@@ -89,9 +77,6 @@ internal fun handleKeyPress(
     }
 }
 
-/**
- * Handle numpad key press.
- */
 internal fun handleNumpadKey(
     code: Int,
     label: String,
@@ -108,9 +93,6 @@ internal fun handleNumpadKey(
     } else newSt
 }
 
-/**
- * Handle NumLock toggle.
- */
 internal fun handleNumLockToggle(
     st: KbState,
     scope: CoroutineScope,

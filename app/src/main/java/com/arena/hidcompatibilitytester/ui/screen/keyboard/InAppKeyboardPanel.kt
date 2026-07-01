@@ -1,4 +1,3 @@
-// ui/screen/keyboard/InAppKeyboardPanel.kt
 package com.arena.hidcompatibilitytester.ui.screen.keyboard
 
 import androidx.compose.foundation.background
@@ -16,6 +15,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Job
@@ -41,7 +41,6 @@ fun InAppKeyboardPanel(
                 onSendKey(0, listOf(0x39))
                 scope.launch { delay(60); onSendKey(0, emptyList()) }
             }
-            key.isFn -> { st = st.copy(fn = !st.fn) }
             key.isMod -> {
                 st = when (key.modBit) {
                     0x02 -> st.copy(lShift = !st.lShift)
@@ -82,7 +81,6 @@ fun InAppKeyboardPanel(
             .padding(horizontal = 2.dp),
         verticalArrangement = Arrangement.spacedBy(1.dp),
     ) {
-        // Dismiss bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -112,10 +110,8 @@ fun InAppKeyboardPanel(
         val rowH = settings.keyHeight.mainDp.dp
         val fnH  = settings.keyHeight.fnDp.dp
 
-        if (settings.showFunctionRow) {
-            InAppKeyRow(INAPP_ROW_FN, fnH, st, settings) { handleKey(it) }
-            HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
-        }
+        InAppKeyRow(INAPP_ROW_FN, fnH, st, settings) { handleKey(it) }
+        HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
         InAppKeyRow(INAPP_ROW_NUM, rowH, st, settings) { handleKey(it) }
         InAppKeyRow(INAPP_ROW_QWERTY, rowH, st, settings) { handleKey(it) }
         InAppKeyRow(INAPP_ROW_HOME, rowH, st, settings) { handleKey(it) }
@@ -139,7 +135,7 @@ private fun MiniLed(label: String) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// InApp key data & state
+// InApp key data & state — no Fn, Menu replaces it
 // ═════════════════════════════════════════════════════════════════════════════
 
 internal data class InAppKey(
@@ -150,8 +146,7 @@ internal data class InAppKey(
     val modBit : Int     = 0,
     val isMod  : Boolean = false,
     val isCaps : Boolean = false,
-    val isFn   : Boolean = false,
-    val color  : Int     = 0,
+    val color  : Int     = 0, // 0=normal, 1=mod, 2=accent, 3=danger
 )
 
 internal data class InAppKbState(
@@ -159,7 +154,7 @@ internal data class InAppKbState(
     val lShift: Boolean = false, val rShift: Boolean = false,
     val lAlt: Boolean = false, val rAlt: Boolean = false,
     val lGui: Boolean = false, val rGui: Boolean = false,
-    val caps: Boolean = false, val fn: Boolean = false,
+    val caps: Boolean = false,
     val lastKey: String = "",
 ) {
     val shift get() = lShift || rShift
@@ -183,17 +178,18 @@ internal data class InAppKbState(
     )
 }
 
-// Key row definitions
+// Key row definitions — Fn replaced with Menu
 internal val INAPP_ROW_FN = listOf(
     InAppKey("Esc", code=0x29, w=1.4f, color=3),
-    InAppKey("F1", code=0x3A, color=4), InAppKey("F2", code=0x3B, color=4),
-    InAppKey("F3", code=0x3C, color=4), InAppKey("F4", code=0x3D, color=4),
-    InAppKey("F5", code=0x3E, color=4), InAppKey("F6", code=0x3F, color=4),
-    InAppKey("F7", code=0x40, color=4), InAppKey("F8", code=0x41, color=4),
-    InAppKey("F9", code=0x42, color=4), InAppKey("F10", code=0x43, color=4),
-    InAppKey("F11", code=0x44, color=4), InAppKey("F12", code=0x45, color=4),
+    InAppKey("F1", code=0x3A), InAppKey("F2", code=0x3B),
+    InAppKey("F3", code=0x3C), InAppKey("F4", code=0x3D),
+    InAppKey("F5", code=0x3E), InAppKey("F6", code=0x3F),
+    InAppKey("F7", code=0x40), InAppKey("F8", code=0x41),
+    InAppKey("F9", code=0x42), InAppKey("F10", code=0x43),
+    InAppKey("F11", code=0x44), InAppKey("F12", code=0x45),
     InAppKey("Del", code=0x4C, w=1.4f, color=3),
 )
+
 internal val INAPP_ROW_NUM = listOf(
     InAppKey("`","~",code=0x35), InAppKey("1","!",code=0x1E), InAppKey("2","@",code=0x1F),
     InAppKey("3","#",code=0x20), InAppKey("4","$",code=0x21), InAppKey("5","%",code=0x22),
@@ -201,6 +197,7 @@ internal val INAPP_ROW_NUM = listOf(
     InAppKey("9","(",code=0x26), InAppKey("0",")",code=0x27), InAppKey("-","_",code=0x2D),
     InAppKey("=","+",code=0x2E), InAppKey("⌫","",code=0x2A,w=2.0f,color=3),
 )
+
 internal val INAPP_ROW_QWERTY = listOf(
     InAppKey("Tab",code=0x2B,w=1.5f,color=1),
     InAppKey("Q",code=0x14),InAppKey("W",code=0x1A),InAppKey("E",code=0x08),
@@ -209,6 +206,7 @@ internal val INAPP_ROW_QWERTY = listOf(
     InAppKey("P",code=0x13),InAppKey("[","{",code=0x2F),InAppKey("]","}",code=0x30),
     InAppKey("\\","|",code=0x31,w=1.5f),
 )
+
 internal val INAPP_ROW_HOME = listOf(
     InAppKey("Caps",code=0x39,w=1.75f,color=1,isCaps=true),
     InAppKey("A",code=0x04),InAppKey("S",code=0x16),InAppKey("D",code=0x07),
@@ -217,6 +215,7 @@ internal val INAPP_ROW_HOME = listOf(
     InAppKey(";",":",code=0x33),InAppKey("'","\"",code=0x34),
     InAppKey("↵","",code=0x28,w=2.25f,color=2),
 )
+
 internal val INAPP_ROW_ALPHA = listOf(
     InAppKey("⇧",modBit=0x02,w=2.25f,color=1,isMod=true),
     InAppKey("Z",code=0x1D),InAppKey("X",code=0x1B),InAppKey("C",code=0x06),
@@ -225,13 +224,15 @@ internal val INAPP_ROW_ALPHA = listOf(
     InAppKey("/","?",code=0x38),
     InAppKey("⇧",modBit=0x20,w=2.75f,color=1,isMod=true),
 )
+
+// Fn replaced with Menu (code 0x65)
 internal val INAPP_ROW_MODS = listOf(
     InAppKey("Ctrl",modBit=0x01,w=1.5f,color=1,isMod=true),
     InAppKey("Win",modBit=0x08,w=1.2f,color=1,isMod=true),
     InAppKey("Alt",modBit=0x04,w=1.2f,color=1,isMod=true),
-    InAppKey("Space",code=0x2C,w=5.0f),
+    InAppKey("Space",code=0x2C,w=4.0f),
     InAppKey("AltGr",modBit=0x40,w=1.2f,color=1,isMod=true),
-    InAppKey("Fn",w=1.0f,color=4,isFn=true),
+    InAppKey("Menu",code=0x65,w=1.5f,color=1),
     InAppKey("Ctrl",modBit=0x10,w=1.5f,color=1,isMod=true),
 )
 
@@ -251,7 +252,6 @@ internal fun InAppKeyRow(
         keys.forEach { k ->
             val active = when {
                 k.isCaps -> st.caps
-                k.isFn   -> st.fn
                 k.modBit == 0x02 -> st.lShift
                 k.modBit == 0x20 -> st.rShift
                 k.modBit == 0x01 -> st.lCtrl
@@ -264,7 +264,7 @@ internal fun InAppKeyRow(
             }
 
             val mainLabel = when {
-                k.isMod || k.isCaps || k.isFn -> k.label
+                k.isMod || k.isCaps -> k.label
                 k.label.length == 1 && k.label[0].isLetter() ->
                     if (st.caps xor st.shift) k.label.uppercase() else k.label.lowercase()
                 st.shift && k.shift.isNotEmpty() -> k.shift
@@ -276,7 +276,6 @@ internal fun InAppKeyRow(
                 k.color == 1 -> Color(0xFF1A2332)
                 k.color == 2 -> Color(0xFF1A3A5C)
                 k.color == 3 -> Color(0xFF3A1A1A)
-                k.color == 4 -> Color(0xFF1A2A1A)
                 else -> Color(0xFF2A3240)
             }
 
@@ -284,16 +283,15 @@ internal fun InAppKeyRow(
                 active -> Color(0xFF90CAF9)
                 k.color == 2 -> Color(0xFF64B5F6)
                 k.color == 3 -> Color(0xFFEF9A9A)
-                k.color == 4 -> Color(0xFFA5D6A7)
                 k.color == 1 -> Color(0xFFB0BEC5)
                 else -> Color(0xFFECEFF1)
             }
 
-            val shouldNotRepeat = k.isMod || k.isCaps || k.isFn
+            val shouldNotRepeat = k.isMod || k.isCaps
 
             InAppKeyButton(
                 label = mainLabel,
-                topLabel = if (!k.isMod && !k.isCaps && !k.isFn && k.shift.isNotEmpty()
+                topLabel = if (!k.isMod && !k.isCaps && k.shift.isNotEmpty()
                     && k.label.length == 1 && settings.showKeyHints
                 ) k.shift else "",
                 bg = bg, fg = fg, active = active,
@@ -377,6 +375,7 @@ private fun InAppKeyButton(
                 },
                 fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }

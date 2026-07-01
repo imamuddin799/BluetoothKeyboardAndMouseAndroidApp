@@ -13,7 +13,6 @@ data class KeyboardSettings(
 
     // Layout
     val keyHeight: KeyHeight = KeyHeight.MEDIUM,
-    val showFunctionRow: Boolean = true,
     val showStatusBar: Boolean = true,
     val compactModifiers: Boolean = false,
 

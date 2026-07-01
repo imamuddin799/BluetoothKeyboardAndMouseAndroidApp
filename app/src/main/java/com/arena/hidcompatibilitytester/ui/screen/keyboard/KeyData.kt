@@ -1,4 +1,3 @@
-// ui/screen/keyboard/KeyData.kt
 package com.arena.hidcompatibilitytester.ui.screen.keyboard
 
 import com.arena.hidcompatibilitytester.bluetooth.BleHidManager
@@ -20,7 +19,7 @@ internal const val MOD_RGUI   = 0x80
 // Key color categories
 // ═════════════════════════════════════════════════════════════════════════════
 
-internal enum class KC { NORMAL, MOD, SPECIAL, ACCENT, DANGER, FN }
+internal enum class KC { NORMAL, MOD, SPECIAL, ACCENT, DANGER }
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Key model
@@ -30,7 +29,6 @@ internal data class Key(
     val label    : String,
     val shift    : String  = "",
     val altGr    : String  = "",
-    val fnLabel  : String  = "",
     val w        : Float   = 1f,
     val code     : Int     = 0,
     val modBit   : Int     = 0,
@@ -38,13 +36,12 @@ internal data class Key(
     val isMod    : Boolean = false,
     val isCaps   : Boolean = false,
     val isNum    : Boolean = false,
-    val isFn     : Boolean = false,
     val isScroll : Boolean = false,
     val noRepeat : Boolean = false,
 )
 
 internal fun Key.shouldRepeat() =
-    !noRepeat && !isMod && !isCaps && !isNum && !isFn && !isScroll
+    !noRepeat && !isMod && !isCaps && !isNum && !isScroll
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Media key model
@@ -58,18 +55,18 @@ internal data class MKey(val icon: String, val label: String, val code: Int)
 
 internal val ROW_FN = listOf(
     Key("Esc", code = 0x29, w = 1.4f, color = KC.DANGER, noRepeat = true),
-    Key("F1",  code = 0x3A, fnLabel = "Brt▼", color = KC.FN),
-    Key("F2",  code = 0x3B, fnLabel = "Brt▲", color = KC.FN),
-    Key("F3",  code = 0x3C, fnLabel = "Srch", color = KC.FN),
-    Key("F4",  code = 0x3D, fnLabel = "App",  color = KC.FN),
-    Key("F5",  code = 0x3E, fnLabel = "Ref",  color = KC.FN),
-    Key("F6",  code = 0x3F, fnLabel = "Prv",  color = KC.FN),
-    Key("F7",  code = 0x40, fnLabel = "⏮",   color = KC.FN),
-    Key("F8",  code = 0x41, fnLabel = "⏯",   color = KC.FN),
-    Key("F9",  code = 0x42, fnLabel = "⏭",   color = KC.FN),
-    Key("F10", code = 0x43, fnLabel = "🔇",  color = KC.FN),
-    Key("F11", code = 0x44, fnLabel = "🔉",  color = KC.FN),
-    Key("F12", code = 0x45, fnLabel = "🔊",  color = KC.FN),
+    Key("F1",  code = 0x3A, color = KC.SPECIAL),
+    Key("F2",  code = 0x3B, color = KC.SPECIAL),
+    Key("F3",  code = 0x3C, color = KC.SPECIAL),
+    Key("F4",  code = 0x3D, color = KC.SPECIAL),
+    Key("F5",  code = 0x3E, color = KC.SPECIAL),
+    Key("F6",  code = 0x3F, color = KC.SPECIAL),
+    Key("F7",  code = 0x40, color = KC.SPECIAL),
+    Key("F8",  code = 0x41, color = KC.SPECIAL),
+    Key("F9",  code = 0x42, color = KC.SPECIAL),
+    Key("F10", code = 0x43, color = KC.SPECIAL),
+    Key("F11", code = 0x44, color = KC.SPECIAL),
+    Key("F12", code = 0x45, color = KC.SPECIAL),
     Key("Del", code = 0x4C, w = 1.4f, color = KC.DANGER),
 )
 
@@ -112,10 +109,9 @@ internal val ROW_MODS = listOf(
     Key("Ctrl", modBit=MOD_LCTRL, w=1.5f,color=KC.MOD,isMod=true,noRepeat=true),
     Key("Win",  modBit=MOD_LGUI,  w=1.2f,color=KC.MOD,isMod=true,noRepeat=true),
     Key("Alt",  modBit=MOD_LALT,  w=1.2f,color=KC.MOD,isMod=true,noRepeat=true),
-    Key("Space",code=0x2C,w=5.0f),
+    Key("Space",code=0x2C,w=4.0f),
     Key("AltGr",modBit=MOD_RALT,  w=1.2f,color=KC.MOD,isMod=true,noRepeat=true),
-    Key("Menu", code=0x65,w=1.0f,color=KC.MOD,noRepeat=true),
-    Key("Fn",   w=1.0f,color=KC.FN,isFn=true,noRepeat=true),
+    Key("Menu", code=0x65,w=1.5f,color=KC.MOD,noRepeat=true),
     Key("Ctrl", modBit=MOD_RCTRL, w=1.5f,color=KC.MOD,isMod=true,noRepeat=true),
 )
 
@@ -123,9 +119,9 @@ internal val ROW_MODS_COMPACT = listOf(
     Key("Ctrl", modBit=MOD_LCTRL, w=1.25f,color=KC.MOD,isMod=true,noRepeat=true),
     Key("Win",  modBit=MOD_LGUI,  w=1.0f,color=KC.MOD,isMod=true,noRepeat=true),
     Key("Alt",  modBit=MOD_LALT,  w=1.0f,color=KC.MOD,isMod=true,noRepeat=true),
-    Key("Space",code=0x2C,w=6.0f),
+    Key("Space",code=0x2C,w=4.5f),
     Key("AltGr",modBit=MOD_RALT,  w=1.0f,color=KC.MOD,isMod=true,noRepeat=true),
-    Key("Fn",   w=1.0f,color=KC.FN,isFn=true,noRepeat=true),
+    Key("Menu", code=0x65,w=1.5f,color=KC.MOD,noRepeat=true),
     Key("Ctrl", modBit=MOD_RCTRL, w=1.25f,color=KC.MOD,isMod=true,noRepeat=true),
 )
 

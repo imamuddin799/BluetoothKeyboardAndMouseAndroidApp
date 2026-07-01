@@ -1,4 +1,3 @@
-// ui/screen/keyboard/components/KBtn.kt
 package com.arena.hidcompatibilitytester.ui.screen.keyboard.components
 
 import androidx.compose.animation.animateColorAsState
@@ -31,7 +30,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.*
-import com.arena.hidcompatibilitytester.ui.screen.keyboard.KeyboardSettings
 
 @Composable
 internal fun KBtn(
@@ -42,7 +40,6 @@ internal fun KBtn(
     active     : Boolean = false,
     topLabel   : String  = "",
     mainLabel  : String,
-    subLabel   : String  = "",
     scrollable : Boolean = false,
     onPress    : () -> Unit,
 ) {
@@ -158,15 +155,7 @@ internal fun KBtn(
                 )
             }
 
-            if (subLabel.isNotEmpty()) {
-                Text(
-                    subLabel, fontSize = 6.sp,
-                    color = Color(0xFFA5D6A7).copy(alpha = 0.55f),
-                    textAlign = TextAlign.Center, maxLines = 1,
-                )
-            } else {
-                Spacer(Modifier.height(6.sp.value.dp))
-            }
+            Spacer(Modifier.height(6.sp.value.dp))
         }
 
         if (active) {

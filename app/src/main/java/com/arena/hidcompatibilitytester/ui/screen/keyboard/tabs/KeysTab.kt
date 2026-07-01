@@ -1,4 +1,3 @@
-// ui/screen/keyboard/tabs/KeysTab.kt
 package com.arena.hidcompatibilitytester.ui.screen.keyboard.tabs
 
 import androidx.compose.foundation.background
@@ -34,12 +33,7 @@ internal fun KeysTab(
             .fillMaxSize()
             .background(Color(0xFF080F18)),
     ) {
-        // Scrollable upper content
-        val fixedKbHeight = if (settings.showFunctionRow) {
-            fnH + 1.dp + mainH * 5 + 10.dp + 12.dp // fn + divider + 5 rows + spacing + padding
-        } else {
-            mainH * 5 + 8.dp + 8.dp
-        }
+        val fixedKbHeight = fnH + 1.dp + mainH * 5 + 10.dp + 12.dp
 
         Column(
             modifier = Modifier
@@ -53,7 +47,6 @@ internal fun KeysTab(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // Navigation Cluster
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -84,7 +77,6 @@ internal fun KeysTab(
                     }
                 }
 
-                // Arrow Keys
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -121,7 +113,6 @@ internal fun KeysTab(
                 }
             }
 
-            // System Keys
             Text(
                 "System Keys", color = Color(0xFF607D8B),
                 fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
@@ -151,7 +142,6 @@ internal fun KeysTab(
 
             Spacer(Modifier.height(6.dp))
 
-            // Quick Modifiers
             Text(
                 "Quick Modifiers", color = Color(0xFF607D8B),
                 fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
@@ -186,7 +176,7 @@ internal fun KeysTab(
             Spacer(Modifier.height(16.dp))
         }
 
-        // Fixed keyboard at bottom
+        // Fixed keyboard at bottom — always show F-row
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -195,10 +185,8 @@ internal fun KeysTab(
                 .padding(horizontal = 2.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            if (settings.showFunctionRow) {
-                ResponsiveRow(ROW_FN, fnH, st, settings) { onKeyPress(it) }
-                HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
-            }
+            ResponsiveRow(ROW_FN, fnH, st, settings) { onKeyPress(it) }
+            HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
             ResponsiveRow(ROW_NUM, mainH, st, settings) { onKeyPress(it) }
             ResponsiveRow(ROW_QWERTY, mainH, st, settings) { onKeyPress(it) }
             ResponsiveRow(ROW_HOME, mainH, st, settings) { onKeyPress(it) }
@@ -229,7 +217,6 @@ internal fun ResponsiveRow(
                 active = isKeyActive(k, st),
                 topLabel = displayTop(k, st, settings.showKeyHints),
                 mainLabel = displayMain(k, st),
-                subLabel = if (st.fn && k.fnLabel.isNotEmpty()) k.fnLabel else "",
                 scrollable = false,
                 onPress = { onClick(k) },
             )

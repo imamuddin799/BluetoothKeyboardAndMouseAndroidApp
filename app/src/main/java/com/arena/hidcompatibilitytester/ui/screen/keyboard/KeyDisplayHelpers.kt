@@ -1,10 +1,8 @@
-// ui/screen/keyboard/KeyDisplayHelpers.kt
 package com.arena.hidcompatibilitytester.ui.screen.keyboard
 
 internal fun isKeyActive(k: Key, st: KbState): Boolean = when {
     k.isCaps   -> st.caps
     k.isNum    -> st.numLock
-    k.isFn     -> st.fn
     k.isScroll -> st.scrollLk
     k.modBit == MOD_LSHIFT -> st.lShift
     k.modBit == MOD_RSHIFT -> st.rShift
@@ -20,7 +18,7 @@ internal fun isKeyActive(k: Key, st: KbState): Boolean = when {
 
 internal fun displayMain(k: Key, st: KbState): String {
     if (k.label.isEmpty()) return "Space"
-    if (k.isMod || k.isCaps || k.isFn || k.isNum || k.isScroll) return k.label
+    if (k.isMod || k.isCaps || k.isNum || k.isScroll) return k.label
     val isLetter = k.label.length == 1 && k.label[0].isLetter()
     return when {
         st.altGr && k.altGr.isNotEmpty() -> k.altGr
@@ -32,7 +30,7 @@ internal fun displayMain(k: Key, st: KbState): String {
 
 internal fun displayTop(k: Key, st: KbState, showHints: Boolean = true): String {
     if (!showHints) return ""
-    if (k.isMod || k.isCaps || k.isFn || k.isNum || k.isScroll) return ""
+    if (k.isMod || k.isCaps || k.isNum || k.isScroll) return ""
     if (k.label.length == 1 && k.shift.isNotEmpty()) return k.shift
     return ""
 }

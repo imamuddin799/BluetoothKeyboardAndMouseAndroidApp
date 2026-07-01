@@ -49,7 +49,6 @@ internal fun KbStatusBar(
                     "ALT" to st.alt,
                     "AGR" to st.altGr,
                     "WIN" to st.gui,
-                    "FN" to st.fn,
                     "OVR" to !st.insertMode,
                 ).forEach { (lbl, on) -> LedBadge(lbl, on) }
             }
