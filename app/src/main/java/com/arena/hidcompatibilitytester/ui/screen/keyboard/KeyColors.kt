@@ -2,7 +2,7 @@ package com.arena.hidcompatibilitytester.ui.screen.keyboard
 
 import androidx.compose.ui.graphics.Color
 
-internal fun keyBg(c: KC, active: Boolean, pressed: Boolean, highContrast: Boolean = false): Color {
+fun keyBg(c: KC, active: Boolean, pressed: Boolean, highContrast: Boolean = false): Color {
     val boost = if (highContrast) 0.15f else 0f
     return when {
         pressed -> Color(0xFF3A7ABD)
@@ -17,7 +17,7 @@ internal fun keyBg(c: KC, active: Boolean, pressed: Boolean, highContrast: Boole
     }
 }
 
-internal fun keyFg(c: KC, active: Boolean, highContrast: Boolean = false): Color {
+fun keyFg(c: KC, active: Boolean, highContrast: Boolean = false): Color {
     val boost = if (highContrast) 0.2f else 0f
     return when {
         active         -> Color(0xFF90CAF9)

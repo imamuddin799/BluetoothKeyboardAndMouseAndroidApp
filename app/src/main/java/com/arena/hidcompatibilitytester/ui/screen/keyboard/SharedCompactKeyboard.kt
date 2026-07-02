@@ -14,87 +14,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.components.KBtn
 
 @Composable
 fun SharedCompactKeyboard(
+    st            : KbState,
     settings      : KeyboardSettings,
     showDismissBar: Boolean = false,
-    onSendKey     : (Int, List<Int>) -> Unit,
-    onReleaseKeys : () -> Unit,
-    onConsumerKey : (Int) -> Unit,
-    onTypeText    : (String) -> Unit,
+    onKeyPress    : (Key) -> Unit,
     onDismiss     : (() -> Unit)? = null,
 ) {
-    var st by remember { mutableStateOf(SharedKbState()) }
-    val scope = rememberCoroutineScope()
-
-    fun handleKey(key: Key) {
-        when {
-            key.isCaps -> {
-                st = st.copy(caps = !st.caps, lastKey = "CapsLk")
-                onSendKey(0, listOf(0x39))
-                scope.launch { delay(60); onSendKey(0, emptyList()) }
-            }
-            key.isMod -> {
-                st = st.toggleMod(key.modBit)
-                onSendKey(st.modByte(), emptyList())
-            }
-            key.code == 0x2B -> {
-                val mod = st.modByte()
-                onSendKey(mod, listOf(key.code))
-                st = st.copy(lastKey = st.modPrefix() + "Tab")
-                scope.launch {
-                    delay(60)
-                    onSendKey(st.modByte(), emptyList())
-                }
-            }
-            key.code != 0 -> {
-                var mod = st.modByte()
-                val isLetter = key.label.length == 1 && key.label[0].isLetter()
-                if (isLetter) {
-                    mod = mod and (MOD_LSHIFT or MOD_RSHIFT).inv()
-                    if (st.shift) mod = mod or MOD_LSHIFT
-                }
-                onSendKey(mod, listOf(key.code))
-                st = st.copy(lastKey = key.label)
-                scope.launch {
-                    delay(60); onSendKey(0, emptyList())
-                    if (settings.autoReleaseModsAfterKey && !settings.stickyModifiers) {
-                        st = st.releaseMods()
-                    }
-                }
-            }
-        }
-    }
-
-    fun isActive(k: Key): Boolean = when {
-        k.isCaps -> st.caps
-        k.modBit == MOD_LSHIFT || k.modBit == MOD_RSHIFT -> st.shift
-        k.modBit == MOD_LCTRL  || k.modBit == MOD_RCTRL  -> st.ctrl
-        k.modBit == MOD_LALT                              -> st.alt
-        k.modBit == MOD_RALT                              -> st.altGr
-        k.modBit == MOD_LGUI   || k.modBit == MOD_RGUI   -> st.gui
-        else -> false
-    }
-
-    fun mainLabel(k: Key): String = when {
-        k.label.isEmpty() -> "Space"
-        k.isMod || k.isCaps -> k.label
-        k.label.length == 1 && k.label[0].isLetter() ->
-            if (st.caps xor st.shift) k.label.uppercase() else k.label.lowercase()
-        st.shift && k.shift.isNotEmpty() -> k.shift
-        else -> k.label
-    }
-
-    fun topLabel(k: Key): String {
-        if (!settings.showKeyHints) return ""
-        if (k.isMod || k.isCaps) return ""
-        if (k.label.length == 1 && k.shift.isNotEmpty()) return k.shift
-        return ""
-    }
+    fun isActive(k: Key): Boolean = isKeyActive(k, st)
+    fun mainLabel(k: Key): String = displayMain(k, st)
+    fun topLabel(k: Key): String = displayTop(k, st, settings.showKeyHints)
 
     Column(
         modifier = Modifier
@@ -138,22 +70,18 @@ fun SharedCompactKeyboard(
         val rowH = settings.keyHeight.mainDp.dp
         val fnH  = settings.keyHeight.fnDp.dp
 
-        SharedStyledKeyRow(SHARED_ROW_FN, fnH, settings, ::isActive, ::mainLabel, ::topLabel) { handleKey(it) }
+        SharedStyledKeyRow(SHARED_ROW_FN, fnH, settings, ::isActive, ::mainLabel, ::topLabel) { onKeyPress(it) }
         HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
-        SharedStyledKeyRow(SHARED_ROW_NUM, rowH, settings, ::isActive, ::mainLabel, ::topLabel) { handleKey(it) }
-        SharedStyledKeyRow(SHARED_ROW_QWERTY, rowH, settings, ::isActive, ::mainLabel, ::topLabel) { handleKey(it) }
-        SharedStyledKeyRow(SHARED_ROW_HOME, rowH, settings, ::isActive, ::mainLabel, ::topLabel) { handleKey(it) }
-        SharedStyledKeyRow(SHARED_ROW_ALPHA, rowH, settings, ::isActive, ::mainLabel, ::topLabel) { handleKey(it) }
+        SharedStyledKeyRow(SHARED_ROW_NUM, rowH, settings, ::isActive, ::mainLabel, ::topLabel) { onKeyPress(it) }
+        SharedStyledKeyRow(SHARED_ROW_QWERTY, rowH, settings, ::isActive, ::mainLabel, ::topLabel) { onKeyPress(it) }
+        SharedStyledKeyRow(SHARED_ROW_HOME, rowH, settings, ::isActive, ::mainLabel, ::topLabel) { onKeyPress(it) }
+        SharedStyledKeyRow(SHARED_ROW_ALPHA, rowH, settings, ::isActive, ::mainLabel, ::topLabel) { onKeyPress(it) }
         SharedStyledKeyRow(
             if (settings.compactModifiers) SHARED_ROW_MODS_COMPACT else SHARED_ROW_MODS,
             rowH, settings, ::isActive, ::mainLabel, ::topLabel
-        ) { handleKey(it) }
+        ) { onKeyPress(it) }
     }
 }
-
-// ═════════════════════════════════════════════════════════════════════════════
-// Private composables — scoped to this file only
-// ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
 private fun SharedMiniLed(label: String) {
@@ -197,54 +125,7 @@ private fun SharedStyledKeyRow(
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Shared keyboard state
-// ═════════════════════════════════════════════════════════════════════════════
-
-internal data class SharedKbState(
-    val ctrl: Boolean = false,
-    val shift: Boolean = false,
-    val alt: Boolean = false,
-    val altGr: Boolean = false,
-    val gui: Boolean = false,
-    val caps: Boolean = false,
-    val lastKey: String = "",
-) {
-    val anyMod get() = ctrl || shift || alt || altGr || gui
-
-    fun modByte(): Int {
-        var m = 0
-        if (ctrl)  m = m or MOD_LCTRL
-        if (shift) m = m or MOD_LSHIFT
-        if (alt)   m = m or MOD_LALT
-        if (altGr) m = m or MOD_RALT
-        if (gui)   m = m or MOD_LGUI
-        return m
-    }
-
-    fun toggleMod(modBit: Int): SharedKbState = when (modBit) {
-        MOD_LSHIFT, MOD_RSHIFT -> copy(shift = !shift)
-        MOD_LCTRL, MOD_RCTRL  -> copy(ctrl = !ctrl)
-        MOD_LALT               -> copy(alt = !alt)
-        MOD_RALT               -> copy(altGr = !altGr)
-        MOD_LGUI, MOD_RGUI    -> copy(gui = !gui)
-        else                   -> this
-    }
-
-    fun releaseMods() = copy(
-        ctrl = false, shift = false, alt = false, altGr = false, gui = false,
-    )
-
-    fun modPrefix() = buildString {
-        if (ctrl)  append("Ctrl+")
-        if (shift) append("Shift+")
-        if (alt)   append("Alt+")
-        if (altGr) append("AltGr+")
-        if (gui)   append("Win+")
-    }
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// Key row definitions — reuses Key from KeyData.kt
+// Key row definitions
 // ═════════════════════════════════════════════════════════════════════════════
 
 private val SHARED_ROW_FN = listOf(

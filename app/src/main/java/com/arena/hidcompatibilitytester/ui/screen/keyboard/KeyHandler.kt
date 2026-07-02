@@ -4,7 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-internal fun handleKeyPress(
+fun handleKeyPress(
     key: Key,
     st: KbState,
     settings: KeyboardSettings,
@@ -13,28 +13,31 @@ internal fun handleKeyPress(
 ): KbState {
     return when {
         key.isCaps -> {
+            val newSt = st.copy(caps = !st.caps, lastKey = "CapsLk")
             onSendKey(0, listOf(0x39))
             scope.launch { delay(60); onSendKey(0, emptyList()) }
-            st.copy(caps = !st.caps, lastKey = "CapsLk")
+            newSt
         }
 
         key.isNum -> {
+            val newSt = st.copy(numLock = !st.numLock, lastKey = "NumLk")
             onSendKey(0, listOf(0x53))
             scope.launch { delay(60); onSendKey(0, emptyList()) }
-            st.copy(numLock = !st.numLock, lastKey = "NumLk")
+            newSt
         }
 
         key.isScroll -> {
+            val newSt = st.copy(scrollLk = !st.scrollLk, lastKey = "ScrLk")
             onSendKey(0, listOf(0x47))
             scope.launch { delay(60); onSendKey(0, emptyList()) }
-            st.copy(scrollLk = !st.scrollLk, lastKey = "ScrLk")
+            newSt
         }
 
         key.code == 0x49 && !key.isMod -> {
             val newSt = st.copy(insertMode = !st.insertMode, lastKey = "Ins")
             onSendKey(newSt.modByte(), listOf(0x49))
             scope.launch { delay(60); onSendKey(0, emptyList()) }
-            if (settings.autoReleaseModsAfterKey) newSt.releaseMods() else newSt
+            newSt.releaseMods()
         }
 
         key.isMod -> {
@@ -43,19 +46,25 @@ internal fun handleKeyPress(
             newSt
         }
 
-        // Tab — always keep modifiers held
+        // Tab — modifiers stay held after release
         key.code == 0x2B -> {
             val mod = st.modByte()
+            val keepMods = st.anyMod
             val label = st.modPrefix() + "Tab"
             onSendKey(mod, listOf(key.code))
+            val newSt = st.copy(lastKey = label)
             scope.launch {
                 delay(60)
-                // Re-send modifier-only report to keep them held
-                onSendKey(st.modByte(), emptyList())
+                if (keepMods) {
+                    onSendKey(newSt.modByte(), emptyList())
+                } else {
+                    onSendKey(0, emptyList())
+                }
             }
-            st.copy(lastKey = label)
+            newSt
         }
 
+        // All other keys — send then release modifiers
         key.code != 0 -> {
             var mod = st.modByte()
             val isLetter = key.label.length == 1 && key.label[0].isLetter()
@@ -65,11 +74,9 @@ internal fun handleKeyPress(
             }
             val label = st.modPrefix() + key.label.ifEmpty { "Space" }
             onSendKey(mod, listOf(key.code))
-            scope.launch { delay(60); onSendKey(0, emptyList()) }
             val newSt = st.copy(lastKey = label)
-            if (settings.autoReleaseModsAfterKey && !settings.stickyModifiers) {
-                newSt.releaseMods()
-            } else newSt
+            scope.launch { delay(60); onSendKey(0, emptyList()) }
+            newSt.releaseMods()
         }
 
         else -> st
@@ -84,12 +91,10 @@ internal fun handleNumpadKey(
     scope: CoroutineScope,
     onSendKey: (Int, List<Int>) -> Unit,
 ): KbState {
+    val newSt = st.copy(lastKey = label)
     onSendKey(st.modByte(), listOf(code))
     scope.launch { delay(60); onSendKey(0, emptyList()) }
-    val newSt = st.copy(lastKey = label)
-    return if (settings.autoReleaseModsAfterKey && !settings.stickyModifiers) {
-        newSt.releaseMods()
-    } else newSt
+    return newSt.releaseMods()
 }
 
 internal fun handleNumLockToggle(
@@ -97,7 +102,8 @@ internal fun handleNumLockToggle(
     scope: CoroutineScope,
     onSendKey: (Int, List<Int>) -> Unit,
 ): KbState {
+    val newSt = st.copy(numLock = !st.numLock, lastKey = "NumLk")
     onSendKey(0, listOf(0x53))
     scope.launch { delay(60); onSendKey(0, emptyList()) }
-    return st.copy(numLock = !st.numLock, lastKey = "NumLk")
+    return newSt
 }

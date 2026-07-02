@@ -34,24 +34,24 @@ internal fun KbStatusBar(
             .padding(horizontal = 8.dp, vertical = 5.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        // Row 1: LED badges + ready indicator + settings
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(3.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (showFullStatus) {
-                listOf(
-                    "CAPS" to st.caps,
-                    "NUM" to st.numLock,
-                    "SCR" to st.scrollLk,
-                    "SHF" to st.shift,
-                    "CTL" to st.ctrl,
-                    "ALT" to st.alt,
-                    "AGR" to st.altGr,
-                    "WIN" to st.gui,
-                    "OVR" to !st.insertMode,
-                ).forEach { (lbl, on) -> LedBadge(lbl, on) }
-            }
+            // Always show all LED indicators
+            listOf(
+                "CAPS" to st.caps,
+                "NUM" to st.numLock,
+                "SCR" to st.scrollLk,
+                "SHF" to st.shift,
+                "CTL" to st.ctrl,
+                "ALT" to st.alt,
+                "AGR" to st.altGr,
+                "WIN" to st.gui,
+                "OVR" to !st.insertMode,
+            ).forEach { (lbl, on) -> LedBadge(lbl, on) }
 
             Spacer(Modifier.weight(1f))
 
@@ -67,7 +67,8 @@ internal fun KbStatusBar(
             ToolbarIcon("⚙", onClick = onShowSettings)
         }
 
-        if (showFullStatus && (st.anyMod || st.lastKey.isNotEmpty())) {
+        // Row 2: Last key combo display — always visible
+        if (st.anyMod || st.lastKey.isNotEmpty()) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),

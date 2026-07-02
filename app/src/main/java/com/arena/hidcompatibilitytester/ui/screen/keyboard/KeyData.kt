@@ -6,26 +6,26 @@ import com.arena.hidcompatibilitytester.bluetooth.BleHidManager
 // HID Modifier bits
 // ═════════════════════════════════════════════════════════════════════════════
 
-internal const val MOD_LCTRL  = 0x01
-internal const val MOD_LSHIFT = 0x02
-internal const val MOD_LALT   = 0x04
-internal const val MOD_LGUI   = 0x08
-internal const val MOD_RCTRL  = 0x10
-internal const val MOD_RSHIFT = 0x20
-internal const val MOD_RALT   = 0x40
-internal const val MOD_RGUI   = 0x80
+const val MOD_LCTRL  = 0x01
+const val MOD_LSHIFT = 0x02
+const val MOD_LALT   = 0x04
+const val MOD_LGUI   = 0x08
+const val MOD_RCTRL  = 0x10
+const val MOD_RSHIFT = 0x20
+const val MOD_RALT   = 0x40
+const val MOD_RGUI   = 0x80
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Key color categories
 // ═════════════════════════════════════════════════════════════════════════════
 
-internal enum class KC { NORMAL, MOD, SPECIAL, ACCENT, DANGER }
+enum class KC { NORMAL, MOD, SPECIAL, ACCENT, DANGER }
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Key model
 // ═════════════════════════════════════════════════════════════════════════════
 
-internal data class Key(
+data class Key(
     val label    : String,
     val shift    : String  = "",
     val altGr    : String  = "",
@@ -40,7 +40,7 @@ internal data class Key(
     val noRepeat : Boolean = false,
 )
 
-internal fun Key.shouldRepeat() =
+fun Key.shouldRepeat() =
     !noRepeat && !isMod && !isCaps && !isNum && !isScroll
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -167,7 +167,7 @@ internal val SYSTEM_ROW2 = listOf(
 )
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Quick modifier keys (for Nav/Media tabs)
+// Quick modifier keys
 // ═════════════════════════════════════════════════════════════════════════════
 
 internal val QUICK_MODIFIERS = listOf(

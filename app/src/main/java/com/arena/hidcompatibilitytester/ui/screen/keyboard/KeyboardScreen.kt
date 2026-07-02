@@ -53,7 +53,7 @@ fun KeyboardScreen(
     }
 
     fun handleInsertToggle() {
-        st = st.copy(insertMode = !st.insertMode)
+        st = st.copy(insertMode = !st.insertMode, lastKey = "Ins")
         onSendKey(0, listOf(0x49))
         scope.launch { delay(60); onSendKey(0, emptyList()) }
     }

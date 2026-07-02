@@ -1,4 +1,3 @@
-// ui/screen/keyboard/KeyboardGestures.kt
 package com.arena.hidcompatibilitytester.ui.screen.keyboard
 
 import androidx.compose.ui.geometry.Offset
@@ -11,13 +10,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
-/**
- * Scroll-safe tap with optional key-repeat.
- *
- * slopPx   – max finger travel (px) that still counts as a tap
- * repeatMe – if true, fires onTap repeatedly while finger is held
- */
-internal suspend fun PointerInputScope.scrollSafeTap(
+suspend fun PointerInputScope.scrollSafeTap(
     scope           : CoroutineScope,
     slopPx          : Float   = 18f,
     repeatMe        : Boolean = false,
@@ -67,10 +60,7 @@ internal suspend fun PointerInputScope.scrollSafeTap(
     }
 }
 
-/**
- * Continuously listens for scroll-safe taps (loops forever).
- */
-internal suspend fun PointerInputScope.repeatScrollSafeTap(
+suspend fun PointerInputScope.repeatScrollSafeTap(
     scope           : CoroutineScope,
     slopPx          : Float   = 18f,
     repeatMe        : Boolean = false,

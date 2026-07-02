@@ -30,8 +30,7 @@ internal fun KeysTab(
     val navH = settings.keyHeight.navDp.dp
     val rowH = settings.keyHeight.mainDp.dp
     val fnH  = settings.keyHeight.fnDp.dp
-    // fn row + divider + 5 main rows + internal spacing + outer padding
-    val fixedKbHeight = fnH + 1.dp + (rowH + 2.dp) * 5 + rowH + 12.dp
+    val fixedKbHeight = fnH + 1.dp + (rowH * 6) + 20.dp
 
     Box(
         modifier = Modifier
@@ -180,7 +179,7 @@ internal fun KeysTab(
             Spacer(Modifier.height(16.dp))
         }
 
-        // Fixed keyboard at bottom — SharedCompactKeyboard, no dismiss bar
+        // Fixed keyboard at bottom — uses parent st
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -189,12 +188,10 @@ internal fun KeysTab(
                 .padding(vertical = 4.dp),
         ) {
             SharedCompactKeyboard(
+                st             = st,
                 settings       = settings,
                 showDismissBar = false,
-                onSendKey      = onSendKey,
-                onReleaseKeys  = onReleaseKeys,
-                onConsumerKey  = onConsumerKey,
-                onTypeText     = onTypeText,
+                onKeyPress     = onKeyPress,
             )
         }
     }

@@ -1,7 +1,5 @@
 package com.arena.hidcompatibilitytester.ui.screen.trackpad
 
-import android.content.Context
-import android.view.inputmethod.InputMethodManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.BasicTextField
@@ -11,15 +9,16 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.arena.hidcompatibilitytester.ui.screen.keyboard.KbState
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.KeyboardSettings
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.SharedCompactKeyboard
+import com.arena.hidcompatibilitytester.ui.screen.keyboard.handleKeyPress
 
 @Composable
 fun TrackpadScreen(
@@ -34,7 +33,6 @@ fun TrackpadScreen(
     onTypeText       : (String) -> Unit,
 ) {
     val physHoldActive = remember { mutableStateOf(false) }
-    val context = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
 
@@ -43,6 +41,10 @@ fun TrackpadScreen(
 
     var hiddenText by remember { mutableStateOf(TextFieldValue("")) }
     val focusRequester = remember { FocusRequester() }
+
+    // Keyboard state for the in-app keyboard on trackpad screen
+    var kbSt by remember { mutableStateOf(KbState()) }
+    val kbScope = rememberCoroutineScope()
 
     fun showSystemKeyboard() {
         inAppKbVisible = false
@@ -127,12 +129,12 @@ fun TrackpadScreen(
                 )
 
                 SharedCompactKeyboard(
+                    st             = kbSt,
                     settings       = keyboardSettings,
                     showDismissBar = true,
-                    onSendKey      = onSendKey,
-                    onReleaseKeys  = onReleaseKeys,
-                    onConsumerKey  = onConsumerKey,
-                    onTypeText     = onTypeText,
+                    onKeyPress     = { key ->
+                        kbSt = handleKeyPress(key, kbSt, keyboardSettings, kbScope, onSendKey)
+                    },
                     onDismiss      = { inAppKbVisible = false },
                 )
 
