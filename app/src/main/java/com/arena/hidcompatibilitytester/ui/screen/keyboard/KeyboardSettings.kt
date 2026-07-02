@@ -1,4 +1,3 @@
-// ui/screen/keyboard/KeyboardSettings.kt
 package com.arena.hidcompatibilitytester.ui.screen.keyboard
 
 data class KeyboardSettings(
@@ -11,20 +10,21 @@ data class KeyboardSettings(
     val hapticEnabled: Boolean = true,
     val hapticIntensity: HapticIntensity = HapticIntensity.MEDIUM,
 
+    // Sound
+    val soundOnPress: Boolean = false,
+
     // Layout
     val keyHeight: KeyHeight = KeyHeight.MEDIUM,
     val showStatusBar: Boolean = true,
     val compactModifiers: Boolean = false,
 
     // Behavior
-    val stickyModifiers: Boolean = false,    // mods stay until next key
-    val autoReleaseModsAfterKey: Boolean = true,
-    val capsLockWarning: Boolean = true,
-    val soundOnPress: Boolean = false,
+    val stickyModifiers: Boolean = false,
+    val keepModsAfterTab: Boolean = true,
 
     // Appearance
     val keyFontSize: KeyFontSize = KeyFontSize.MEDIUM,
-    val showKeyHints: Boolean = true,        // show shift chars on top
+    val showKeyHints: Boolean = true,
     val highContrastMode: Boolean = false,
 
     // Numpad

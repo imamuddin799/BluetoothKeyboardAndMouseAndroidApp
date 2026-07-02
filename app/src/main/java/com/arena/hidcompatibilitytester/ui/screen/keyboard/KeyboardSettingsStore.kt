@@ -12,12 +12,13 @@ object KeyboardSettingsStore {
             putLong("repeatInitialDelayMs", s.repeatInitialDelayMs)
             putLong("repeatIntervalMs", s.repeatIntervalMs)
             putBoolean("hapticEnabled", s.hapticEnabled)
+            putString("hapticIntensity", s.hapticIntensity.name)
+            putBoolean("soundOnPress", s.soundOnPress)
             putString("keyHeight", s.keyHeight.name)
             putBoolean("showStatusBar", s.showStatusBar)
             putBoolean("compactModifiers", s.compactModifiers)
             putBoolean("stickyModifiers", s.stickyModifiers)
-            putBoolean("autoReleaseModsAfterKey", s.autoReleaseModsAfterKey)
-            putBoolean("capsLockWarning", s.capsLockWarning)
+            putBoolean("keepModsAfterTab", s.keepModsAfterTab)
             putString("keyFontSize", s.keyFontSize.name)
             putBoolean("showKeyHints", s.showKeyHints)
             putBoolean("highContrastMode", s.highContrastMode)
@@ -36,14 +37,17 @@ object KeyboardSettingsStore {
             repeatInitialDelayMs = p.getLong("repeatInitialDelayMs", 400L),
             repeatIntervalMs = p.getLong("repeatIntervalMs", 50L),
             hapticEnabled = p.getBoolean("hapticEnabled", true),
+            hapticIntensity = runCatching {
+                HapticIntensity.valueOf(p.getString("hapticIntensity", "MEDIUM")!!)
+            }.getOrDefault(HapticIntensity.MEDIUM),
+            soundOnPress = p.getBoolean("soundOnPress", false),
             keyHeight = runCatching {
                 KeyHeight.valueOf(p.getString("keyHeight", "MEDIUM")!!)
             }.getOrDefault(KeyHeight.MEDIUM),
             showStatusBar = p.getBoolean("showStatusBar", true),
             compactModifiers = p.getBoolean("compactModifiers", false),
             stickyModifiers = p.getBoolean("stickyModifiers", false),
-            autoReleaseModsAfterKey = p.getBoolean("autoReleaseModsAfterKey", true),
-            capsLockWarning = p.getBoolean("capsLockWarning", true),
+            keepModsAfterTab = p.getBoolean("keepModsAfterTab", true),
             keyFontSize = runCatching {
                 KeyFontSize.valueOf(p.getString("keyFontSize", "MEDIUM")!!)
             }.getOrDefault(KeyFontSize.MEDIUM),

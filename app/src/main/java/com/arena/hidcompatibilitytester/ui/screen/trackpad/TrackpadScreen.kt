@@ -42,9 +42,12 @@ fun TrackpadScreen(
     var hiddenText by remember { mutableStateOf(TextFieldValue("")) }
     val focusRequester = remember { FocusRequester() }
 
-    // Keyboard state for the in-app keyboard on trackpad screen
     var kbSt by remember { mutableStateOf(KbState()) }
     val kbScope = rememberCoroutineScope()
+
+    // KEY FIX: same stale-closure fix as KeyboardScreen
+    val currentKbSt       by rememberUpdatedState(kbSt)
+    val currentKbSettings by rememberUpdatedState(keyboardSettings)
 
     fun showSystemKeyboard() {
         inAppKbVisible = false
@@ -105,7 +108,7 @@ fun TrackpadScreen(
                 }
                 hiddenText = newValue
             },
-            modifier = Modifier
+            modifier    = Modifier
                 .size(1.dp)
                 .focusRequester(focusRequester),
             textStyle   = TextStyle(fontSize = 1.sp, color = Color.Transparent),
@@ -133,9 +136,16 @@ fun TrackpadScreen(
                     settings       = keyboardSettings,
                     showDismissBar = true,
                     onKeyPress     = { key ->
-                        kbSt = handleKeyPress(key, kbSt, keyboardSettings, kbScope, onSendKey)
+                        kbSt = handleKeyPress(
+                            key                  = key,
+                            st                   = currentKbSt,
+                            settings             = currentKbSettings,
+                            scope                = kbScope,
+                            onSendKey            = onSendKey,
+                            onDelayedStateUpdate = { delayedSt -> kbSt = delayedSt }
+                        )
                     },
-                    onDismiss      = { inAppKbVisible = false },
+                    onDismiss = { inAppKbVisible = false },
                 )
 
                 Spacer(

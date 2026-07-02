@@ -130,17 +130,13 @@ fun KeyboardSettingsSheet(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(
-                                    horizontal = 2.dp,
-                                    vertical = 14.dp
-                                ),
+                                .padding(horizontal = 2.dp, vertical = 14.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = section.title,
                                 fontSize = if (isSelected) 13.sp else 12.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold
-                                else FontWeight.Normal,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                 maxLines = 1,
                                 softWrap = false,
                                 overflow = TextOverflow.Ellipsis
@@ -173,8 +169,6 @@ fun KeyboardSettingsSheet(
         }
     }
 }
-
-// ── Section composables ───────────────────────────────────────────────
 
 @Composable
 private fun KeysSection(
@@ -226,6 +220,26 @@ private fun KeysSection(
         ) {
             onChange(settings.copy(hapticEnabled = it))
         }
+
+        AnimatedVisibility(visible = settings.hapticEnabled) {
+            SizeSelector(
+                title = "Haptic Intensity",
+                subtitle = "Strength of vibration feedback",
+                options = HapticIntensity.entries.map { it.label },
+                selectedIndex = settings.hapticIntensity.ordinal,
+                spacing = spacing,
+            ) {
+                onChange(settings.copy(hapticIntensity = HapticIntensity.entries[it]))
+            }
+        }
+
+        SettingsToggle(
+            "Sound on Press",
+            "Play a click sound when pressing keys",
+            settings.soundOnPress
+        ) {
+            onChange(settings.copy(soundOnPress = it))
+        }
     }
 }
 
@@ -238,38 +252,34 @@ private fun BehaviorSection(
     SettingsCard("Modifier Keys", spacing) {
         SettingsToggle(
             "Sticky Modifiers",
-            "Modifiers stay active until the next key is pressed",
+            "Mods stay held across key presses until manually cleared",
             settings.stickyModifiers
         ) {
             onChange(settings.copy(stickyModifiers = it))
         }
 
-        SettingsToggle(
-            "Auto-Release Modifiers",
-            "Release Ctrl / Shift / Alt after sending a key combo",
-            settings.autoReleaseModsAfterKey
-        ) {
-            onChange(settings.copy(autoReleaseModsAfterKey = it))
+        AnimatedVisibility(visible = !settings.stickyModifiers) {
+            Column(verticalArrangement = Arrangement.spacedBy(spacing.itemSpacing)) {
+                SettingsToggle(
+                    "Keep Mods After Tab",
+                    "Mod+Tab releases only Tab, keeps modifiers held",
+                    settings.keepModsAfterTab
+                ) {
+                    onChange(settings.copy(keepModsAfterTab = it))
+                }
+            }
         }
 
-        StickyModsExplainCard(settings.stickyModifiers, settings.autoReleaseModsAfterKey)
+        StickyModsExplainCard(settings.stickyModifiers, settings.keepModsAfterTab)
     }
 
-    SettingsCard("Indicators", spacing) {
+    SettingsCard("Status Bar", spacing) {
         SettingsToggle(
-            "Status Bar",
-            "Show Caps / Num / Scroll lock and modifier indicators",
+            "Show LED Indicators",
+            "Show Caps / Num / Scroll lock and modifier badges",
             settings.showStatusBar
         ) {
             onChange(settings.copy(showStatusBar = it))
-        }
-
-        SettingsToggle(
-            "Caps Lock Warning",
-            "Highlight status bar when Caps Lock is active",
-            settings.capsLockWarning
-        ) {
-            onChange(settings.copy(capsLockWarning = it))
         }
     }
 
@@ -378,8 +388,6 @@ private fun NumpadMediaSection(
         }
     }
 }
-
-// ── Reusable components ───────────────────────────────────────────────
 
 @Composable
 private fun SettingsCard(
@@ -586,35 +594,27 @@ private fun DefaultTabSelector(
 }
 
 @Composable
-private fun StickyModsExplainCard(stickyMods: Boolean, autoRelease: Boolean) {
+private fun StickyModsExplainCard(stickyMods: Boolean, keepModsAfterTab: Boolean) {
     val (bg, title, lines) = if (stickyMods) {
         Triple(
             Color(0xFF1565C0).copy(0.12f),
-            "🔒  Sticky Modifiers",
+            "🔒  Sticky Modifiers ON",
             listOf(
-                "1. Tap Ctrl — it stays highlighted",
-                "2. Tap any key — combo is sent (e.g. Ctrl+C)",
-                "3. Modifier releases after the key press",
-            )
-        )
-    } else if (autoRelease) {
-        Triple(
-            Color(0xFF2E7D32).copy(0.12f),
-            "⚡  Auto-Release",
-            listOf(
-                "1. Tap Ctrl — it stays highlighted",
-                "2. Tap a key — combo sent, modifiers clear",
-                "3. Ready for next keypress immediately",
+                "• Mod + Key → release only Key, Mod stays held",
+                "• Mod + Tab → release only Tab, Mod stays held",
+                "• Tap Mod again or Clear to release",
             )
         )
     } else {
         Triple(
-            Color(0xFF6A1B9A).copy(0.12f),
-            "✋  Manual Release",
+            Color(0xFF2E7D32).copy(0.12f),
+            "⚡  Sticky Modifiers OFF",
             listOf(
-                "1. Tap Ctrl — it stays highlighted",
-                "2. Tap keys — Ctrl stays held for all",
-                "3. Tap Ctrl again to release (or use Clear)",
+                "• Mod + Key → release both Mod and Key",
+                if (keepModsAfterTab)
+                    "• Mod + Tab → release only Tab, Mod stays held"
+                else
+                    "• Mod + Tab → release both Mod and Tab",
             )
         )
     }

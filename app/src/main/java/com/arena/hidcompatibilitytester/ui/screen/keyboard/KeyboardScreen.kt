@@ -33,33 +33,54 @@ fun KeyboardScreen(
         mutableStateOf(
             KbState(
                 numLock = settings.numpadStartsLocked,
-                tab = settings.defaultTab,
+                tab     = settings.defaultTab,
             )
         )
     }
     var typeText by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
+    // ── KEY FIX: wrap mutable state writes in rememberUpdatedState so that
+    // coroutines launched before a recomposition always write to the CURRENT
+    // st, not a stale snapshot captured at launch time.
+    val currentSt       by rememberUpdatedState(st)
+    val currentSettings by rememberUpdatedState(settings)
+
     fun handleKey(key: Key) {
-        st = handleKeyPress(key, st, settings, scope, onSendKey)
+        st = handleKeyPress(
+            key                  = key,
+            st                   = currentSt,
+            settings             = currentSettings,
+            scope                = scope,
+            onSendKey            = onSendKey,
+            onDelayedStateUpdate = { delayedSt -> st = delayedSt }
+        )
     }
 
     fun handleNumCode(code: Int, label: String) {
-        st = handleNumpadKey(code, label, st, settings, scope, onSendKey)
+        st = handleNumpadKey(
+            code                 = code,
+            label                = label,
+            st                   = currentSt,
+            settings             = currentSettings,
+            scope                = scope,
+            onSendKey            = onSendKey,
+            onDelayedStateUpdate = { delayedSt -> st = delayedSt }
+        )
     }
 
     fun doHandleNumLockToggle() {
-        st = handleNumLockToggle(st, scope, onSendKey)
+        st = handleNumLockToggle(currentSt, scope, onSendKey)
     }
 
     fun handleInsertToggle() {
-        st = st.copy(insertMode = !st.insertMode, lastKey = "Ins")
+        st = currentSt.copy(insertMode = !currentSt.insertMode, lastKey = "Ins")
         onSendKey(0, listOf(0x49))
-        scope.launch { delay(60); onSendKey(0, emptyList()) }
+        scope.launch { delay(16); onSendKey(0, emptyList()) }
     }
 
     fun clearMods() {
-        st = st.releaseMods().copy(lastKey = "")
+        st = currentSt.releaseMods().copy(lastKey = "")
         onSendKey(0, emptyList())
     }
 
@@ -68,9 +89,9 @@ fun KeyboardScreen(
         val tabLabels = listOf("⌨ Keys", "↕ Nav+Num", "🎵 Media")
         TabRow(
             selectedTabIndex = st.tab,
-            containerColor = Color(0xFF050C14),
-            contentColor = Color.White,
-            indicator = { tabPositions ->
+            containerColor   = Color(0xFF050C14),
+            contentColor     = Color.White,
+            indicator        = { tabPositions ->
                 if (st.tab < tabPositions.size) {
                     val t = tabPositions[st.tab]
                     Box(
@@ -88,14 +109,14 @@ fun KeyboardScreen(
             tabLabels.forEachIndexed { i, title ->
                 Tab(
                     selected = st.tab == i,
-                    onClick = { st = st.copy(tab = i) },
-                    text = {
+                    onClick  = { st = st.copy(tab = i) },
+                    text     = {
                         Text(
                             title,
-                            fontSize = 12.sp,
-                            color = if (st.tab == i) Color(0xFF90CAF9) else Color(0xFF546E7A),
+                            fontSize   = 12.sp,
+                            color      = if (st.tab == i) Color(0xFF90CAF9) else Color(0xFF546E7A),
                             fontWeight = if (st.tab == i) FontWeight.SemiBold else FontWeight.Normal,
-                            maxLines = 1
+                            maxLines   = 1
                         )
                     }
                 )
@@ -103,10 +124,10 @@ fun KeyboardScreen(
         }
 
         KbStatusBar(
-            st = st,
-            isReady = isReady,
+            st             = st,
+            isReady        = isReady,
             showFullStatus = settings.showStatusBar,
-            onClearMods = { clearMods() },
+            onClearMods    = { clearMods() },
             onShowSettings = onShowSettings,
         )
 
@@ -120,17 +141,19 @@ fun KeyboardScreen(
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(32.dp)
+                    modifier            = Modifier.padding(32.dp)
                 ) {
                     Text("⏳", fontSize = 36.sp)
                     Text(
                         "Host not connected",
-                        color = Color.White, fontSize = 16.sp,
+                        color      = Color.White,
+                        fontSize   = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
                         "Go to Status tab → Start BLE HID\nPair from host Bluetooth settings",
-                        color = Color.Gray, fontSize = 13.sp,
+                        color     = Color.Gray,
+                        fontSize  = 13.sp,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -149,7 +172,6 @@ fun KeyboardScreen(
                 onConsumerKey = onConsumerKey,
                 onTypeText    = onTypeText,
             )
-
             1 -> NavNumpadTab(
                 st                = st,
                 settings          = settings,
@@ -163,7 +185,6 @@ fun KeyboardScreen(
                 onSendKey         = onSendKey,
                 onTypeText        = onTypeText,
             )
-
             2 -> MediaTab(
                 st              = st,
                 settings        = settings,
