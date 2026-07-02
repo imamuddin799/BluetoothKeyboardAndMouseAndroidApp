@@ -51,15 +51,28 @@ data class KbState(
         if (gui)   append("Win+")
     }
 
-    fun toggleMod(modBit: Int): KbState = when (modBit) {
-        MOD_LSHIFT -> copy(lShift = !lShift)
-        MOD_RSHIFT -> copy(rShift = !rShift)
-        MOD_LCTRL  -> copy(lCtrl  = !lCtrl)
-        MOD_RCTRL  -> copy(rCtrl  = !rCtrl)
-        MOD_LALT   -> copy(lAlt   = !lAlt)
-        MOD_RALT   -> copy(rAlt   = !rAlt)
-        MOD_LGUI   -> copy(lGui   = !lGui)
-        MOD_RGUI   -> copy(rGui   = !rGui)
-        else       -> this
+    fun toggleMod(modBit: Int): KbState {
+        return when (modBit) {
+            // Ctrl: toggle both L and R together
+            MOD_LCTRL, MOD_RCTRL -> {
+                val newVal = !ctrl
+                copy(lCtrl = newVal, rCtrl = newVal)
+            }
+            // Shift: toggle both L and R together
+            MOD_LSHIFT, MOD_RSHIFT -> {
+                val newVal = !shift
+                copy(lShift = newVal, rShift = newVal)
+            }
+            // Alt left only
+            MOD_LALT -> copy(lAlt = !lAlt)
+            // AltGr (right alt) only
+            MOD_RALT -> copy(rAlt = !rAlt)
+            // GUI: toggle both L and R together
+            MOD_LGUI, MOD_RGUI -> {
+                val newVal = !gui
+                copy(lGui = newVal, rGui = newVal)
+            }
+            else -> this
+        }
     }
 }

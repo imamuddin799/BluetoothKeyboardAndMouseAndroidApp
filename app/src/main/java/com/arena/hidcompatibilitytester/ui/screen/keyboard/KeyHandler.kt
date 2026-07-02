@@ -40,8 +40,9 @@ fun handleKeyPress(
             newSt.releaseMods()
         }
 
+        // Modifier keys — clear lastKey so status bar shows only "Ctrl+ …waiting"
         key.isMod -> {
-            val newSt = st.toggleMod(key.modBit)
+            val newSt = st.toggleMod(key.modBit).copy(lastKey = "")
             onSendKey(newSt.modByte(), emptyList())
             newSt
         }
@@ -50,9 +51,9 @@ fun handleKeyPress(
         key.code == 0x2B -> {
             val mod = st.modByte()
             val keepMods = st.anyMod
-            val label = st.modPrefix() + "Tab"
+            // lastKey is ONLY the key name, modPrefix() is added by status bar
             onSendKey(mod, listOf(key.code))
-            val newSt = st.copy(lastKey = label)
+            val newSt = st.copy(lastKey = "Tab")
             scope.launch {
                 delay(60)
                 if (keepMods) {
@@ -72,9 +73,10 @@ fun handleKeyPress(
                 mod = mod and (MOD_LSHIFT or MOD_RSHIFT).inv()
                 if (st.shift) mod = mod or MOD_LSHIFT
             }
-            val label = st.modPrefix() + key.label.ifEmpty { "Space" }
+            // lastKey is ONLY the key name, modPrefix() handles the prefix display
+            val keyName = key.label.ifEmpty { "Space" }
             onSendKey(mod, listOf(key.code))
-            val newSt = st.copy(lastKey = label)
+            val newSt = st.copy(lastKey = keyName)
             scope.launch { delay(60); onSendKey(0, emptyList()) }
             newSt.releaseMods()
         }
