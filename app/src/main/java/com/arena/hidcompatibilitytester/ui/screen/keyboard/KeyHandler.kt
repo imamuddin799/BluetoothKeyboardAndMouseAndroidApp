@@ -43,18 +43,17 @@ internal fun handleKeyPress(
             newSt
         }
 
+        // Tab — always keep modifiers held
         key.code == 0x2B -> {
             val mod = st.modByte()
-            val keepMods = st.anyMod || settings.stickyModifiers
-            val label = st.modPrefix() + key.label.ifEmpty { "Space" }
+            val label = st.modPrefix() + "Tab"
             onSendKey(mod, listOf(key.code))
             scope.launch {
                 delay(60)
-                if (keepMods) onSendKey(st.modByte(), emptyList())
-                else onSendKey(0, emptyList())
+                // Re-send modifier-only report to keep them held
+                onSendKey(st.modByte(), emptyList())
             }
-            val newSt = st.copy(lastKey = label)
-            if (!keepMods && settings.autoReleaseModsAfterKey) newSt.releaseMods() else newSt
+            st.copy(lastKey = label)
         }
 
         key.code != 0 -> {

@@ -59,7 +59,7 @@ fun AppMainScreen(
                 Tab(
                     selected = selectedTab == i,
                     onClick  = { selectedTab = i },
-                    text     = { Text(title, fontSize = 13.sp) }
+                    text     = { Text(title, fontSize = 13.sp, maxLines = 1) }
                 )
             }
         }
@@ -74,19 +74,21 @@ fun AppMainScreen(
                 onReconnectHost   = onReconnectHost,
             )
             1 -> TrackpadScreen(
-                isReady        = isReady,
-                settings       = trackpadSettings,
-                onSendMouse    = onSendMouse,
-                onShowSettings = onShowTrackpadSettings,
-                onSendKey      = onSendKey,
-                onReleaseKeys  = onReleaseKeys,
-                onConsumerKey  = onConsumerKey,
-                onTypeText     = onTypeText,
+                isReady          = isReady,
+                settings         = trackpadSettings,
+                keyboardSettings = keyboardSettings,
+                onSendMouse      = onSendMouse,
+                onShowSettings   = onShowTrackpadSettings,
+                onSendKey        = onSendKey,
+                onReleaseKeys    = onReleaseKeys,
+                onConsumerKey    = onConsumerKey,
+                onTypeText       = onTypeText,
             )
             2 -> KeyboardScreen(
                 isReady        = isReady,
                 settings       = keyboardSettings,
                 onSendKey      = onSendKey,
+                onReleaseKeys  = onReleaseKeys,
                 onConsumerKey  = onConsumerKey,
                 onTypeText     = onTypeText,
                 onShowSettings = onShowKeyboardSettings,

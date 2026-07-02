@@ -18,18 +18,20 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.arena.hidcompatibilitytester.ui.screen.keyboard.InAppKeyboardPanel
+import com.arena.hidcompatibilitytester.ui.screen.keyboard.KeyboardSettings
+import com.arena.hidcompatibilitytester.ui.screen.keyboard.SharedCompactKeyboard
 
 @Composable
 fun TrackpadScreen(
-    isReady       : Boolean,
-    settings      : TrackpadSettings,
-    onSendMouse   : (dx: Int, dy: Int, buttons: Int, wheel: Int) -> Unit,
-    onShowSettings: () -> Unit,
-    onSendKey     : (Int, List<Int>) -> Unit,
-    onReleaseKeys : () -> Unit,
-    onConsumerKey : (Int) -> Unit,
-    onTypeText    : (String) -> Unit,
+    isReady          : Boolean,
+    settings         : TrackpadSettings,
+    keyboardSettings : KeyboardSettings,
+    onSendMouse      : (dx: Int, dy: Int, buttons: Int, wheel: Int) -> Unit,
+    onShowSettings   : () -> Unit,
+    onSendKey        : (Int, List<Int>) -> Unit,
+    onReleaseKeys    : () -> Unit,
+    onConsumerKey    : (Int) -> Unit,
+    onTypeText       : (String) -> Unit,
 ) {
     val physHoldActive = remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -39,12 +41,10 @@ fun TrackpadScreen(
     var systemKbVisible by remember { mutableStateOf(false) }
     var inAppKbVisible  by remember { mutableStateOf(false) }
 
-    // Hidden text field for system keyboard input capture
     var hiddenText by remember { mutableStateOf(TextFieldValue("")) }
     val focusRequester = remember { FocusRequester() }
 
     fun showSystemKeyboard() {
-        // Close in-app if open
         inAppKbVisible = false
         systemKbVisible = true
         focusRequester.requestFocus()
@@ -65,7 +65,6 @@ fun TrackpadScreen(
         if (inAppKbVisible) {
             inAppKbVisible = false
         } else {
-            // Close system KB if open
             if (systemKbVisible) hideSystemKeyboard()
             inAppKbVisible = true
         }
@@ -86,7 +85,6 @@ fun TrackpadScreen(
             inAppKbVisible   = inAppKbVisible,
         )
 
-        // Hidden text field to capture system keyboard input
         BasicTextField(
             value         = hiddenText,
             onValueChange = { newValue ->
@@ -115,7 +113,6 @@ fun TrackpadScreen(
         if (!isReady) {
             TrackpadNotReadyCard()
         } else {
-            // Trackpad takes remaining space
             TrackpadSurface(
                 modifier       = Modifier.weight(1f),
                 settings       = settings,
@@ -124,21 +121,21 @@ fun TrackpadScreen(
             )
 
             if (inAppKbVisible) {
-                // Mouse buttons above in-app keyboard
                 TrackpadClickButtons(
                     onSendMouse    = onSendMouse,
                     physHoldActive = physHoldActive
                 )
 
-                InAppKeyboardPanel(
-                    onSendKey     = onSendKey,
-                    onReleaseKeys = onReleaseKeys,
-                    onConsumerKey = onConsumerKey,
-                    onTypeText    = onTypeText,
-                    onDismiss     = { inAppKbVisible = false }
+                SharedCompactKeyboard(
+                    settings       = keyboardSettings,
+                    showDismissBar = true,
+                    onSendKey      = onSendKey,
+                    onReleaseKeys  = onReleaseKeys,
+                    onConsumerKey  = onConsumerKey,
+                    onTypeText     = onTypeText,
+                    onDismiss      = { inAppKbVisible = false },
                 )
 
-                // Bottom spacing
                 Spacer(
                     Modifier
                         .fillMaxWidth()
@@ -146,7 +143,6 @@ fun TrackpadScreen(
                         .background(Color(0xFF080F18))
                 )
             } else {
-                // Normal: just mouse buttons
                 TrackpadClickButtons(
                     onSendMouse    = onSendMouse,
                     physHoldActive = physHoldActive

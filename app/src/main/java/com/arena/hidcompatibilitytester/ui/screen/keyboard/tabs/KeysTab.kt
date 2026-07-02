@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -23,18 +22,23 @@ internal fun KeysTab(
     settings: KeyboardSettings,
     onKeyPress: (Key) -> Unit,
     onClearMods: () -> Unit,
+    onSendKey: (Int, List<Int>) -> Unit,
+    onReleaseKeys: () -> Unit,
+    onConsumerKey: (Int) -> Unit,
+    onTypeText: (String) -> Unit,
 ) {
-    val mainH = settings.keyHeight.mainDp.dp
-    val fnH   = settings.keyHeight.fnDp.dp
-    val navH  = settings.keyHeight.navDp.dp
+    val navH = settings.keyHeight.navDp.dp
+    val rowH = settings.keyHeight.mainDp.dp
+    val fnH  = settings.keyHeight.fnDp.dp
+    // fn row + divider + 5 main rows + internal spacing + outer padding
+    val fixedKbHeight = fnH + 1.dp + (rowH + 2.dp) * 5 + rowH + 12.dp
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF080F18)),
     ) {
-        val fixedKbHeight = fnH + 1.dp + mainH * 5 + 10.dp + 12.dp
-
+        // Scrollable upper content
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -176,49 +180,21 @@ internal fun KeysTab(
             Spacer(Modifier.height(16.dp))
         }
 
-        // Fixed keyboard at bottom — always show F-row
-        Column(
+        // Fixed keyboard at bottom — SharedCompactKeyboard, no dismiss bar
+        Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .background(Color(0xFF080F18))
-                .padding(horizontal = 2.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+                .padding(vertical = 4.dp),
         ) {
-            ResponsiveRow(ROW_FN, fnH, st, settings) { onKeyPress(it) }
-            HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
-            ResponsiveRow(ROW_NUM, mainH, st, settings) { onKeyPress(it) }
-            ResponsiveRow(ROW_QWERTY, mainH, st, settings) { onKeyPress(it) }
-            ResponsiveRow(ROW_HOME, mainH, st, settings) { onKeyPress(it) }
-            ResponsiveRow(ROW_ALPHA, mainH, st, settings) { onKeyPress(it) }
-            ResponsiveRow(
-                if (settings.compactModifiers) ROW_MODS_COMPACT else ROW_MODS,
-                mainH, st, settings,
-            ) { onKeyPress(it) }
-        }
-    }
-}
-
-@Composable
-internal fun ResponsiveRow(
-    keys: List<Key>,
-    height: androidx.compose.ui.unit.Dp,
-    st: KbState,
-    settings: KeyboardSettings,
-    onClick: (Key) -> Unit,
-) {
-    Row(Modifier.fillMaxWidth()) {
-        keys.forEach { k ->
-            KBtn(
-                key = k,
-                modifier = Modifier.weight(k.w),
-                h = height,
-                settings = settings,
-                active = isKeyActive(k, st),
-                topLabel = displayTop(k, st, settings.showKeyHints),
-                mainLabel = displayMain(k, st),
-                scrollable = false,
-                onPress = { onClick(k) },
+            SharedCompactKeyboard(
+                settings       = settings,
+                showDismissBar = false,
+                onSendKey      = onSendKey,
+                onReleaseKeys  = onReleaseKeys,
+                onConsumerKey  = onConsumerKey,
+                onTypeText     = onTypeText,
             )
         }
     }

@@ -21,12 +21,13 @@ import com.arena.hidcompatibilitytester.ui.screen.keyboard.tabs.NavNumpadTab
 
 @Composable
 fun KeyboardScreen(
-    isReady: Boolean,
-    settings: KeyboardSettings,
-    onSendKey: (modifiers: Int, keyCodes: List<Int>) -> Unit,
-    onConsumerKey: (Int) -> Unit,
-    onTypeText: (String) -> Unit,
-    onShowSettings: () -> Unit,
+    isReady        : Boolean,
+    settings       : KeyboardSettings,
+    onSendKey      : (modifiers: Int, keyCodes: List<Int>) -> Unit,
+    onReleaseKeys  : () -> Unit,
+    onConsumerKey  : (Int) -> Unit,
+    onTypeText     : (String) -> Unit,
+    onShowSettings : () -> Unit,
 ) {
     var st by remember(settings.numpadStartsLocked, settings.defaultTab) {
         mutableStateOf(
@@ -101,8 +102,6 @@ fun KeyboardScreen(
             }
         }
 
-        // Status bar always shown — Ready + ⚙ always visible
-        // LEDs + combo bar only when showStatusBar = true
         KbStatusBar(
             st = st,
             isReady = isReady,
@@ -126,14 +125,12 @@ fun KeyboardScreen(
                     Text("⏳", fontSize = 36.sp)
                     Text(
                         "Host not connected",
-                        color = Color.White,
-                        fontSize = 16.sp,
+                        color = Color.White, fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
                         "Go to Status tab → Start BLE HID\nPair from host Bluetooth settings",
-                        color = Color.Gray,
-                        fontSize = 13.sp,
+                        color = Color.Gray, fontSize = 13.sp,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -143,32 +140,36 @@ fun KeyboardScreen(
 
         when (st.tab) {
             0 -> KeysTab(
-                st = st,
-                settings = settings,
-                onKeyPress = { handleKey(it) },
-                onClearMods = { clearMods() },
+                st            = st,
+                settings      = settings,
+                onKeyPress    = { handleKey(it) },
+                onClearMods   = { clearMods() },
+                onSendKey     = onSendKey,
+                onReleaseKeys = onReleaseKeys,
+                onConsumerKey = onConsumerKey,
+                onTypeText    = onTypeText,
             )
 
             1 -> NavNumpadTab(
-                st = st,
-                settings = settings,
-                typeText = typeText,
+                st                = st,
+                settings          = settings,
+                typeText          = typeText,
                 onTypeTextChanged = { typeText = it },
-                onKeyPress = { handleKey(it) },
-                onNumpadKey = { code, label -> handleNumCode(code, label) },
-                onNumLock = { doHandleNumLockToggle() },
-                onInsertToggle = { handleInsertToggle() },
-                onClearMods = { clearMods() },
-                onSendKey = onSendKey,
-                onTypeText = onTypeText,
+                onKeyPress        = { handleKey(it) },
+                onNumpadKey       = { code, label -> handleNumCode(code, label) },
+                onNumLock         = { doHandleNumLockToggle() },
+                onInsertToggle    = { handleInsertToggle() },
+                onClearMods       = { clearMods() },
+                onSendKey         = onSendKey,
+                onTypeText        = onTypeText,
             )
 
             2 -> MediaTab(
-                st = st,
-                settings = settings,
-                onKeyPress = { handleKey(it) },
-                onConsumerKey = onConsumerKey,
-                onClearMods = { clearMods() },
+                st              = st,
+                settings        = settings,
+                onKeyPress      = { handleKey(it) },
+                onConsumerKey   = onConsumerKey,
+                onClearMods     = { clearMods() },
                 onUpdateLastKey = { st = st.copy(lastKey = it) },
             )
         }

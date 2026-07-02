@@ -4,14 +4,11 @@ internal fun isKeyActive(k: Key, st: KbState): Boolean = when {
     k.isCaps   -> st.caps
     k.isNum    -> st.numLock
     k.isScroll -> st.scrollLk
-    k.modBit == MOD_LSHIFT -> st.lShift
-    k.modBit == MOD_RSHIFT -> st.rShift
-    k.modBit == MOD_LCTRL  -> st.lCtrl
-    k.modBit == MOD_RCTRL  -> st.rCtrl
-    k.modBit == MOD_LALT   -> st.lAlt
-    k.modBit == MOD_RALT   -> st.rAlt
-    k.modBit == MOD_LGUI   -> st.lGui
-    k.modBit == MOD_RGUI   -> st.rGui
+    k.modBit == MOD_LSHIFT || k.modBit == MOD_RSHIFT -> st.shift
+    k.modBit == MOD_LCTRL  || k.modBit == MOD_RCTRL  -> st.ctrl
+    k.modBit == MOD_LALT                              -> st.alt
+    k.modBit == MOD_RALT                              -> st.altGr
+    k.modBit == MOD_LGUI   || k.modBit == MOD_RGUI   -> st.gui
     k.code == 0x49 && !k.isMod -> !st.insertMode
     else       -> false
 }
