@@ -28,31 +28,27 @@ internal fun KeysTab(
     onTypeText: (String) -> Unit,
 ) {
     val navH = settings.keyHeight.navDp.dp
-    val rowH = settings.keyHeight.mainDp.dp
-    val fnH  = settings.keyHeight.fnDp.dp
-    val fixedKbHeight = fnH + 1.dp + (rowH * 6) + 20.dp
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF080F18)),
     ) {
-        // Scrollable upper content
+        // Scrollable upper content — takes remaining space
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = fixedKbHeight)
+                .weight(1f)
                 .verticalScroll(rememberScrollState())
-                .padding(4.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalArrangement = Arrangement.spacedBy(1.dp),
                 ) {
                     Text(
                         "Navigation", color = Color(0xFF607D8B),
@@ -82,7 +78,7 @@ internal fun KeysTab(
 
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalArrangement = Arrangement.spacedBy(1.dp),
                 ) {
                     Text(
                         "Arrow Keys", color = Color(0xFF607D8B),
@@ -91,7 +87,7 @@ internal fun KeysTab(
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalArrangement = Arrangement.spacedBy(1.dp),
                     ) {
                         Row(
                             Modifier.fillMaxWidth(),
@@ -120,7 +116,7 @@ internal fun KeysTab(
                 "System Keys", color = Color(0xFF607D8B),
                 fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
             )
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Row(Modifier.fillMaxWidth()) {
                     SYSTEM_ROW1.forEach { k ->
                         KBtn(
@@ -143,15 +139,13 @@ internal fun KeysTab(
                 }
             }
 
-            Spacer(Modifier.height(6.dp))
-
             Text(
                 "Quick Modifiers", color = Color(0xFF607D8B),
                 fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
             )
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalArrangement = Arrangement.spacedBy(1.dp),
             ) {
                 QUICK_MODIFIERS_WITH_MENU.forEach { k ->
                     KBtn(
@@ -164,10 +158,10 @@ internal fun KeysTab(
             }
 
             if (st.anyMod) {
-                Spacer(Modifier.height(4.dp))
                 TextButton(
                     onClick = onClearMods,
                     modifier = Modifier.align(Alignment.End),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                 ) {
                     Text(
                         "Clear Modifiers", fontSize = 11.sp,
@@ -175,24 +169,14 @@ internal fun KeysTab(
                     )
                 }
             }
-
-            Spacer(Modifier.height(16.dp))
         }
 
-        // Fixed keyboard at bottom — uses parent st
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .background(Color(0xFF080F18))
-                .padding(vertical = 4.dp),
-        ) {
-            SharedCompactKeyboard(
-                st             = st,
-                settings       = settings,
-                showDismissBar = false,
-                onKeyPress     = onKeyPress,
-            )
-        }
+        // Fixed keyboard at bottom — no extra padding, no extra space
+        SharedCompactKeyboard(
+            st             = st,
+            settings       = settings,
+            showDismissBar = false,
+            onKeyPress     = onKeyPress,
+        )
     }
 }
