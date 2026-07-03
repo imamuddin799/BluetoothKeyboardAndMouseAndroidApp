@@ -34,6 +34,8 @@ object KeyboardSettingsStore {
             putBoolean("mediaRowRepeatVolume", s.mediaRowRepeatVolume)
             putBoolean("mediaRowRepeatBrightness", s.mediaRowRepeatBrightness)
             putString("mediaRowGroupOrder", s.mediaRowGroupOrder.joinToString(",") { it.name })
+            putBoolean("showNavRowInKeyboard", s.showNavRowInKeyboard)
+            putBoolean("showNavRowInTrackpad", s.showNavRowInTrackpad)
             putInt("defaultTab", s.defaultTab)
             apply()
         }
@@ -91,6 +93,8 @@ object KeyboardSettingsStore {
                     MediaRowGroup.BRIGHTNESS
                 )
             ),
+            showNavRowInKeyboard = p.getBoolean("showNavRowInKeyboard", false),
+            showNavRowInTrackpad = p.getBoolean("showNavRowInTrackpad", false),
             defaultTab = p.getInt("defaultTab", 0),
         )
     }

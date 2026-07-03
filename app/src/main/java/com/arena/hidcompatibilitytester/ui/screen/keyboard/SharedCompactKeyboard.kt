@@ -24,6 +24,7 @@ fun SharedCompactKeyboard(
     settings         : KeyboardSettings,
     showDismissBar   : Boolean = false,
     showMediaRow     : Boolean = false,
+    showNavRow       : Boolean = false,
     showComboPreview : Boolean = false,
     onKeyPress       : (Key) -> Unit,
     onConsumerKey    : ((Int) -> Unit)? = null,
@@ -126,6 +127,7 @@ fun SharedCompactKeyboard(
         val rowH = settings.keyHeight.mainDp.dp
         val fnH  = settings.keyHeight.fnDp.dp
 
+        // ── Optional media row ──
         if (showMediaRow) {
             val mediaKeys = buildMediaRow(settings)
             if (mediaKeys.isNotEmpty()) {
@@ -136,6 +138,15 @@ fun SharedCompactKeyboard(
             }
         }
 
+        // ── Optional nav row ──
+        if (showNavRow) {
+            SharedStyledKeyRow(SHARED_ROW_NAV, fnH, settings, ::isActive, ::mainLabel, ::topLabel) {
+                handleKeyClick(it)
+            }
+            HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
+        }
+
+        // ── Standard keyboard rows ──
         SharedStyledKeyRow(SHARED_ROW_FN, fnH, settings, ::isActive, ::mainLabel, ::topLabel) {
             handleKeyClick(it)
         }
@@ -244,6 +255,22 @@ private fun buildMediaRow(settings: KeyboardSettings): List<Key> {
     val totalKeys = allKeys.size
     return allKeys.map { it.copy(w = 1f) }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Navigation quick row
+// ═══════════════════════════════════════════════════════════════
+
+private val SHARED_ROW_NAV = listOf(
+    Key("PgUp", code = 0x4B, color = KC.SPECIAL),
+    Key("PgDn", code = 0x4E, color = KC.SPECIAL),
+    Key("Ins",  code = 0x49, color = KC.SPECIAL),
+    Key("Home", code = 0x4A, color = KC.SPECIAL),
+    Key("End",  code = 0x4D, color = KC.SPECIAL),
+    Key("←",    code = 0x50, color = KC.SPECIAL),
+    Key("↑",    code = 0x52, color = KC.SPECIAL),
+    Key("↓",    code = 0x51, color = KC.SPECIAL),
+    Key("→",    code = 0x4F, color = KC.SPECIAL),
+)
 
 // ═══════════════════════════════════════════════════════════════
 // Key row definitions

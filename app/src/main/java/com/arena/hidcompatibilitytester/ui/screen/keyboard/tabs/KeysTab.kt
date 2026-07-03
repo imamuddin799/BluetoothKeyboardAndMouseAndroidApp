@@ -178,12 +178,13 @@ internal fun KeysTab(
                 .padding(top = 3.dp, bottom = 6.dp)
         ) {
             SharedCompactKeyboard(
-                st           = st,
-                settings     = settings,
+                st             = st,
+                settings       = settings,
                 showDismissBar = false,
-                showMediaRow = settings.showMediaRowInKeyboard,
-                onKeyPress   = onKeyPress,
-                onConsumerKey = onConsumerKey,
+                showMediaRow   = settings.showMediaRowInKeyboard,
+                showNavRow     = settings.showNavRowInKeyboard,
+                onKeyPress     = onKeyPress,
+                onConsumerKey  = onConsumerKey,
             )
         }
     }

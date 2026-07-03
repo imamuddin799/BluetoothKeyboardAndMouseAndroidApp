@@ -136,6 +136,7 @@ fun TrackpadScreen(
                     settings         = keyboardSettings,
                     showDismissBar   = true,
                     showMediaRow     = keyboardSettings.showMediaRowInTrackpad,
+                    showNavRow       = keyboardSettings.showNavRowInTrackpad,
                     showComboPreview = keyboardSettings.showComboPreview,
                     onKeyPress       = { key ->
                         kbSt = handleKeyPress(

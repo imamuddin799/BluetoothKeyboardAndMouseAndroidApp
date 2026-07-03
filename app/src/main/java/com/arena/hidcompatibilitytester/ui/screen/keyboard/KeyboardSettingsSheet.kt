@@ -391,6 +391,32 @@ private fun AppearanceSection(
         }
     }
 
+    // ── Nav Row Settings ──
+    SettingsCard("Navigation Quick Row", spacing) {
+        Text(
+            "Home · End · PgUp · PgDn · Ins · ← ↑ ↓ →",
+            fontSize = 11.sp,
+            color = Color(0xFF607D8B),
+            fontWeight = FontWeight.Medium,
+        )
+
+        SettingsToggle(
+            "Show in Keyboard Tab",
+            "Navigation row between media and function keys",
+            settings.showNavRowInKeyboard
+        ) {
+            onChange(settings.copy(showNavRowInKeyboard = it))
+        }
+
+        SettingsToggle(
+            "Show in Trackpad Keyboard",
+            "Navigation row when keyboard is open on trackpad",
+            settings.showNavRowInTrackpad
+        ) {
+            onChange(settings.copy(showNavRowInTrackpad = it))
+        }
+    }
+
     SettingsCard("Visibility", spacing) {
         SettingsToggle(
             "High Contrast Mode",
@@ -782,55 +808,61 @@ private fun MediaRowSection(
 }
 
 @Composable
-private fun DragToReorderList(
+fun DragToReorderList(
     items: List<MediaRowGroup>,
     onReorder: (List<MediaRowGroup>) -> Unit,
 ) {
-    var orderList     by remember(items) { mutableStateOf(items.toList()) }
-    var draggingIdx   by remember { mutableIntStateOf(-1) }
-    var dragYAccum    by remember { mutableFloatStateOf(0f) }
+    var orderList by remember(items) { mutableStateOf(items.toList()) }
+    var draggingIdx by remember { mutableIntStateOf(-1) }
+    var dragYAccum by remember { mutableFloatStateOf(0f) }
     var lastTargetIdx by remember { mutableIntStateOf(-1) }
+    var isCommitting by remember { mutableStateOf(false) }  // ← only once here
 
-    val density      = LocalDensity.current
+    val density = LocalDensity.current
     val itemHeightDp = 72.dp
-    val spacingDp    = 6.dp
-    val slotPx       = with(density) { (itemHeightDp + spacingDp).toPx() }
+    val spacingDp = 6.dp
+    val slotPx = with(density) { (itemHeightDp + spacingDp).toPx() }
 
-    val targetIdx = if (draggingIdx >= 0) {
-        (draggingIdx + (dragYAccum / slotPx).roundToInt())
-            .coerceIn(0, orderList.size - 1)
-    } else -1
+    val targetIdx =
+        if (draggingIdx >= 0) {
+            (draggingIdx + (dragYAccum / slotPx).roundToInt()).coerceIn(0, orderList.size - 1)
+        } else -1
 
-    LaunchedEffect(targetIdx) {
-        if (targetIdx >= 0) lastTargetIdx = targetIdx
+    LaunchedEffect(targetIdx) { if (targetIdx >= 0) lastTargetIdx = targetIdx }
+
+    val offsetAnimatables = remember {
+        mutableStateMapOf<MediaRowGroup, Animatable<Float, AnimationVector1D>>()
+    }
+    val scaleAnimatables = remember {
+        mutableStateMapOf<MediaRowGroup, Animatable<Float, AnimationVector1D>>()
+    }
+    val elevationAnimatables = remember {
+        mutableStateMapOf<MediaRowGroup, Animatable<Float, AnimationVector1D>>()
     }
 
-    // Stable animatables keyed by item identity, not index
-    val offsetAnimatables   = remember { mutableStateMapOf<MediaRowGroup, Animatable<Float, AnimationVector1D>>() }
-    val scaleAnimatables    = remember { mutableStateMapOf<MediaRowGroup, Animatable<Float, AnimationVector1D>>() }
-    val elevationAnimatables = remember { mutableStateMapOf<MediaRowGroup, Animatable<Float, AnimationVector1D>>() }
-
     orderList.forEach { group ->
-        if (!offsetAnimatables.containsKey(group))    offsetAnimatables[group]    = Animatable(0f)
-        if (!scaleAnimatables.containsKey(group))     scaleAnimatables[group]     = Animatable(1f)
+        if (!offsetAnimatables.containsKey(group)) offsetAnimatables[group] = Animatable(0f)
+        if (!scaleAnimatables.containsKey(group)) scaleAnimatables[group] = Animatable(1f)
         if (!elevationAnimatables.containsKey(group)) elevationAnimatables[group] = Animatable(0f)
     }
 
     val coroutineScope = rememberCoroutineScope()
+    // ← removed second var isCommitting here
 
-    // Drive shuffle offsets while dragging
     orderList.forEachIndexed { index, group ->
         val isDragged = draggingIdx == index
 
-        val targetOffsetPx = when {
-            isDragged  -> dragYAccum
-            draggingIdx < 0 -> 0f
-            targetIdx > draggingIdx && index in (draggingIdx + 1)..targetIdx -> -slotPx
-            targetIdx < draggingIdx && index in targetIdx until draggingIdx  ->  slotPx
-            else -> 0f
-        }
+        val targetOffsetPx =
+            when {
+                isDragged -> dragYAccum
+                draggingIdx < 0 -> 0f
+                targetIdx > draggingIdx && index in (draggingIdx + 1)..targetIdx -> -slotPx
+                targetIdx < draggingIdx && index in targetIdx until draggingIdx -> slotPx
+                else -> 0f
+            }
 
         LaunchedEffect(group, targetOffsetPx, isDragged) {
+            if (isCommitting) return@LaunchedEffect
             val anim = offsetAnimatables[group] ?: return@LaunchedEffect
             if (isDragged) {
                 anim.snapTo(targetOffsetPx)
@@ -843,6 +875,7 @@ private fun DragToReorderList(
         }
 
         LaunchedEffect(group, isDragged) {
+            if (isCommitting) return@LaunchedEffect
             scaleAnimatables[group]?.animateTo(
                 if (isDragged) 1.04f else 1f,
                 animationSpec = spring(dampingRatio = 0.65f, stiffness = 200f)
@@ -856,14 +889,13 @@ private fun DragToReorderList(
 
     fun commitReorder() {
         val from = draggingIdx
-        val to   = lastTargetIdx
+        val to = lastTargetIdx
 
-        draggingIdx   = -1
-        dragYAccum    = 0f
+        draggingIdx = -1
+        dragYAccum = 0f
         lastTargetIdx = -1
 
         if (from < 0 || to < 0 || to == from) {
-            // No actual reorder but still animate dragged item back to 0
             coroutineScope.launch {
                 orderList.getOrNull(from)?.let { group ->
                     offsetAnimatables[group]?.animateTo(
@@ -880,22 +912,22 @@ private fun DragToReorderList(
         newList.add(to, draggedItem)
 
         coroutineScope.launch {
-            // ── CRITICAL: Freeze every item at its current visual pixel position
-            //    expressed in new-list coordinate space, BEFORE the list reorders ──
-            newList.forEachIndexed { newIndex, group ->
-                val oldIndex         = orderList.indexOf(group)
-                val currentAnimValue = offsetAnimatables[group]?.value ?: 0f
-                // Where this item visually is right now, relative to new slot
-                val frozenOffset     = (oldIndex - newIndex) * slotPx + currentAnimValue
-                offsetAnimatables[group]?.snapTo(frozenOffset)
+            isCommitting = true
+
+            val frozenOffsets = newList.mapIndexed { newIndex, group ->
+                val oldIndex = orderList.indexOf(group)
+                val currentValue = offsetAnimatables[group]?.value ?: 0f
+                group to (oldIndex - newIndex) * slotPx + currentValue
             }
 
-            // Reorder the list — items look frozen because offsets compensate exactly
+            frozenOffsets.forEach { (group, frozen) ->
+                offsetAnimatables[group]?.snapTo(frozen)
+            }
+
             orderList = newList
             onReorder(newList)
 
-            // Now spring every item from frozen position into its final resting place
-            newList.map { group ->
+            val jobs = newList.map { group ->
                 launch {
                     offsetAnimatables[group]?.animateTo(
                         0f,
@@ -903,13 +935,16 @@ private fun DragToReorderList(
                     )
                 }
             }
+            jobs.forEach { it.join() }
+
+            isCommitting = false
         }
     }
 
     fun cancelDrag() {
         val cancelledGroup = orderList.getOrNull(draggingIdx)
-        draggingIdx   = -1
-        dragYAccum    = 0f
+        draggingIdx = -1
+        dragYAccum = 0f
         lastTargetIdx = -1
 
         coroutineScope.launch {
@@ -924,123 +959,149 @@ private fun DragToReorderList(
 
     Column(
         verticalArrangement = Arrangement.spacedBy(spacingDp),
-        modifier = Modifier.fillMaxWidth()
+        modifier =
+            Modifier.fillMaxWidth().pointerInput(orderList) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { startOffset ->
+                        if (isCommitting) return@detectDragGesturesAfterLongPress
+                        val calculatedIndex = (startOffset.y / slotPx).toInt()
+                        if (calculatedIndex in orderList.indices) {
+                            draggingIdx = calculatedIndex
+                            dragYAccum = 0f
+                            lastTargetIdx = calculatedIndex
+                        }
+                    },
+                    onDrag = { change, amount ->
+                        if (draggingIdx >= 0 && !isCommitting) {
+                            change.consume()
+                            dragYAccum += amount.y
+                        }
+                    },
+                    onDragEnd = { if (!isCommitting) commitReorder() },
+                    onDragCancel = { if (!isCommitting) cancelDrag() }
+                )
+            }
     ) {
         orderList.forEachIndexed { index, group ->
             val isDragged = draggingIdx == index
-            val isTarget  = !isDragged && index == targetIdx
+            val isTarget = !isDragged && index == targetIdx
 
-            val offsetDp    = with(density) { (offsetAnimatables[group]?.value ?: 0f).toDp() }
-            val scale       = scaleAnimatables[group]?.value ?: 1f
+            val offsetDp = with(density) { (offsetAnimatables[group]?.value ?: 0f).toDp() }
+            val scale = scaleAnimatables[group]?.value ?: 1f
             val elevationDp = with(density) { (elevationAnimatables[group]?.value ?: 0f).toDp() }
 
-            val bgColor = when {
-                isDragged -> Color(0xFF4A90D9).copy(0.3f)
-                isTarget  -> Color(0xFF4A90D9).copy(0.08f)
-                else      -> Color(0xFF0A1520)
-            }
-            val borderColor = when {
-                isDragged -> Color(0xFF4A90D9)
-                isTarget  -> Color(0xFF4A90D9).copy(0.3f)
-                else      -> Color.White.copy(0.08f)
-            }
-            val borderWidth = when {
-                isDragged -> 2.dp
-                isTarget  -> 1.dp
-                else      -> 0.5.dp
-            }
+            val bgColor =
+                when {
+                    isDragged -> Color(0xFF4A90D9).copy(0.3f)
+                    isTarget -> Color(0xFF4A90D9).copy(0.08f)
+                    else -> Color(0xFF0A1520)
+                }
+            val borderColor =
+                when {
+                    isDragged -> Color(0xFF4A90D9)
+                    isTarget -> Color(0xFF4A90D9).copy(0.3f)
+                    else -> Color.White.copy(0.08f)
+                }
+            val borderWidth =
+                when {
+                    isDragged -> 2.dp
+                    isTarget -> 1.dp
+                    else -> 0.5.dp
+                }
 
             Surface(
-                color           = bgColor,
-                shape           = RoundedCornerShape(12.dp),
+                color = bgColor,
+                shape = RoundedCornerShape(12.dp),
                 shadowElevation = elevationDp,
-                modifier        = Modifier
-                    .fillMaxWidth()
-                    .height(itemHeightDp)
-                    .zIndex(if (isDragged) 10f else 0f)
-                    .offset(y = offsetDp)
-                    .scale(scale)
-                    .border(borderWidth, borderColor, RoundedCornerShape(12.dp))
-                    .pointerInput(index) {
-                        detectDragGesturesAfterLongPress(
-                            onDragStart = {
-                                draggingIdx   = index
-                                dragYAccum    = 0f
-                                lastTargetIdx = index
-                            },
-                            onDrag = { change, amount ->
-                                change.consume()
-                                dragYAccum += amount.y
-                            },
-                            onDragEnd    = { commitReorder() },
-                            onDragCancel = { cancelDrag() }
-                        )
-                    }
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(itemHeightDp)
+                        .zIndex(if (isDragged) 10f else 0f)
+                        .offset(y = offsetDp)
+                        .scale(scale)
+                        .border(borderWidth, borderColor, RoundedCornerShape(12.dp))
             ) {
                 Row(
-                    modifier              = Modifier.fillMaxSize().padding(horizontal = 14.dp),
-                    verticalAlignment     = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Row(
-                        verticalAlignment     = Alignment.CenterVertically,
+                        verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier              = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f),
                     ) {
-                        val displayIndex = when {
-                            isDragged        -> targetIdx + 1
-                            draggingIdx >= 0 -> {
-                                val wouldBe = when {
-                                    targetIdx > draggingIdx && index in (draggingIdx + 1)..targetIdx -> index - 1
-                                    targetIdx < draggingIdx && index in targetIdx until draggingIdx  -> index + 1
-                                    else -> index
+                        val displayIndex =
+                            when {
+                                isDragged -> targetIdx + 1
+                                draggingIdx >= 0 -> {
+                                    val wouldBe =
+                                        when {
+                                            targetIdx > draggingIdx &&
+                                                index in (draggingIdx + 1)..targetIdx -> index - 1
+                                            targetIdx < draggingIdx &&
+                                                index in targetIdx until draggingIdx -> index + 1
+                                            else -> index
+                                        }
+                                    wouldBe + 1
                                 }
-                                wouldBe + 1
+                                else -> index + 1
                             }
-                            else -> index + 1
-                        }
 
                         Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .background(
-                                    if (isDragged) Color(0xFF4A90D9).copy(0.3f)
-                                    else Color(0xFF4A90D9).copy(0.15f),
-                                    RoundedCornerShape(6.dp)
-                                ),
+                            modifier =
+                                Modifier
+                                    .size(24.dp)
+                                    .background(
+                                        if (isDragged) Color(0xFF4A90D9).copy(0.3f)
+                                        else Color(0xFF4A90D9).copy(0.15f),
+                                        RoundedCornerShape(6.dp)
+                                    ),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
                                 "$displayIndex",
-                                fontSize   = 12.sp,
-                                color      = if (isDragged) Color.White else Color(0xFF90CAF9),
+                                fontSize = 12.sp,
+                                color = if (isDragged) Color.White else Color(0xFF90CAF9),
                                 fontWeight = FontWeight.Bold,
                             )
                         }
-
                         Text(group.icon, fontSize = 20.sp)
-
                         Column {
-                            Text(group.label, fontSize = 14.sp, color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                group.label,
+                                fontSize = 14.sp,
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold
+                            )
                             Text(
                                 when (group) {
-                                    MediaRowGroup.TRANSPORT  -> "⏮ ⏯ ⏹ ⏭"
-                                    MediaRowGroup.VOLUME     -> "🔇 🔉 🔊"
+                                    MediaRowGroup.TRANSPORT -> "⏮ ⏯ ⏹ ⏭"
+                                    MediaRowGroup.VOLUME -> "🔇 🔉 🔊"
                                     MediaRowGroup.BRIGHTNESS -> "🔅 🔆"
                                 },
                                 fontSize = 11.sp,
-                                color    = Color(0xFF607D8B),
+                                color = Color(0xFF607D8B),
                             )
                         }
                     }
-
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(1.dp),
-                        modifier            = Modifier.padding(start = 8.dp)
+                        modifier = Modifier.padding(start = 8.dp)
                     ) {
-                        Text("⠿", fontSize = 22.sp, color = if (isDragged) Color(0xFF90CAF9) else Color(0xFF546E7A))
-                        Text("Hold & drag", fontSize = 7.sp, color = Color(0xFF455A64), maxLines = 1)
+                        Text(
+                            "⠿",
+                            fontSize = 22.sp,
+                            color = if (isDragged) Color(0xFF90CAF9) else Color(0xFF546E7A)
+                        )
+                        Text(
+                            "Hold & drag",
+                            fontSize = 7.sp,
+                            color = Color(0xFF455A64),
+                            maxLines = 1
+                        )
                     }
                 }
             }

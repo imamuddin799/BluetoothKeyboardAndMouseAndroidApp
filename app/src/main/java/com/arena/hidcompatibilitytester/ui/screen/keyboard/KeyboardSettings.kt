@@ -49,6 +49,10 @@ data class KeyboardSettings(
         MediaRowGroup.BRIGHTNESS,
     ),
 
+    // Nav Quick Row
+    val showNavRowInKeyboard: Boolean = false,
+    val showNavRowInTrackpad: Boolean = false,
+
     // Default tab
     val defaultTab: Int = 0,
 )
