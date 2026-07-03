@@ -52,12 +52,16 @@ internal fun KBtn(
         keyBg(key.color, active, pressed, settings.highContrastMode),
         tween(70), label = "bg"
     )
-    val sc by animateFloatAsState(if (pressed) 0.93f else 1f, tween(55), label = "sc")
+    val sc by animateFloatAsState(
+        if (pressed) 0.93f else 1f, tween(55), label = "sc"
+    )
 
     val doRepeat = settings.repeatEnabled && key.shouldRepeat()
 
     val gestureModifier = if (scrollable) {
-        Modifier.pointerInput(key, settings.repeatInitialDelayMs, settings.repeatIntervalMs) {
+        Modifier.pointerInput(
+            key, settings.repeatInitialDelayMs, settings.repeatIntervalMs
+        ) {
             repeatScrollSafeTap(
                 scope            = scope,
                 slopPx           = 18f,
@@ -73,7 +77,9 @@ internal fun KBtn(
             )
         }
     } else {
-        Modifier.pointerInput(key, settings.repeatInitialDelayMs, settings.repeatIntervalMs) {
+        Modifier.pointerInput(
+            key, settings.repeatInitialDelayMs, settings.repeatIntervalMs
+        ) {
             detectTapGestures(
                 onPress = {
                     pressed = true
@@ -92,10 +98,53 @@ internal fun KBtn(
                     }
                     tryAwaitRelease()
                     pressed = false
-                    holdJob?.cancel(); holdJob = null
+                    holdJob?.cancel()
+                    holdJob = null
                 },
             )
         }
+    }
+
+    // ── Function keys: no padding, pure center, no hints ──
+    val isFnKey = key.color == KC.SPECIAL
+
+    val showTopHint = !isFnKey &&
+            topLabel.isNotEmpty() &&
+            settings.showKeyHints
+
+    val compactHeight     = h <= 34.dp
+    val veryCompactHeight = h <= 32.dp
+
+    val contentVerticalPadding = when {
+        isFnKey           -> 0.dp
+        veryCompactHeight -> 1.dp
+        compactHeight     -> 1.5.dp
+        else              -> 2.dp
+    }
+
+    val contentHorizontalPadding = if (isFnKey) 0.dp else 2.dp
+
+    val hintFontSize = when {
+        veryCompactHeight -> 5.sp
+        compactHeight     -> 6.sp
+        else              -> 7.sp
+    }
+
+    val hintTopPadding = when {
+        veryCompactHeight -> 0.dp
+        compactHeight     -> 0.5.dp
+        else              -> 1.dp
+    }
+
+    val mainLabelOffsetY = if (showTopHint) {
+        when {
+            veryCompactHeight -> 1.dp
+            compactHeight     -> 1.5.dp
+            h <= 40.dp        -> 2.dp
+            else              -> 2.5.dp
+        }
+    } else {
+        0.dp
     }
 
     val baseFontSp = settings.keyFontSize.baseSp
@@ -106,66 +155,100 @@ internal fun KBtn(
             .scale(sc)
             .padding(1.dp)
             .clip(RoundedCornerShape(5.dp))
-            .background(Brush.verticalGradient(listOf(bg.copy(alpha = 0.85f), bg)))
+            .background(
+                Brush.verticalGradient(
+                    listOf(bg.copy(alpha = 0.85f), bg)
+                )
+            )
             .border(
                 width = if (active) 1.5.dp else 0.5.dp,
-                color = if (active) Color(0xFF4A90D9) else Color.White.copy(0.08f),
+                color = if (active) Color(0xFF4A90D9)
+                        else Color.White.copy(0.08f),
                 shape = RoundedCornerShape(5.dp),
             )
             .then(gestureModifier),
-        contentAlignment = Alignment.Center,
+        contentAlignment = if (isFnKey) Alignment.Center else Alignment.TopStart,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 1.dp, vertical = 2.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            if (topLabel.isNotEmpty() && settings.showKeyHints) {
-                Text(
-                    topLabel, fontSize = 7.sp,
-                    color = Color.White.copy(alpha = 0.30f),
-                    modifier = Modifier.fillMaxWidth(),
-                    lineHeight = 7.sp, textAlign = TextAlign.Start,
-                )
-            } else {
-                Spacer(Modifier.height(7.sp.value.dp))
-            }
-
+        if (isFnKey) {
+            // ── Function key: single centered text, zero padding ──
+            Text(
+                text = mainLabel,
+                color = keyFg(key.color, active, settings.highContrastMode),
+                fontSize = when {
+                    mainLabel.length > 5 -> (baseFontSp - 5).coerceAtLeast(6).sp
+                    mainLabel.length > 3 -> (baseFontSp - 3).coerceAtLeast(7).sp
+                    mainLabel.length > 2 -> (baseFontSp - 2).coerceAtLeast(8).sp
+                    else                 -> baseFontSp.sp
+                },
+                fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Clip,
+            )
+        } else {
+            // ── Normal key: hint at top corner, label near center ──
             Box(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center,
+                    .fillMaxSize()
+                    .padding(
+                        horizontal = contentHorizontalPadding,
+                        vertical = contentVerticalPadding
+                    )
             ) {
+                if (showTopHint) {
+                    Text(
+                        text = topLabel,
+                        fontSize = hintFontSize,
+                        lineHeight = hintFontSize,
+                        color = Color.White.copy(alpha = 0.30f),
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .fillMaxWidth()
+                            .padding(top = hintTopPadding),
+                        textAlign = TextAlign.Start,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Clip,
+                    )
+                }
+
                 Text(
-                    mainLabel,
+                    text = mainLabel,
                     color = keyFg(key.color, active, settings.highContrastMode),
                     fontSize = when {
                         mainLabel.length > 5 -> (baseFontSp - 5).coerceAtLeast(6).sp
                         mainLabel.length > 3 -> (baseFontSp - 3).coerceAtLeast(7).sp
                         mainLabel.length > 2 -> (baseFontSp - 2).coerceAtLeast(8).sp
-                        else -> baseFontSp.sp
+                        else                 -> baseFontSp.sp
                     },
-                    fontWeight = if (key.color == KC.ACCENT || active) FontWeight.Bold
-                    else FontWeight.Medium,
+                    fontWeight = if (key.color == KC.ACCENT || active) {
+                        FontWeight.Bold
+                    } else {
+                        FontWeight.Medium
+                    },
                     textAlign = TextAlign.Center,
                     maxLines = 1,
+                    softWrap = false,
                     overflow = TextOverflow.Clip,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .fillMaxWidth()
+                        .offset(y = mainLabelOffsetY)
+                        .padding(horizontal = 1.dp)
                 )
             }
-
-            Spacer(Modifier.height(6.sp.value.dp))
         }
 
+        // ── Active indicator dot ──
         if (active) {
             Box(
                 Modifier
-                    .size(5.dp)
+                    .size(if (compactHeight) 4.dp else 5.dp)
                     .clip(RoundedCornerShape(3.dp))
                     .background(Color(0xFF4FC3F7))
                     .align(Alignment.BottomCenter)
-                    .offset(y = (-2).dp)
+                    .offset(y = if (compactHeight) (-1).dp else (-2).dp)
             )
         }
     }
