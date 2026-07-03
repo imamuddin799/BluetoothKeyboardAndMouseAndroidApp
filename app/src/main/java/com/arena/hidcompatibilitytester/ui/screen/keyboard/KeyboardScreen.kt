@@ -124,11 +124,12 @@ fun KeyboardScreen(
         }
 
         KbStatusBar(
-            st             = st,
-            isReady        = isReady,
-            showFullStatus = settings.showStatusBar,
-            onClearMods    = { clearMods() },
-            onShowSettings = onShowSettings,
+            st               = st,
+            isReady          = isReady,
+            showFullStatus   = settings.showStatusBar,
+            showComboPreview = settings.showComboPreview,
+            onClearMods      = { clearMods() },
+            onShowSettings   = onShowSettings,
         )
 
         if (!isReady) {

@@ -24,6 +24,7 @@ internal fun KbStatusBar(
     st: KbState,
     isReady: Boolean,
     showFullStatus: Boolean,
+    showComboPreview: Boolean,
     onClearMods: () -> Unit,
     onShowSettings: () -> Unit,
 ) {
@@ -71,7 +72,7 @@ internal fun KbStatusBar(
 
         // Combo row: always show when there's something to display
         // This ensures pressed keys and mod combos are always visible
-        if (st.anyMod || st.lastKey.isNotEmpty()) {
+        if (showComboPreview && (st.anyMod || st.lastKey.isNotEmpty())) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -102,7 +103,12 @@ internal fun KbStatusBar(
                         onClick = onClearMods,
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                     ) {
-                        Text("✕ Clear", fontSize = 10.sp, color = Color(0xFFEF9A9A), maxLines = 1)
+                        Text(
+                            "✕ Clear",
+                            fontSize = 10.sp,
+                            color = Color(0xFFEF9A9A),
+                            maxLines = 1
+                        )
                     }
                 }
             }

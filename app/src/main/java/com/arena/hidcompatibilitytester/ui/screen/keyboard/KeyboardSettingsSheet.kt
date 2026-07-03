@@ -281,6 +281,14 @@ private fun BehaviorSection(
         ) {
             onChange(settings.copy(showStatusBar = it))
         }
+
+        SettingsToggle(
+            "Show Key Combo Preview",
+            "Show current modifier/key combo and Clear button",
+            settings.showComboPreview
+        ) {
+            onChange(settings.copy(showComboPreview = it))
+        }
     }
 
     SettingsCard("Default Tab", spacing) {

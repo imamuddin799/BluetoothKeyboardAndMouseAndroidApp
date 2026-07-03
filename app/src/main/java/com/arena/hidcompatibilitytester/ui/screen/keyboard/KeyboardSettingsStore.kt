@@ -16,6 +16,7 @@ object KeyboardSettingsStore {
             putBoolean("soundOnPress", s.soundOnPress)
             putString("keyHeight", s.keyHeight.name)
             putBoolean("showStatusBar", s.showStatusBar)
+            putBoolean("showComboPreview", s.showComboPreview)
             putBoolean("compactModifiers", s.compactModifiers)
             putBoolean("stickyModifiers", s.stickyModifiers)
             putBoolean("keepModsAfterTab", s.keepModsAfterTab)
@@ -45,6 +46,7 @@ object KeyboardSettingsStore {
                 KeyHeight.valueOf(p.getString("keyHeight", "MEDIUM")!!)
             }.getOrDefault(KeyHeight.MEDIUM),
             showStatusBar = p.getBoolean("showStatusBar", true),
+            showComboPreview = p.getBoolean("showComboPreview", true),
             compactModifiers = p.getBoolean("compactModifiers", false),
             stickyModifiers = p.getBoolean("stickyModifiers", false),
             keepModsAfterTab = p.getBoolean("keepModsAfterTab", true),

@@ -16,6 +16,7 @@ data class KeyboardSettings(
     // Layout
     val keyHeight: KeyHeight = KeyHeight.MEDIUM,
     val showStatusBar: Boolean = true,
+    val showComboPreview: Boolean = true, // <- add this
     val compactModifiers: Boolean = false,
 
     // Behavior
