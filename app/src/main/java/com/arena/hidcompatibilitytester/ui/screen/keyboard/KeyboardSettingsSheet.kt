@@ -273,6 +273,24 @@ private fun BehaviorSection(
         StickyModsExplainCard(settings.stickyModifiers, settings.keepModsAfterTab)
     }
 
+    SettingsCard("Media Quick Row", spacing) {
+        SettingsToggle(
+            "Show in Keyboard Tab",
+            "Transport, volume & brightness row above function keys",
+            settings.showMediaRowInKeyboard
+        ) {
+            onChange(settings.copy(showMediaRowInKeyboard = it))
+        }
+
+        SettingsToggle(
+            "Show in Trackpad Keyboard",
+            "Same row when keyboard is open on trackpad screen",
+            settings.showMediaRowInTrackpad
+        ) {
+            onChange(settings.copy(showMediaRowInTrackpad = it))
+        }
+    }
+
     SettingsCard("Status Bar", spacing) {
         SettingsToggle(
             "Show LED Indicators",

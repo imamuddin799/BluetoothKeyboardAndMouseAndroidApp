@@ -171,12 +171,20 @@ internal fun KeysTab(
             }
         }
 
-        // Fixed keyboard at bottom — no extra padding, no extra space
-        SharedCompactKeyboard(
-            st             = st,
-            settings       = settings,
-            showDismissBar = false,
-            onKeyPress     = onKeyPress,
-        )
+        // Fixed keyboard at bottom
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 3.dp, bottom = 6.dp)
+        ) {
+            SharedCompactKeyboard(
+                st           = st,
+                settings     = settings,
+                showDismissBar = false,
+                showMediaRow = settings.showMediaRowInKeyboard,
+                onKeyPress   = onKeyPress,
+                onConsumerKey = onConsumerKey,
+            )
+        }
     }
 }

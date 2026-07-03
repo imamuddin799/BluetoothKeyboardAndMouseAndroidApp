@@ -26,22 +26,23 @@ enum class KC { NORMAL, MOD, SPECIAL, ACCENT, DANGER }
 // ═════════════════════════════════════════════════════════════════════════════
 
 data class Key(
-    val label    : String,
-    val shift    : String  = "",
-    val altGr    : String  = "",
-    val w        : Float   = 1f,
-    val code     : Int     = 0,
-    val modBit   : Int     = 0,
-    val color    : KC      = KC.NORMAL,
-    val isMod    : Boolean = false,
-    val isCaps   : Boolean = false,
-    val isNum    : Boolean = false,
-    val isScroll : Boolean = false,
-    val noRepeat : Boolean = false,
+    val label       : String,
+    val shifted     : String  = "",
+    val code        : Int     = 0,
+    val w           : Float   = 1f,
+    val color       : KC      = KC.NORMAL,
+    val isMod       : Boolean = false,
+    val modBit      : Int     = 0,
+    val isCaps      : Boolean = false,
+    val noRepeat    : Boolean = false,
+    val isConsumer  : Boolean = false,
+    val consumerCode: Int     = 0,
+    val isNum       : Boolean = false,
+    val isScroll    : Boolean = false,
 )
 
 fun Key.shouldRepeat() =
-    !noRepeat && !isMod && !isCaps && !isNum && !isScroll
+    !noRepeat && !isMod && !isCaps && !isNum && !isScroll && !isConsumer
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Media key model

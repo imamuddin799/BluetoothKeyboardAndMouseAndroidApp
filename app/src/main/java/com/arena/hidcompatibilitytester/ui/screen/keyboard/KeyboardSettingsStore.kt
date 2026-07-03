@@ -21,6 +21,8 @@ object KeyboardSettingsStore {
             putBoolean("stickyModifiers", s.stickyModifiers)
             putBoolean("keepModsAfterTab", s.keepModsAfterTab)
             putString("keyFontSize", s.keyFontSize.name)
+            putBoolean("showMediaRowInKeyboard", s.showMediaRowInKeyboard)
+            putBoolean("showMediaRowInTrackpad", s.showMediaRowInTrackpad)
             putBoolean("showKeyHints", s.showKeyHints)
             putBoolean("highContrastMode", s.highContrastMode)
             putBoolean("numpadStartsLocked", s.numpadStartsLocked)
@@ -53,6 +55,8 @@ object KeyboardSettingsStore {
             keyFontSize = runCatching {
                 KeyFontSize.valueOf(p.getString("keyFontSize", "MEDIUM")!!)
             }.getOrDefault(KeyFontSize.MEDIUM),
+            showMediaRowInKeyboard = p.getBoolean("showMediaRowInKeyboard", false),
+            showMediaRowInTrackpad = p.getBoolean("showMediaRowInTrackpad", false),
             showKeyHints = p.getBoolean("showKeyHints", true),
             highContrastMode = p.getBoolean("highContrastMode", false),
             numpadStartsLocked = p.getBoolean("numpadStartsLocked", true),

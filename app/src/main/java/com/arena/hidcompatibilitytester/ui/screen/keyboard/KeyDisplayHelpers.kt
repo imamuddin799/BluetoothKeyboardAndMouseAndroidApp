@@ -18,19 +18,18 @@ fun isKeyActive(k: Key, st: KbState): Boolean = when {
 
 fun displayMain(k: Key, st: KbState): String {
     if (k.label.isEmpty()) return "Space"
-    if (k.isMod || k.isCaps || k.isNum || k.isScroll) return k.label
+    if (k.isMod || k.isCaps || k.isNum || k.isScroll || k.isConsumer) return k.label
     val isLetter = k.label.length == 1 && k.label[0].isLetter()
     return when {
-        st.altGr && k.altGr.isNotEmpty() -> k.altGr
         isLetter -> if (st.isUpperCase()) k.label.uppercase() else k.label.lowercase()
-        st.shift && k.shift.isNotEmpty() -> k.shift
+        st.shift && k.shifted.isNotEmpty() -> k.shifted
         else -> k.label
     }
 }
 
 fun displayTop(k: Key, st: KbState, showHints: Boolean = true): String {
     if (!showHints) return ""
-    if (k.isMod || k.isCaps || k.isNum || k.isScroll) return ""
-    if (k.label.length == 1 && k.shift.isNotEmpty()) return k.shift
+    if (k.isMod || k.isCaps || k.isNum || k.isScroll || k.isConsumer) return ""
+    if (k.label.length == 1 && k.shifted.isNotEmpty()) return k.shifted
     return ""
 }

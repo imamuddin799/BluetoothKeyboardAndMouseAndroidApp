@@ -132,10 +132,12 @@ fun TrackpadScreen(
                 )
 
                 SharedCompactKeyboard(
-                    st             = kbSt,
-                    settings       = keyboardSettings,
-                    showDismissBar = true,
-                    onKeyPress     = { key ->
+                    st               = kbSt,
+                    settings         = keyboardSettings,
+                    showDismissBar   = true,
+                    showMediaRow     = keyboardSettings.showMediaRowInTrackpad,
+                    showComboPreview = keyboardSettings.showComboPreview,
+                    onKeyPress       = { key ->
                         kbSt = handleKeyPress(
                             key                  = key,
                             st                   = currentKbSt,
@@ -144,6 +146,11 @@ fun TrackpadScreen(
                             onSendKey            = onSendKey,
                             onDelayedStateUpdate = { delayedSt -> kbSt = delayedSt }
                         )
+                    },
+                    onConsumerKey = onConsumerKey,
+                    onClearMods   = {
+                        kbSt = kbSt.releaseMods().copy(lastKey = "")
+                        onSendKey(0, emptyList())
                     },
                     onDismiss = { inAppKbVisible = false },
                 )

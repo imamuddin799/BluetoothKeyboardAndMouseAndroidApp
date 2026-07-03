@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,15 +20,27 @@ import com.arena.hidcompatibilitytester.ui.screen.keyboard.components.KBtn
 
 @Composable
 fun SharedCompactKeyboard(
-    st            : KbState,
-    settings      : KeyboardSettings,
-    showDismissBar: Boolean = false,
-    onKeyPress    : (Key) -> Unit,
-    onDismiss     : (() -> Unit)? = null,
+    st               : KbState,
+    settings         : KeyboardSettings,
+    showDismissBar   : Boolean = false,
+    showMediaRow     : Boolean = false,
+    showComboPreview : Boolean = false,
+    onKeyPress       : (Key) -> Unit,
+    onConsumerKey    : ((Int) -> Unit)? = null,
+    onClearMods      : (() -> Unit)? = null,
+    onDismiss        : (() -> Unit)? = null,
 ) {
     fun isActive(k: Key): Boolean = isKeyActive(k, st)
     fun mainLabel(k: Key): String = displayMain(k, st)
     fun topLabel(k: Key): String = displayTop(k, st, settings.showKeyHints)
+
+    fun handleKeyClick(k: Key) {
+        if (k.isConsumer && onConsumerKey != null) {
+            onConsumerKey(k.consumerCode)
+        } else {
+            onKeyPress(k)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -67,19 +81,80 @@ fun SharedCompactKeyboard(
             HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
         }
 
+        if (showComboPreview && (st.anyMod || st.lastKey.isNotEmpty())) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF050C14))
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                val combo = st.modPrefix() + st.lastKey
+                Surface(
+                    color = Color(0xFF0A1828),
+                    shape = RoundedCornerShape(5.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(
+                        text = when {
+                            st.anyMod && st.lastKey.isEmpty() ->
+                                "▶ ${st.modPrefix().trimEnd('+')}+ …waiting"
+                            combo.isEmpty() -> "Ready…"
+                            else -> "⌨ $combo"
+                        },
+                        fontSize = 11.sp,
+                        color = if (combo.isEmpty()) Color(0xFF546E7A)
+                                else Color(0xFF90CAF9),
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        maxLines = 1
+                    )
+                }
+                if (st.anyMod && onClearMods != null) {
+                    TextButton(
+                        onClick = onClearMods,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    ) {
+                        Text("✕ Clear", fontSize = 10.sp, color = Color(0xFFEF9A9A), maxLines = 1)
+                    }
+                }
+            }
+            HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
+        }
+
         val rowH = settings.keyHeight.mainDp.dp
         val fnH  = settings.keyHeight.fnDp.dp
 
-        SharedStyledKeyRow(SHARED_ROW_FN, fnH, settings, ::isActive, ::mainLabel, ::topLabel) { onKeyPress(it) }
+        if (showMediaRow) {
+            SharedStyledKeyRow(SHARED_ROW_MEDIA, fnH, settings, ::isActive, ::mainLabel, ::topLabel) {
+                handleKeyClick(it)
+            }
+            HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
+        }
+
+        SharedStyledKeyRow(SHARED_ROW_FN, fnH, settings, ::isActive, ::mainLabel, ::topLabel) {
+            handleKeyClick(it)
+        }
         HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
-        SharedStyledKeyRow(SHARED_ROW_NUM, rowH, settings, ::isActive, ::mainLabel, ::topLabel) { onKeyPress(it) }
-        SharedStyledKeyRow(SHARED_ROW_QWERTY, rowH, settings, ::isActive, ::mainLabel, ::topLabel) { onKeyPress(it) }
-        SharedStyledKeyRow(SHARED_ROW_HOME, rowH, settings, ::isActive, ::mainLabel, ::topLabel) { onKeyPress(it) }
-        SharedStyledKeyRow(SHARED_ROW_ALPHA, rowH, settings, ::isActive, ::mainLabel, ::topLabel) { onKeyPress(it) }
+        SharedStyledKeyRow(SHARED_ROW_NUM, rowH, settings, ::isActive, ::mainLabel, ::topLabel) {
+            handleKeyClick(it)
+        }
+        SharedStyledKeyRow(SHARED_ROW_QWERTY, rowH, settings, ::isActive, ::mainLabel, ::topLabel) {
+            handleKeyClick(it)
+        }
+        SharedStyledKeyRow(SHARED_ROW_HOME, rowH, settings, ::isActive, ::mainLabel, ::topLabel) {
+            handleKeyClick(it)
+        }
+        SharedStyledKeyRow(SHARED_ROW_ALPHA, rowH, settings, ::isActive, ::mainLabel, ::topLabel) {
+            handleKeyClick(it)
+        }
         SharedStyledKeyRow(
             if (settings.compactModifiers) SHARED_ROW_MODS_COMPACT else SHARED_ROW_MODS,
             rowH, settings, ::isActive, ::mainLabel, ::topLabel
-        ) { onKeyPress(it) }
+        ) {
+            handleKeyClick(it)
+        }
     }
 }
 
@@ -124,9 +199,25 @@ private fun SharedStyledKeyRow(
     }
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// Media row
+// ═══════════════════════════════════════════════════════════════
+
+private val SHARED_ROW_MEDIA = listOf(
+    Key("⏮", code = 0, w = 1f, color = KC.SPECIAL, isConsumer = true, consumerCode = 0xB6),
+    Key("⏯", code = 0, w = 1f, color = KC.SPECIAL, isConsumer = true, consumerCode = 0xCD),
+    Key("⏹", code = 0, w = 1f, color = KC.SPECIAL, isConsumer = true, consumerCode = 0xB7),
+    Key("⏭", code = 0, w = 1f, color = KC.SPECIAL, isConsumer = true, consumerCode = 0xB5),
+    Key("🔇", code = 0, w = 1f, color = KC.SPECIAL, isConsumer = true, consumerCode = 0xE2),
+    Key("🔉", code = 0, w = 1f, color = KC.SPECIAL, isConsumer = true, consumerCode = 0xEA),
+    Key("🔊", code = 0, w = 1f, color = KC.SPECIAL, isConsumer = true, consumerCode = 0xE9),
+    Key("🔅", code = 0, w = 1f, color = KC.SPECIAL, isConsumer = true, consumerCode = 0x0070),
+    Key("🔆", code = 0, w = 1f, color = KC.SPECIAL, isConsumer = true, consumerCode = 0x006F),
+)
+
+// ═══════════════════════════════════════════════════════════════
 // Key row definitions
-// ═════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 private val SHARED_ROW_FN = listOf(
     Key("Esc", code = 0x29, w = 1.4f, color = KC.DANGER, noRepeat = true),

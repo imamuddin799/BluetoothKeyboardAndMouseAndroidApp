@@ -26,6 +26,8 @@ data class KeyboardSettings(
     // Appearance
     val keyFontSize: KeyFontSize = KeyFontSize.MEDIUM,
     val showKeyHints: Boolean = true,
+    val showMediaRowInKeyboard: Boolean = true,
+    val showMediaRowInTrackpad: Boolean = false,
     val highContrastMode: Boolean = false,
 
     // Numpad
