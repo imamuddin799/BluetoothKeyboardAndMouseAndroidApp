@@ -13,6 +13,7 @@ fun keyBg(c: KC, active: Boolean, pressed: Boolean, highContrast: Boolean = fals
             KC.SPECIAL -> Color(0xFF1A2535).brighten(boost)
             KC.ACCENT  -> Color(0xFF1A3A5C).brighten(boost)
             KC.DANGER  -> Color(0xFF3A1A1A).brighten(boost)
+            KC.MEDIA   -> Color(0xFF2A1F3D).brighten(boost)
         }
     }
 }
@@ -24,6 +25,7 @@ fun keyFg(c: KC, active: Boolean, highContrast: Boolean = false): Color {
         c == KC.ACCENT -> Color(0xFF64B5F6).brighten(boost)
         c == KC.DANGER -> Color(0xFFEF9A9A).brighten(boost)
         c == KC.MOD    -> Color(0xFFB0BEC5).brighten(boost)
+        c == KC.MEDIA  -> Color(0xFFD1C4E9).brighten(boost)
         else           -> Color(0xFFECEFF1)
     }
 }

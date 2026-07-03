@@ -127,10 +127,13 @@ fun SharedCompactKeyboard(
         val fnH  = settings.keyHeight.fnDp.dp
 
         if (showMediaRow) {
-            SharedStyledKeyRow(SHARED_ROW_MEDIA, fnH, settings, ::isActive, ::mainLabel, ::topLabel) {
-                handleKeyClick(it)
+            val mediaKeys = buildMediaRow(settings)
+            if (mediaKeys.isNotEmpty()) {
+                SharedStyledKeyRow(mediaKeys, fnH, settings, ::isActive, ::mainLabel, ::topLabel) {
+                    handleKeyClick(it)
+                }
+                HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
             }
-            HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
         }
 
         SharedStyledKeyRow(SHARED_ROW_FN, fnH, settings, ::isActive, ::mainLabel, ::topLabel) {
@@ -200,20 +203,47 @@ private fun SharedStyledKeyRow(
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Media row
+// Media row — per-group key definitions
 // ═══════════════════════════════════════════════════════════════
 
-private val SHARED_ROW_MEDIA = listOf(
-    Key("⏮", code = 0, w = 1f, color = KC.SPECIAL, isConsumer = true, consumerCode = 0xB6),
-    Key("⏯", code = 0, w = 1f, color = KC.SPECIAL, isConsumer = true, consumerCode = 0xCD),
-    Key("⏹", code = 0, w = 1f, color = KC.SPECIAL, isConsumer = true, consumerCode = 0xB7),
-    Key("⏭", code = 0, w = 1f, color = KC.SPECIAL, isConsumer = true, consumerCode = 0xB5),
-    Key("🔇", code = 0, w = 1f, color = KC.SPECIAL, isConsumer = true, consumerCode = 0xE2),
-    Key("🔉", code = 0, w = 1f, color = KC.SPECIAL, isConsumer = true, consumerCode = 0xEA),
-    Key("🔊", code = 0, w = 1f, color = KC.SPECIAL, isConsumer = true, consumerCode = 0xE9),
-    Key("🔅", code = 0, w = 1f, color = KC.SPECIAL, isConsumer = true, consumerCode = 0x0070),
-    Key("🔆", code = 0, w = 1f, color = KC.SPECIAL, isConsumer = true, consumerCode = 0x006F),
+private val MEDIA_KEYS_TRANSPORT = listOf(
+    Key("⏮", consumerCode = 0xB6, color = KC.MEDIA, isConsumer = true, noRepeat = true, mediaGroup = MediaRowGroup.TRANSPORT),
+    Key("⏯", consumerCode = 0xCD, color = KC.MEDIA, isConsumer = true, noRepeat = true, mediaGroup = MediaRowGroup.TRANSPORT),
+    Key("⏹", consumerCode = 0xB7, color = KC.MEDIA, isConsumer = true, noRepeat = true, mediaGroup = MediaRowGroup.TRANSPORT),
+    Key("⏭", consumerCode = 0xB5, color = KC.MEDIA, isConsumer = true, noRepeat = true, mediaGroup = MediaRowGroup.TRANSPORT),
 )
+
+private val MEDIA_KEYS_VOLUME = listOf(
+    Key("🔇", consumerCode = 0xE2, color = KC.MEDIA, isConsumer = true, noRepeat = false, mediaGroup = MediaRowGroup.VOLUME),
+    Key("🔉", consumerCode = 0xEA, color = KC.MEDIA, isConsumer = true, noRepeat = false, mediaGroup = MediaRowGroup.VOLUME),
+    Key("🔊", consumerCode = 0xE9, color = KC.MEDIA, isConsumer = true, noRepeat = false, mediaGroup = MediaRowGroup.VOLUME),
+)
+
+private val MEDIA_KEYS_BRIGHTNESS = listOf(
+    Key("🔅", consumerCode = 0x0070, color = KC.MEDIA, isConsumer = true, noRepeat = false, mediaGroup = MediaRowGroup.BRIGHTNESS),
+    Key("🔆", consumerCode = 0x006F, color = KC.MEDIA, isConsumer = true, noRepeat = false, mediaGroup = MediaRowGroup.BRIGHTNESS),
+)
+
+private fun buildMediaRow(settings: KeyboardSettings): List<Key> {
+    val groupKeys = mapOf(
+        MediaRowGroup.TRANSPORT to MEDIA_KEYS_TRANSPORT,
+        MediaRowGroup.VOLUME to MEDIA_KEYS_VOLUME,
+        MediaRowGroup.BRIGHTNESS to MEDIA_KEYS_BRIGHTNESS,
+    )
+    val visibleGroups = settings.mediaRowGroupOrder.filter { group ->
+        when (group) {
+            MediaRowGroup.TRANSPORT -> settings.mediaRowShowTransport
+            MediaRowGroup.VOLUME -> settings.mediaRowShowVolume
+            MediaRowGroup.BRIGHTNESS -> settings.mediaRowShowBrightness
+        }
+    }
+    val allKeys = visibleGroups.flatMap { groupKeys[it] ?: emptyList() }
+    if (allKeys.isEmpty()) return emptyList()
+
+    // Distribute equal weights
+    val totalKeys = allKeys.size
+    return allKeys.map { it.copy(w = 1f) }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // Key row definitions

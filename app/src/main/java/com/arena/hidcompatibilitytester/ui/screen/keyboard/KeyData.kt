@@ -19,7 +19,7 @@ const val MOD_RGUI   = 0x80
 // Key color categories
 // ═════════════════════════════════════════════════════════════════════════════
 
-enum class KC { NORMAL, MOD, SPECIAL, ACCENT, DANGER }
+enum class KC { NORMAL, MOD, SPECIAL, ACCENT, DANGER, MEDIA }
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Key model
@@ -39,10 +39,11 @@ data class Key(
     val consumerCode: Int     = 0,
     val isNum       : Boolean = false,
     val isScroll    : Boolean = false,
+    val mediaGroup  : MediaRowGroup? = null,
 )
 
 fun Key.shouldRepeat() =
-    !noRepeat && !isMod && !isCaps && !isNum && !isScroll && !isConsumer
+    !noRepeat && !isMod && !isCaps && !isNum && !isScroll
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Media key model

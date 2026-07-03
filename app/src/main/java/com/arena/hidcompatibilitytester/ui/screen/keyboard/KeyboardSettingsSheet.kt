@@ -18,6 +18,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.border
+import androidx.compose.material3.IconButton
 import com.arena.hidcompatibilitytester.ui.components.AdaptiveSpacing
 import com.arena.hidcompatibilitytester.ui.components.rememberAdaptiveSpacing
 
@@ -26,6 +28,7 @@ private enum class KbSettingsSection(val title: String) {
     BEHAVIOR("Behavior"),
     APPEARANCE("Appearance"),
     NUMPAD("Numpad"),
+    MEDIA_ROW("Media"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -162,6 +165,7 @@ fun KeyboardSettingsSheet(
                     KbSettingsSection.BEHAVIOR -> BehaviorSection(local, spacing) { local = it }
                     KbSettingsSection.APPEARANCE -> AppearanceSection(local, spacing) { local = it }
                     KbSettingsSection.NUMPAD -> NumpadMediaSection(local, spacing) { local = it }
+                    KbSettingsSection.MEDIA_ROW -> MediaRowSection(local, spacing) { local = it }
                 }
 
                 Spacer(Modifier.height(4.dp))
@@ -660,6 +664,219 @@ private fun StickyModsExplainCard(stickyMods: Boolean, keepModsAfterTab: Boolean
             )
             lines.forEach {
                 Text(it, fontSize = 11.sp, color = Color(0xFFB0BEC5))
+            }
+        }
+    }
+}
+
+@Composable
+private fun MediaRowSection(
+    settings: KeyboardSettings,
+    spacing: AdaptiveSpacing,
+    onChange: (KeyboardSettings) -> Unit,
+) {
+    SettingsCard("Visibility", spacing) {
+        SettingsToggle(
+            "Show in Keyboard Tab",
+            "Media row above function keys in keyboard",
+            settings.showMediaRowInKeyboard
+        ) {
+            onChange(settings.copy(showMediaRowInKeyboard = it))
+        }
+
+        SettingsToggle(
+            "Show in Trackpad Keyboard",
+            "Media row when keyboard is open on trackpad",
+            settings.showMediaRowInTrackpad
+        ) {
+            onChange(settings.copy(showMediaRowInTrackpad = it))
+        }
+    }
+
+    SettingsCard("Groups", spacing) {
+        SettingsToggle(
+            "Transport",
+            "⏮ ⏯ ⏹ ⏭ — Play, pause, stop, skip",
+            settings.mediaRowShowTransport
+        ) {
+            onChange(settings.copy(mediaRowShowTransport = it))
+        }
+
+        SettingsToggle(
+            "Volume",
+            "🔇 🔉 🔊 — Mute, volume down, volume up",
+            settings.mediaRowShowVolume
+        ) {
+            onChange(settings.copy(mediaRowShowVolume = it))
+        }
+
+        SettingsToggle(
+            "Brightness",
+            "🔅 🔆 — Brightness down, brightness up",
+            settings.mediaRowShowBrightness
+        ) {
+            onChange(settings.copy(mediaRowShowBrightness = it))
+        }
+    }
+
+    SettingsCard("Key Repeat", spacing) {
+        Text(
+            "Transport keys never repeat",
+            fontSize = 11.sp,
+            color = Color(0xFF607D8B),
+            fontWeight = FontWeight.Medium,
+        )
+
+        SettingsToggle(
+            "Repeat Volume Keys",
+            "Hold volume up/down to repeat",
+            settings.mediaRowRepeatVolume
+        ) {
+            onChange(settings.copy(mediaRowRepeatVolume = it))
+        }
+
+        SettingsToggle(
+            "Repeat Brightness Keys",
+            "Hold brightness up/down to repeat",
+            settings.mediaRowRepeatBrightness
+        ) {
+            onChange(settings.copy(mediaRowRepeatBrightness = it))
+        }
+    }
+
+    SettingsCard("Group Order", spacing) {
+        Text(
+            "Drag to reorder groups left → right",
+            fontSize = 11.sp,
+            color = Color(0xFF607D8B),
+            fontWeight = FontWeight.Medium,
+        )
+        Spacer(Modifier.height(4.dp))
+        DragToReorderList(
+            items = settings.mediaRowGroupOrder,
+            onReorder = { newOrder ->
+                onChange(settings.copy(mediaRowGroupOrder = newOrder))
+            }
+        )
+    }
+}
+
+@Composable
+private fun DragToReorderList(
+    items: List<MediaRowGroup>,
+    onReorder: (List<MediaRowGroup>) -> Unit,
+) {
+    var draggedIndex by remember { mutableStateOf<Int?>(null) }
+    var currentItems by remember(items) { mutableStateOf(items.toList()) }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        currentItems.forEachIndexed { index, group ->
+            val isDragged = draggedIndex == index
+
+            Surface(
+                color = if (isDragged) Color(0xFF4A90D9).copy(0.2f)
+                        else Color(0xFF0A1520),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(
+                        width = if (isDragged) 1.5.dp else 0.5.dp,
+                        color = if (isDragged) Color(0xFF4A90D9)
+                                else Color.White.copy(0.08f),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text(
+                            "${index + 1}",
+                            fontSize = 12.sp,
+                            color = Color(0xFF4A90D9),
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            group.icon,
+                            fontSize = 16.sp,
+                        )
+                        Column {
+                            Text(
+                                group.label,
+                                fontSize = 14.sp,
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                when (group) {
+                                    MediaRowGroup.TRANSPORT -> "⏮ ⏯ ⏹ ⏭"
+                                    MediaRowGroup.VOLUME -> "🔇 🔉 🔊"
+                                    MediaRowGroup.BRIGHTNESS -> "🔅 🔆"
+                                },
+                                fontSize = 10.sp,
+                                color = Color(0xFF607D8B),
+                            )
+                        }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        // Move up button
+                        IconButton(
+                            onClick = {
+                                if (index > 0) {
+                                    val newList = currentItems.toMutableList()
+                                    val temp = newList[index]
+                                    newList[index] = newList[index - 1]
+                                    newList[index - 1] = temp
+                                    currentItems = newList
+                                    onReorder(newList)
+                                }
+                            },
+                            enabled = index > 0,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Text(
+                                "▲",
+                                fontSize = 14.sp,
+                                color = if (index > 0) Color(0xFF90CAF9)
+                                        else Color(0xFF2A3A4A),
+                            )
+                        }
+
+                        // Move down button
+                        IconButton(
+                            onClick = {
+                                if (index < currentItems.size - 1) {
+                                    val newList = currentItems.toMutableList()
+                                    val temp = newList[index]
+                                    newList[index] = newList[index + 1]
+                                    newList[index + 1] = temp
+                                    currentItems = newList
+                                    onReorder(newList)
+                                }
+                            },
+                            enabled = index < currentItems.size - 1,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Text(
+                                "▼",
+                                fontSize = 14.sp,
+                                color = if (index < currentItems.size - 1) Color(0xFF90CAF9)
+                                        else Color(0xFF2A3A4A),
+                            )
+                        }
+                    }
+                }
             }
         }
     }

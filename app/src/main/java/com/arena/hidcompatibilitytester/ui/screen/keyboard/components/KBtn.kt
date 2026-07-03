@@ -56,7 +56,15 @@ internal fun KBtn(
         if (pressed) 0.93f else 1f, tween(55), label = "sc"
     )
 
-    val doRepeat = settings.repeatEnabled && key.shouldRepeat()
+    val doRepeat = when {
+        !settings.repeatEnabled -> false
+        !key.shouldRepeat() -> false
+        key.isConsumer && key.mediaGroup == MediaRowGroup.TRANSPORT -> false
+        key.isConsumer && key.mediaGroup == MediaRowGroup.VOLUME -> settings.mediaRowRepeatVolume
+        key.isConsumer && key.mediaGroup == MediaRowGroup.BRIGHTNESS -> settings.mediaRowRepeatBrightness
+        key.isConsumer -> false
+        else -> true
+    }
 
     val gestureModifier = if (scrollable) {
         Modifier.pointerInput(
@@ -106,7 +114,7 @@ internal fun KBtn(
     }
 
     // ── Function keys: no padding, pure center, no hints ──
-    val isFnKey = key.color == KC.SPECIAL
+    val isFnKey = key.color == KC.SPECIAL || key.color == KC.MEDIA
 
     val showTopHint = !isFnKey &&
             topLabel.isNotEmpty() &&

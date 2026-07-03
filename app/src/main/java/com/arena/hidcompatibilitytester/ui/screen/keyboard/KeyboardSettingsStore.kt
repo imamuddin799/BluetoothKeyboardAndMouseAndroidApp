@@ -21,13 +21,19 @@ object KeyboardSettingsStore {
             putBoolean("stickyModifiers", s.stickyModifiers)
             putBoolean("keepModsAfterTab", s.keepModsAfterTab)
             putString("keyFontSize", s.keyFontSize.name)
-            putBoolean("showMediaRowInKeyboard", s.showMediaRowInKeyboard)
-            putBoolean("showMediaRowInTrackpad", s.showMediaRowInTrackpad)
             putBoolean("showKeyHints", s.showKeyHints)
             putBoolean("highContrastMode", s.highContrastMode)
             putBoolean("numpadStartsLocked", s.numpadStartsLocked)
             putBoolean("numpadShowHints", s.numpadShowHints)
             putString("mediaKeySize", s.mediaKeySize.name)
+            putBoolean("showMediaRowInKeyboard", s.showMediaRowInKeyboard)
+            putBoolean("showMediaRowInTrackpad", s.showMediaRowInTrackpad)
+            putBoolean("mediaRowShowTransport", s.mediaRowShowTransport)
+            putBoolean("mediaRowShowVolume", s.mediaRowShowVolume)
+            putBoolean("mediaRowShowBrightness", s.mediaRowShowBrightness)
+            putBoolean("mediaRowRepeatVolume", s.mediaRowRepeatVolume)
+            putBoolean("mediaRowRepeatBrightness", s.mediaRowRepeatBrightness)
+            putString("mediaRowGroupOrder", s.mediaRowGroupOrder.joinToString(",") { it.name })
             putInt("defaultTab", s.defaultTab)
             apply()
         }
@@ -55,8 +61,6 @@ object KeyboardSettingsStore {
             keyFontSize = runCatching {
                 KeyFontSize.valueOf(p.getString("keyFontSize", "MEDIUM")!!)
             }.getOrDefault(KeyFontSize.MEDIUM),
-            showMediaRowInKeyboard = p.getBoolean("showMediaRowInKeyboard", false),
-            showMediaRowInTrackpad = p.getBoolean("showMediaRowInTrackpad", false),
             showKeyHints = p.getBoolean("showKeyHints", true),
             highContrastMode = p.getBoolean("highContrastMode", false),
             numpadStartsLocked = p.getBoolean("numpadStartsLocked", true),
@@ -64,6 +68,29 @@ object KeyboardSettingsStore {
             mediaKeySize = runCatching {
                 MediaKeySize.valueOf(p.getString("mediaKeySize", "MEDIUM")!!)
             }.getOrDefault(MediaKeySize.MEDIUM),
+            showMediaRowInKeyboard = p.getBoolean("showMediaRowInKeyboard", false),
+            showMediaRowInTrackpad = p.getBoolean("showMediaRowInTrackpad", false),
+            mediaRowShowTransport = p.getBoolean("mediaRowShowTransport", true),
+            mediaRowShowVolume = p.getBoolean("mediaRowShowVolume", true),
+            mediaRowShowBrightness = p.getBoolean("mediaRowShowBrightness", true),
+            mediaRowRepeatVolume = p.getBoolean("mediaRowRepeatVolume", true),
+            mediaRowRepeatBrightness = p.getBoolean("mediaRowRepeatBrightness", true),
+            mediaRowGroupOrder = runCatching {
+                p.getString("mediaRowGroupOrder", null)
+                    ?.split(",")
+                    ?.map { MediaRowGroup.valueOf(it.trim()) }
+                    ?: listOf(
+                        MediaRowGroup.TRANSPORT,
+                        MediaRowGroup.VOLUME,
+                        MediaRowGroup.BRIGHTNESS
+                    )
+            }.getOrDefault(
+                listOf(
+                    MediaRowGroup.TRANSPORT,
+                    MediaRowGroup.VOLUME,
+                    MediaRowGroup.BRIGHTNESS
+                )
+            ),
             defaultTab = p.getInt("defaultTab", 0),
         )
     }

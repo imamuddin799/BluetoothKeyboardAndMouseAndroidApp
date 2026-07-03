@@ -16,7 +16,7 @@ data class KeyboardSettings(
     // Layout
     val keyHeight: KeyHeight = KeyHeight.MEDIUM,
     val showStatusBar: Boolean = true,
-    val showComboPreview: Boolean = true, // <- add this
+    val showComboPreview: Boolean = true,
     val compactModifiers: Boolean = false,
 
     // Behavior
@@ -26,8 +26,6 @@ data class KeyboardSettings(
     // Appearance
     val keyFontSize: KeyFontSize = KeyFontSize.MEDIUM,
     val showKeyHints: Boolean = true,
-    val showMediaRowInKeyboard: Boolean = true,
-    val showMediaRowInTrackpad: Boolean = false,
     val highContrastMode: Boolean = false,
 
     // Numpad
@@ -37,9 +35,29 @@ data class KeyboardSettings(
     // Media
     val mediaKeySize: MediaKeySize = MediaKeySize.MEDIUM,
 
+    // Media Quick Row
+    val showMediaRowInKeyboard: Boolean = false,
+    val showMediaRowInTrackpad: Boolean = false,
+    val mediaRowShowTransport: Boolean = true,
+    val mediaRowShowVolume: Boolean = true,
+    val mediaRowShowBrightness: Boolean = true,
+    val mediaRowRepeatVolume: Boolean = true,
+    val mediaRowRepeatBrightness: Boolean = true,
+    val mediaRowGroupOrder: List<MediaRowGroup> = listOf(
+        MediaRowGroup.TRANSPORT,
+        MediaRowGroup.VOLUME,
+        MediaRowGroup.BRIGHTNESS,
+    ),
+
     // Default tab
     val defaultTab: Int = 0,
 )
+
+enum class MediaRowGroup(val label: String, val icon: String) {
+    TRANSPORT("Transport", "⏯"),
+    VOLUME("Volume", "🔊"),
+    BRIGHTNESS("Brightness", "🔆"),
+}
 
 enum class HapticIntensity(val label: String) {
     LIGHT("Light"),
