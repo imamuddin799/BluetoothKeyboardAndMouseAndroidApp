@@ -21,9 +21,27 @@ internal fun KeysTab(
     onReleaseKeys: () -> Unit,
     onConsumerKey: (Int) -> Unit,
     onTypeText: (String) -> Unit,
+    onSettingsChange: ((KeyboardSettings) -> Unit)? = null,
 ) {
     val style = settings.keysTabSectionStyle
     val isMedia = style == SectionStyle.MEDIA
+    val merge = settings.shouldMergeSystemMods(settings.keysTabMergeSystemAndMods)
+    val inPlaceReorder = settings.shouldAllowInPlaceReorder(settings.keysTabInPlaceReorder)
+    val swapped = settings.keysTabNavArrowsSwapped
+
+    // Build visible sections list based on current order
+    val visibleSections = settings.keysTabSectionOrder.filter { section ->
+        when (section) {
+            KeysTabSection.NAV_ARROWS ->
+                settings.keysTabShowNavigation || settings.keysTabShowArrowKeys
+            KeysTabSection.SYSTEM_KEYS ->
+                settings.keysTabShowSystemKeys && !merge
+            KeysTabSection.QUICK_MODS ->
+                settings.keysTabShowQuickMods && !merge
+            KeysTabSection.MERGED_SYSTEM_MODS ->
+                merge && settings.keysTabShowSystemKeys && settings.keysTabShowQuickMods
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -38,91 +56,57 @@ internal fun KeysTab(
                     horizontal = if (isMedia) 8.dp else 4.dp,
                     vertical = 2.dp
                 ),
-            verticalArrangement = Arrangement.spacedBy(if (isMedia) 10.dp else 3.dp),
         ) {
-            val showNav = settings.keysTabShowNavigation
-            val showArrows = settings.keysTabShowArrowKeys
-
-            if (isMedia) {
-                // Nav + Arrows side-by-side in cards
-                if (showNav && showArrows) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        KbCard("Navigation", modifier = Modifier.weight(1f)) {
-                            NavigationSectionContent(st, settings, style, onKeyPress)
-                        }
-                        KbCard("Arrows", modifier = Modifier.weight(1f)) {
-                            ArrowKeysSectionContent(st, settings, style, onKeyPress)
-                        }
+            ReorderableSectionColumn(
+                items = visibleSections,
+                enabled = inPlaceReorder,
+                sectionSpacing = if (isMedia) 10.dp else 3.dp,
+                onReorder = { newOrder ->
+                    // Rebuild full order including hidden items
+                    val allSections = KeysTabSection.entries.toMutableList()
+                    val reordered = newOrder.toMutableList()
+                    allSections.forEach { s ->
+                        if (s !in reordered) reordered.add(s)
                     }
-                } else {
-                    if (showNav) {
-                        KbCard("Navigation") {
-                            NavigationSectionContent(st, settings, style, onKeyPress)
-                        }
-                    }
-                    if (showArrows) {
-                        KbCard("Arrow Keys") {
-                            ArrowKeysSectionContent(st, settings, style, onKeyPress)
-                        }
-                    }
+                    onSettingsChange?.invoke(
+                        settings.copy(keysTabSectionOrder = reordered)
+                    )
                 }
-
-                val mergeKeys = settings.shouldMergeSystemMods(settings.keysTabMergeSystemAndMods)
-                val showSystem = settings.keysTabShowSystemKeys
-                val showMods = settings.keysTabShowQuickMods
-
-                if (mergeKeys && showSystem && showMods) {
-                    KbCard("System & Modifiers") {
-                        MergedSystemModsSectionContent(st, settings, style, onKeyPress, onClearMods)
+            ) { _, section, _ ->
+                when (section) {
+                    KeysTabSection.NAV_ARROWS -> {
+                        KeysTabNavArrowsSection(
+                            st = st, settings = settings, style = style,
+                            swapped = swapped, isMedia = isMedia,
+                            onKeyPress = onKeyPress,
+                        )
                     }
-                } else {
-                    if (showSystem) {
-                        KbCard("System Keys") {
-                            SystemKeysSectionContent(st, settings, style, onKeyPress)
+                    KeysTabSection.SYSTEM_KEYS -> {
+                        if (isMedia) {
+                            KbCard("System Keys") {
+                                SystemKeysSectionContent(st, settings, style, onKeyPress)
+                            }
+                        } else {
+                            SystemKeysSection(st, settings, style, onKeyPress)
                         }
                     }
-                    if (showMods) {
-                        KbCard("Quick Modifiers") {
-                            QuickModsSectionContent(st, settings, style, onKeyPress, onClearMods)
+                    KeysTabSection.QUICK_MODS -> {
+                        if (isMedia) {
+                            KbCard("Quick Modifiers") {
+                                QuickModsSectionContent(st, settings, style, onKeyPress, onClearMods)
+                            }
+                        } else {
+                            QuickModsSection(st, settings, style, onKeyPress, onClearMods)
                         }
                     }
-                }
-            } else {
-                if (showNav && showArrows) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Box(Modifier.weight(1f)) {
-                            NavigationSection(st, settings, style, onKeyPress)
+                    KeysTabSection.MERGED_SYSTEM_MODS -> {
+                        if (isMedia) {
+                            KbCard("System & Modifiers") {
+                                MergedSystemModsSectionContent(st, settings, style, onKeyPress, onClearMods)
+                            }
+                        } else {
+                            MergedSystemModsSection(st, settings, style, onKeyPress, onClearMods)
                         }
-                        Box(Modifier.weight(1f)) {
-                            ArrowKeysSection(st, settings, style, onKeyPress)
-                        }
-                    }
-                } else {
-                    if (showNav) {
-                        NavigationSection(st, settings, style, onKeyPress)
-                    }
-                    if (showArrows) {
-                        ArrowKeysSection(st, settings, style, onKeyPress)
-                    }
-                }
-                val mergeKeys = settings.shouldMergeSystemMods(settings.keysTabMergeSystemAndMods)
-                val showSystem = settings.keysTabShowSystemKeys
-                val showMods = settings.keysTabShowQuickMods
-
-                if (mergeKeys && showSystem && showMods) {
-                    MergedSystemModsSection(st, settings, style, onKeyPress, onClearMods)
-                } else {
-                    if (showSystem) {
-                        SystemKeysSection(st, settings, style, onKeyPress)
-                    }
-                    if (showMods) {
-                        QuickModsSection(st, settings, style, onKeyPress, onClearMods)
                     }
                 }
             }
@@ -134,14 +118,93 @@ internal fun KeysTab(
                 .padding(top = 3.dp, bottom = 6.dp)
         ) {
             SharedCompactKeyboard(
-                st             = st,
-                settings       = settings,
+                st = st,
+                settings = settings,
                 showDismissBar = false,
-                showMediaRow   = settings.showMediaRowInKeyboard,
-                showNavRow     = settings.showNavRowInKeyboard,
-                onKeyPress     = onKeyPress,
-                onConsumerKey  = onConsumerKey,
+                showMediaRow = settings.showMediaRowInKeyboard,
+                showNavRow = settings.showNavRowInKeyboard,
+                onKeyPress = onKeyPress,
+                onConsumerKey = onConsumerKey,
             )
+        }
+    }
+}
+
+@Composable
+private fun KeysTabNavArrowsSection(
+    st: KbState,
+    settings: KeyboardSettings,
+    style: SectionStyle,
+    swapped: Boolean,
+    isMedia: Boolean,
+    onKeyPress: (Key) -> Unit,
+) {
+    val showNav = settings.keysTabShowNavigation
+    val showArrows = settings.keysTabShowArrowKeys
+
+    if (isMedia) {
+        if (showNav && showArrows) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (swapped) {
+                    KbCard("Arrows", modifier = Modifier.weight(1f)) {
+                        ArrowKeysSectionContent(st, settings, style, onKeyPress)
+                    }
+                    KbCard("Navigation", modifier = Modifier.weight(1f)) {
+                        NavigationSectionContent(st, settings, style, onKeyPress)
+                    }
+                } else {
+                    KbCard("Navigation", modifier = Modifier.weight(1f)) {
+                        NavigationSectionContent(st, settings, style, onKeyPress)
+                    }
+                    KbCard("Arrows", modifier = Modifier.weight(1f)) {
+                        ArrowKeysSectionContent(st, settings, style, onKeyPress)
+                    }
+                }
+            }
+        } else {
+            if (showNav) {
+                KbCard("Navigation") {
+                    NavigationSectionContent(st, settings, style, onKeyPress)
+                }
+            }
+            if (showArrows) {
+                KbCard("Arrow Keys") {
+                    ArrowKeysSectionContent(st, settings, style, onKeyPress)
+                }
+            }
+        }
+    } else {
+        if (showNav && showArrows) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (swapped) {
+                    Box(Modifier.weight(1f)) {
+                        ArrowKeysSection(st, settings, style, onKeyPress)
+                    }
+                    Box(Modifier.weight(1f)) {
+                        NavigationSection(st, settings, style, onKeyPress)
+                    }
+                } else {
+                    Box(Modifier.weight(1f)) {
+                        NavigationSection(st, settings, style, onKeyPress)
+                    }
+                    Box(Modifier.weight(1f)) {
+                        ArrowKeysSection(st, settings, style, onKeyPress)
+                    }
+                }
+            }
+        } else {
+            if (showNav) {
+                NavigationSection(st, settings, style, onKeyPress)
+            }
+            if (showArrows) {
+                ArrowKeysSection(st, settings, style, onKeyPress)
+            }
         }
     }
 }

@@ -65,7 +65,17 @@ object KeyboardSettingsStore {
             putBoolean("keysTabMergeSystemAndMods", s.keysTabMergeSystemAndMods)
             putBoolean("mediaTabMergeSystemAndMods", s.mediaTabMergeSystemAndMods)
             putBoolean("navTabMergeSystemAndMods", s.navTabMergeSystemAndMods)
-            
+
+            putString("keysTabSectionOrder", s.keysTabSectionOrder.joinToString(",") { it.name })
+            putBoolean("keysTabNavArrowsSwapped", s.keysTabNavArrowsSwapped)
+            putString("navTabSectionOrder", s.navTabSectionOrder.joinToString(",") { it.name })
+            putBoolean("navTabNavArrowsSwapped", s.navTabNavArrowsSwapped)
+            putString("mediaTabSectionOrder", s.mediaTabSectionOrder.joinToString(",") { it.name })
+            putBoolean("inPlaceReorderGlobal", s.inPlaceReorderGlobal)
+            putBoolean("keysTabInPlaceReorder", s.keysTabInPlaceReorder)
+            putBoolean("mediaTabInPlaceReorder", s.mediaTabInPlaceReorder)
+            putBoolean("navTabInPlaceReorder", s.navTabInPlaceReorder)
+
             putInt("defaultTab", s.defaultTab)
             apply()
         }
@@ -156,6 +166,34 @@ object KeyboardSettingsStore {
             keysTabMergeSystemAndMods = p.getBoolean("keysTabMergeSystemAndMods", false),
             mediaTabMergeSystemAndMods = p.getBoolean("mediaTabMergeSystemAndMods", false),
             navTabMergeSystemAndMods = p.getBoolean("navTabMergeSystemAndMods", false),
+
+            keysTabSectionOrder = runCatching {
+                p.getString("keysTabSectionOrder", null)
+                    ?.split(",")
+                    ?.map { KeysTabSection.valueOf(it.trim()) }
+                    ?: listOf(KeysTabSection.NAV_ARROWS, KeysTabSection.SYSTEM_KEYS, KeysTabSection.QUICK_MODS)
+            }.getOrDefault(listOf(KeysTabSection.NAV_ARROWS, KeysTabSection.SYSTEM_KEYS, KeysTabSection.QUICK_MODS)),
+            keysTabNavArrowsSwapped = p.getBoolean("keysTabNavArrowsSwapped", false),
+
+            navTabSectionOrder = runCatching {
+                p.getString("navTabSectionOrder", null)
+                    ?.split(",")
+                    ?.map { NavTabSection.valueOf(it.trim()) }
+                    ?: listOf(NavTabSection.NAV_ARROWS, NavTabSection.INSERT_TOGGLE, NavTabSection.SYSTEM_KEYS, NavTabSection.QUICK_MODS, NavTabSection.TYPE_TEXT)
+            }.getOrDefault(listOf(NavTabSection.NAV_ARROWS, NavTabSection.INSERT_TOGGLE, NavTabSection.SYSTEM_KEYS, NavTabSection.QUICK_MODS, NavTabSection.TYPE_TEXT)),
+            navTabNavArrowsSwapped = p.getBoolean("navTabNavArrowsSwapped", false),
+
+            mediaTabSectionOrder = runCatching {
+                p.getString("mediaTabSectionOrder", null)
+                    ?.split(",")
+                    ?.map { MediaTabSection.valueOf(it.trim()) }
+                    ?: listOf(MediaTabSection.TRANSPORT, MediaTabSection.VOLUME_BRIGHTNESS, MediaTabSection.NAVIGATION, MediaTabSection.ARROW_KEYS, MediaTabSection.SYSTEM_KEYS, MediaTabSection.QUICK_MODS)
+            }.getOrDefault(listOf(MediaTabSection.TRANSPORT, MediaTabSection.VOLUME_BRIGHTNESS, MediaTabSection.NAVIGATION, MediaTabSection.ARROW_KEYS, MediaTabSection.SYSTEM_KEYS, MediaTabSection.QUICK_MODS)),
+
+            inPlaceReorderGlobal = p.getBoolean("inPlaceReorderGlobal", false),
+            keysTabInPlaceReorder = p.getBoolean("keysTabInPlaceReorder", false),
+            mediaTabInPlaceReorder = p.getBoolean("mediaTabInPlaceReorder", false),
+            navTabInPlaceReorder = p.getBoolean("navTabInPlaceReorder", false),
 
             defaultTab = p.getInt("defaultTab", 0),
         )

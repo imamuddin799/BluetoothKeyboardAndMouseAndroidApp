@@ -248,6 +248,10 @@ class MainActivity : ComponentActivity(),
                     },
                     onShowTrackpadSettings = { showTrackpadSettingsSheet = true },
                     onShowKeyboardSettings = { showKeyboardSettingsSheet = true },
+                    onSettingsChange = { newSettings ->
+                        keyboardSettings = newSettings
+                        KeyboardSettingsStore.save(this@MainActivity, newSettings)
+                    },
                 )
 
                 statusMessage?.let { msg ->

@@ -81,11 +81,47 @@ data class KeyboardSettings(
     val mediaTabMergeSystemAndMods: Boolean = false,
     val navTabMergeSystemAndMods: Boolean = false,
 
+    // Section order per tab
+    val keysTabSectionOrder: List<KeysTabSection> = listOf(
+        KeysTabSection.NAV_ARROWS,
+        KeysTabSection.SYSTEM_KEYS,
+        KeysTabSection.QUICK_MODS,
+    ),
+    val keysTabNavArrowsSwapped: Boolean = false,
+
+    val navTabSectionOrder: List<NavTabSection> = listOf(
+        NavTabSection.NAV_ARROWS,
+        NavTabSection.INSERT_TOGGLE,
+        NavTabSection.SYSTEM_KEYS,
+        NavTabSection.QUICK_MODS,
+        NavTabSection.TYPE_TEXT,
+    ),
+    val navTabNavArrowsSwapped: Boolean = false,
+
+    val mediaTabSectionOrder: List<MediaTabSection> = listOf(
+        MediaTabSection.TRANSPORT,
+        MediaTabSection.VOLUME_BRIGHTNESS,
+        MediaTabSection.NAVIGATION,
+        MediaTabSection.ARROW_KEYS,
+        MediaTabSection.SYSTEM_KEYS,
+        MediaTabSection.QUICK_MODS,
+    ),
+
+    // In-place reorder
+    val inPlaceReorderGlobal: Boolean = false,
+    val keysTabInPlaceReorder: Boolean = false,
+    val mediaTabInPlaceReorder: Boolean = false,
+    val navTabInPlaceReorder: Boolean = false,
+
     // Default tab
     val defaultTab: Int = 0,
 ) {
     fun shouldMergeSystemMods(tabMerge: Boolean): Boolean {
         return mergeSystemAndModsGlobal || tabMerge
+    }
+
+    fun shouldAllowInPlaceReorder(tabReorder: Boolean): Boolean {
+        return inPlaceReorderGlobal || tabReorder
     }
 }
 enum class SectionStyle(val label: String) {
@@ -121,4 +157,31 @@ enum class MediaKeySize(val label: String, val heightDp: Int) {
     SMALL("Small", 48),
     MEDIUM("Medium", 64),
     LARGE("Large", 80),
+}
+
+// Section identifiers for reordering
+enum class KeysTabSection(val label: String, val icon: String) {
+    NAV_ARROWS("Navigation + Arrows", "↕"),
+    SYSTEM_KEYS("System Keys", "⌨"),
+    QUICK_MODS("Quick Modifiers", "⇧"),
+    MERGED_SYSTEM_MODS("System & Modifiers", "⌨⇧"),
+}
+
+enum class NavTabSection(val label: String, val icon: String) {
+    NAV_ARROWS("Navigation + Arrows", "↕"),
+    INSERT_TOGGLE("Insert/Overwrite", "⎀"),
+    SYSTEM_KEYS("System Keys", "⌨"),
+    QUICK_MODS("Quick Modifiers", "⇧"),
+    MERGED_SYSTEM_MODS("System & Modifiers", "⌨⇧"),
+    TYPE_TEXT("Type & Send Text", "✎"),
+}
+
+enum class MediaTabSection(val label: String, val icon: String) {
+    TRANSPORT("Transport", "⏯"),
+    VOLUME_BRIGHTNESS("Volume & Brightness", "🔊"),
+    NAVIGATION("Navigation", "↕"),
+    ARROW_KEYS("Arrow Keys", "←→"),
+    SYSTEM_KEYS("System Keys", "⌨"),
+    QUICK_MODS("Quick Modifiers", "⇧"),
+    MERGED_SYSTEM_MODS("System & Modifiers", "⌨⇧"),
 }

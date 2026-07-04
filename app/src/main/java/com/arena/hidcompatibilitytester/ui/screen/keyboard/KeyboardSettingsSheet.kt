@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -349,6 +350,22 @@ private fun BehaviorSection(
         }
     }
 
+    SettingsCard("In-Place Section Reorder", spacing) {
+        SettingsToggle(
+            "Enable All Tabs",
+            "Long-press and drag to reorder sections directly on any tab",
+            settings.inPlaceReorderGlobal
+        ) {
+            val newSettings = settings.copy(
+                inPlaceReorderGlobal = it,
+                keysTabInPlaceReorder = it,
+                mediaTabInPlaceReorder = it,
+                navTabInPlaceReorder = it,
+            )
+            onChange(newSettings)
+        }
+    }
+
     SettingsCard("Default Tab", spacing) {
         DefaultTabSelector(
             selected = settings.defaultTab,
@@ -472,6 +489,99 @@ private fun AppearanceSection(
                 }
             }
         }
+
+        AnimatedVisibility(visible = true) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                SettingsToggle(
+                    "In-Place Reorder",
+                    if (settings.inPlaceReorderGlobal)
+                        "Controlled by global setting — turn off global to customize"
+                    else
+                        "Long-press and drag sections to reorder on Keys tab",
+                    settings.keysTabInPlaceReorder,
+                    enabled = !settings.inPlaceReorderGlobal,
+                ) {
+                    onChange(settings.copy(keysTabInPlaceReorder = it))
+                }
+                if (settings.inPlaceReorderGlobal) {
+                    GlobalReorderHint()
+                }
+
+                SettingsToggle(
+                    "Swap Nav ↔ Arrows",
+                    "Swap left/right position of Navigation and Arrow Keys",
+                    settings.keysTabNavArrowsSwapped
+                ) {
+                    onChange(settings.copy(keysTabNavArrowsSwapped = it))
+                }
+            }
+        }
+
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Section Order",
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp,
+            color = Color.White
+        )
+        Text(
+            "Drag to reorder sections",
+            fontSize = 11.sp,
+            color = Color(0xFF607D8B)
+        )
+        Spacer(Modifier.height(4.dp))
+        GenericDragToReorderList(
+            items = settings.keysTabSectionOrder.filter { section ->
+                val merge = settings.shouldMergeSystemMods(settings.keysTabMergeSystemAndMods)
+                when (section) {
+                    KeysTabSection.NAV_ARROWS -> settings.keysTabShowNavigation || settings.keysTabShowArrowKeys
+                    KeysTabSection.SYSTEM_KEYS -> settings.keysTabShowSystemKeys && !merge
+                    KeysTabSection.QUICK_MODS -> settings.keysTabShowQuickMods && !merge
+                    KeysTabSection.MERGED_SYSTEM_MODS -> merge
+                }
+            },
+            labelProvider = { it.label },
+            iconProvider = { it.icon },
+            onReorder = { newOrder ->
+                val allSections = settings.keysTabSectionOrder.toMutableList()
+                val visible = newOrder.toSet()
+                val hidden = allSections.filter { it !in visible }
+                onChange(settings.copy(keysTabSectionOrder = newOrder + hidden))
+            }
+        )
+
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Section Order",
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp,
+            color = Color.White
+        )
+        Text(
+            "Drag to reorder sections",
+            fontSize = 11.sp,
+            color = Color(0xFF607D8B)
+        )
+        Spacer(Modifier.height(4.dp))
+        GenericDragToReorderList(
+            items = settings.keysTabSectionOrder.filter { section ->
+                val merge = settings.shouldMergeSystemMods(settings.keysTabMergeSystemAndMods)
+                when (section) {
+                    KeysTabSection.NAV_ARROWS -> settings.keysTabShowNavigation || settings.keysTabShowArrowKeys
+                    KeysTabSection.SYSTEM_KEYS -> settings.keysTabShowSystemKeys && !merge
+                    KeysTabSection.QUICK_MODS -> settings.keysTabShowQuickMods && !merge
+                    KeysTabSection.MERGED_SYSTEM_MODS -> merge
+                }
+            },
+            labelProvider = { it.label },
+            iconProvider = { it.icon },
+            onReorder = { newOrder ->
+                val allSections = settings.keysTabSectionOrder.toMutableList()
+                val visible = newOrder.toSet()
+                val hidden = allSections.filter { it !in visible }
+                onChange(settings.copy(keysTabSectionOrder = newOrder + hidden))
+            }
+        )
     }
 
     // ── Nav Row Settings ──
@@ -507,6 +617,29 @@ private fun AppearanceSection(
             settings.highContrastMode
         ) {
             onChange(settings.copy(highContrastMode = it))
+        }
+    }
+}
+
+@Composable
+private fun GlobalReorderHint() {
+    Surface(
+        color = Color(0xFF1565C0).copy(0.1f),
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("🔒", fontSize = 14.sp)
+            Text(
+                "Global in-place reorder is ON. Go to Behavior to turn it off.",
+                fontSize = 11.sp,
+                color = Color(0xFF90CAF9),
+                maxLines = 2,
+            )
         }
     }
 }
@@ -585,6 +718,68 @@ private fun NumpadMediaSection(
         ) {
             onChange(settings.copy(navTabShowTypeText = it))
         }
+
+        AnimatedVisibility(visible = true) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                SettingsToggle(
+                    "In-Place Reorder",
+                    if (settings.inPlaceReorderGlobal)
+                        "Controlled by global setting — turn off global to customize"
+                    else
+                        "Long-press and drag sections to reorder on Nav+Numpad tab",
+                    settings.navTabInPlaceReorder,
+                    enabled = !settings.inPlaceReorderGlobal,
+                ) {
+                    onChange(settings.copy(navTabInPlaceReorder = it))
+                }
+                if (settings.inPlaceReorderGlobal) {
+                    GlobalReorderHint()
+                }
+
+                SettingsToggle(
+                    "Swap Nav ↔ Arrows",
+                    "Swap left/right position of Navigation and Arrow Keys",
+                    settings.navTabNavArrowsSwapped
+                ) {
+                    onChange(settings.copy(navTabNavArrowsSwapped = it))
+                }
+            }
+        }
+
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Section Order",
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp,
+            color = Color.White
+        )
+        Text(
+            "Drag to reorder sections",
+            fontSize = 11.sp,
+            color = Color(0xFF607D8B)
+        )
+        Spacer(Modifier.height(4.dp))
+        GenericDragToReorderList(
+            items = settings.navTabSectionOrder.filter { section ->
+                val merge = settings.shouldMergeSystemMods(settings.navTabMergeSystemAndMods)
+                when (section) {
+                    NavTabSection.NAV_ARROWS -> settings.navTabShowNavigation || settings.navTabShowArrowKeys
+                    NavTabSection.INSERT_TOGGLE -> settings.navTabShowInsertToggle
+                    NavTabSection.SYSTEM_KEYS -> settings.navTabShowSystemKeys && !merge
+                    NavTabSection.QUICK_MODS -> settings.navTabShowQuickMods && !merge
+                    NavTabSection.MERGED_SYSTEM_MODS -> merge
+                    NavTabSection.TYPE_TEXT -> settings.navTabShowTypeText
+                }
+            },
+            labelProvider = { it.label },
+            iconProvider = { it.icon },
+            onReorder = { newOrder ->
+                val allSections = settings.navTabSectionOrder.toMutableList()
+                val visible = newOrder.toSet()
+                val hidden = allSections.filter { it !in visible }
+                onChange(settings.copy(navTabSectionOrder = newOrder + hidden))
+            }
+        )
     }
 
     SettingsCard("Numpad", spacing) {
@@ -975,11 +1170,67 @@ private fun MediaRowSection(
                 }
             }
         }
+
+        AnimatedVisibility(visible = true) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                SettingsToggle(
+                    "In-Place Reorder",
+                    if (settings.inPlaceReorderGlobal)
+                        "Controlled by global setting — turn off global to customize"
+                    else
+                        "Long-press and drag sections to reorder on Media tab",
+                    settings.mediaTabInPlaceReorder,
+                    enabled = !settings.inPlaceReorderGlobal,
+                ) {
+                    onChange(settings.copy(mediaTabInPlaceReorder = it))
+                }
+                if (settings.inPlaceReorderGlobal) {
+                    GlobalReorderHint()
+                }
+            }
+        }
+
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Section Order",
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp,
+            color = Color.White
+        )
+        Text(
+            "Drag to reorder sections",
+            fontSize = 11.sp,
+            color = Color(0xFF607D8B)
+        )
+        Spacer(Modifier.height(4.dp))
+        GenericDragToReorderList(
+            items = settings.mediaTabSectionOrder.filter { section ->
+                val merge = settings.shouldMergeSystemMods(settings.mediaTabMergeSystemAndMods)
+                when (section) {
+                    MediaTabSection.TRANSPORT -> true
+                    MediaTabSection.VOLUME_BRIGHTNESS -> true
+                    MediaTabSection.NAVIGATION -> settings.mediaTabShowNavigation
+                    MediaTabSection.ARROW_KEYS -> settings.mediaTabShowArrowKeys
+                    MediaTabSection.SYSTEM_KEYS -> settings.mediaTabShowSystemKeys && !merge
+                    MediaTabSection.QUICK_MODS -> settings.mediaTabShowQuickMods && !merge
+                    MediaTabSection.MERGED_SYSTEM_MODS -> merge
+                }
+            },
+            labelProvider = { it.label },
+            iconProvider = { it.icon },
+            onReorder = { newOrder ->
+                val allSections = settings.mediaTabSectionOrder.toMutableList()
+                val visible = newOrder.toSet()
+                val hidden = allSections.filter { it !in visible }
+                onChange(settings.copy(mediaTabSectionOrder = newOrder + hidden))
+            }
+        )
     }
+
     SettingsCard("Visibility", spacing) {
         SettingsToggle(
             "Show in Keyboard Tab",
-            "Media row above function keys in keyboard",
+            "Media ow above function keys in keyboard",
             settings.showMediaRowInKeyboard
         ) {
             onChange(settings.copy(showMediaRowInKeyboard = it))
@@ -1059,6 +1310,160 @@ private fun MediaRowSection(
                 onChange(settings.copy(mediaRowGroupOrder = newOrder))
             }
         )
+    }
+}
+
+@Composable
+private fun <T> GenericDragToReorderList(
+    items: List<T>,
+    labelProvider: (T) -> String,
+    iconProvider: (T) -> String,
+    onReorder: (List<T>) -> Unit,
+) {
+    var orderList by remember(items) { mutableStateOf(items.toList()) }
+    var draggingIdx by remember { mutableIntStateOf(-1) }
+    var dragYAccum by remember { mutableFloatStateOf(0f) }
+    var lastTargetIdx by remember { mutableIntStateOf(-1) }
+    var isCommitting by remember { mutableStateOf(false) }
+
+    val density = LocalDensity.current
+    val itemHeightDp = 56.dp
+    val spacingDp = 4.dp
+    val slotPx = with(density) { (itemHeightDp + spacingDp).toPx() }
+    val coroutineScope = rememberCoroutineScope()
+
+    val targetIdx = if (draggingIdx >= 0) {
+        (draggingIdx + (dragYAccum / slotPx).roundToInt()).coerceIn(0, orderList.size - 1)
+    } else -1
+
+    LaunchedEffect(targetIdx) { if (targetIdx >= 0) lastTargetIdx = targetIdx }
+
+    val offsetAnimatables = remember {
+        mutableStateMapOf<Int, Animatable<Float, AnimationVector1D>>()
+    }
+
+    orderList.indices.forEach { idx ->
+        if (!offsetAnimatables.containsKey(idx)) {
+            offsetAnimatables[idx] = Animatable(0f)
+        }
+    }
+
+    orderList.indices.forEach { index ->
+        val isDragged = draggingIdx == index
+        val targetOffsetPx = when {
+            isDragged -> dragYAccum
+            draggingIdx < 0 -> 0f
+            targetIdx > draggingIdx && index in (draggingIdx + 1)..targetIdx -> -slotPx
+            targetIdx < draggingIdx && index in targetIdx until draggingIdx -> slotPx
+            else -> 0f
+        }
+
+        LaunchedEffect(index, targetOffsetPx, isDragged) {
+            if (isCommitting) return@LaunchedEffect
+            val anim = offsetAnimatables[index] ?: return@LaunchedEffect
+            if (isDragged) anim.snapTo(targetOffsetPx)
+            else anim.animateTo(targetOffsetPx, spring(dampingRatio = 0.8f, stiffness = 300f))
+        }
+    }
+
+    fun commitReorder() {
+        val from = draggingIdx; val to = lastTargetIdx
+        draggingIdx = -1; dragYAccum = 0f; lastTargetIdx = -1
+        if (from < 0 || to < 0 || to == from) return
+        val newList = orderList.toMutableList()
+        val item = newList.removeAt(from)
+        newList.add(to, item)
+        coroutineScope.launch {
+            isCommitting = true
+            orderList.indices.forEach { offsetAnimatables[it]?.snapTo(0f) }
+            orderList = newList
+            onReorder(newList)
+            isCommitting = false
+        }
+    }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(spacingDp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .pointerInput(orderList) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { offset ->
+                        if (isCommitting) return@detectDragGesturesAfterLongPress
+                        val idx = (offset.y / slotPx).toInt().coerceIn(orderList.indices)
+                        draggingIdx = idx; dragYAccum = 0f; lastTargetIdx = idx
+                    },
+                    onDrag = { change, amount ->
+                        if (draggingIdx >= 0 && !isCommitting) {
+                            change.consume(); dragYAccum += amount.y
+                        }
+                    },
+                    onDragEnd = { if (!isCommitting) commitReorder() },
+                    onDragCancel = { draggingIdx = -1; dragYAccum = 0f; lastTargetIdx = -1 },
+                )
+            }
+    ) {
+        orderList.forEachIndexed { index, item ->
+            val isDragged = draggingIdx == index
+            val offsetDp = with(density) { (offsetAnimatables[index]?.value ?: 0f).toDp() }
+
+            Surface(
+                color = if (isDragged) Color(0xFF4A90D9).copy(0.25f) else Color(0xFF0A1520),
+                shape = RoundedCornerShape(10.dp),
+                shadowElevation = if (isDragged) 8.dp else 0.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(itemHeightDp)
+                    .zIndex(if (isDragged) 10f else 0f)
+                    .offset(y = offsetDp)
+                    .scale(if (isDragged) 1.03f else 1f)
+                    .border(
+                        if (isDragged) 1.5.dp else 0.5.dp,
+                        if (isDragged) Color(0xFF4A90D9) else Color.White.copy(0.08f),
+                        RoundedCornerShape(10.dp)
+                    )
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(22.dp)
+                                .background(
+                                    Color(0xFF4A90D9).copy(0.15f),
+                                    RoundedCornerShape(5.dp)
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                "${index + 1}",
+                                fontSize = 11.sp,
+                                color = Color(0xFF90CAF9),
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                        Text(iconProvider(item), fontSize = 16.sp)
+                        Text(
+                            labelProvider(item),
+                            fontSize = 13.sp,
+                            color = Color.White,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                        )
+                    }
+                    Text(
+                        "⠿", fontSize = 18.sp,
+                        color = if (isDragged) Color(0xFF90CAF9) else Color(0xFF546E7A),
+                    )
+                }
+            }
+        }
     }
 }
 

@@ -41,6 +41,7 @@ fun AppMainScreen(
     onReconnectHost        : (BluetoothDevice) -> Unit,
     onShowTrackpadSettings : () -> Unit,
     onShowKeyboardSettings : () -> Unit,
+    onSettingsChange   : ((KeyboardSettings) -> Unit)? = null,
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs    = listOf("Status", "Mouse", "Keyboard", "Devices")
@@ -92,6 +93,7 @@ fun AppMainScreen(
                 onConsumerKey  = onConsumerKey,
                 onTypeText     = onTypeText,
                 onShowSettings = onShowKeyboardSettings,
+                onSettingsChange = onSettingsChange,
             )
             3 -> DevicesScreen(
                 nearbyList      = nearbyList,

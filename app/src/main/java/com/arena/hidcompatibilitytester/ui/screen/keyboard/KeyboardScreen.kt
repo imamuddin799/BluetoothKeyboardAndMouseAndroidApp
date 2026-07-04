@@ -28,6 +28,7 @@ fun KeyboardScreen(
     onConsumerKey  : (Int) -> Unit,
     onTypeText     : (String) -> Unit,
     onShowSettings : () -> Unit,
+    onSettingsChange: ((KeyboardSettings) -> Unit)? = null,
 ) {
     var st by remember(settings.numpadStartsLocked, settings.defaultTab) {
         mutableStateOf(
@@ -172,6 +173,7 @@ fun KeyboardScreen(
                 onReleaseKeys = onReleaseKeys,
                 onConsumerKey = onConsumerKey,
                 onTypeText    = onTypeText,
+                onSettingsChange = onSettingsChange,
             )
             1 -> NavNumpadTab(
                 st                = st,
@@ -185,6 +187,7 @@ fun KeyboardScreen(
                 onClearMods       = { clearMods() },
                 onSendKey         = onSendKey,
                 onTypeText        = onTypeText,
+                onSettingsChange  = onSettingsChange,
             )
             2 -> MediaTab(
                 st              = st,
@@ -193,6 +196,7 @@ fun KeyboardScreen(
                 onConsumerKey   = onConsumerKey,
                 onClearMods     = { clearMods() },
                 onUpdateLastKey = { st = st.copy(lastKey = it) },
+                onSettingsChange = onSettingsChange,
             )
         }
     }

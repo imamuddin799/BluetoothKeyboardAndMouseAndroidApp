@@ -19,10 +19,27 @@ internal fun MediaTab(
     onConsumerKey: (Int) -> Unit,
     onClearMods: () -> Unit,
     onUpdateLastKey: (String) -> Unit,
+    onSettingsChange: ((KeyboardSettings) -> Unit)? = null,
 ) {
     val mediaH = settings.mediaKeySize.heightDp.dp
     val style = settings.mediaTabSectionStyle
     val isCompact = style == SectionStyle.COMPACT
+    val merge = settings.shouldMergeSystemMods(settings.mediaTabMergeSystemAndMods)
+    val inPlaceReorder = settings.shouldAllowInPlaceReorder(settings.mediaTabInPlaceReorder)
+
+    // Build visible sections based on order
+    val visibleSections = settings.mediaTabSectionOrder.filter { section ->
+        when (section) {
+            MediaTabSection.TRANSPORT -> true
+            MediaTabSection.VOLUME_BRIGHTNESS -> true
+            MediaTabSection.NAVIGATION -> settings.mediaTabShowNavigation
+            MediaTabSection.ARROW_KEYS -> settings.mediaTabShowArrowKeys
+            MediaTabSection.SYSTEM_KEYS -> settings.mediaTabShowSystemKeys && !merge
+            MediaTabSection.QUICK_MODS -> settings.mediaTabShowQuickMods && !merge
+            MediaTabSection.MERGED_SYSTEM_MODS ->
+                merge && settings.mediaTabShowSystemKeys && settings.mediaTabShowQuickMods
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -30,104 +47,100 @@ internal fun MediaTab(
             .background(Color(0xFF080F18))
             .verticalScroll(rememberScrollState())
             .padding(if (isCompact) 4.dp else 8.dp),
-        verticalArrangement = Arrangement.spacedBy(if (isCompact) 3.dp else 10.dp),
     ) {
-        // ── Transport — always media card ──
-        KbCard("Transport") {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                MEDIA_TRANSPORT.forEach { mk ->
-                    MediaKeyBtn(mk.icon, mk.label, Modifier.weight(1f), mediaH, settings) {
-                        onConsumerKey(mk.code); onUpdateLastKey(mk.label)
+        ReorderableSectionColumn(
+            items = visibleSections,
+            enabled = inPlaceReorder,
+            sectionSpacing = if (isCompact) 3.dp else 10.dp,
+            onReorder = { newOrder ->
+                val allSections = MediaTabSection.entries.toMutableList()
+                val reordered = newOrder.toMutableList()
+                allSections.forEach { s ->
+                    if (s !in reordered) reordered.add(s)
+                }
+                onSettingsChange?.invoke(
+                    settings.copy(mediaTabSectionOrder = reordered)
+                )
+            }
+        ) { _, section, _ ->
+            when (section) {
+                MediaTabSection.TRANSPORT -> {
+                    KbCard("Transport") {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            MEDIA_TRANSPORT.forEach { mk ->
+                                MediaKeyBtn(mk.icon, mk.label, Modifier.weight(1f), mediaH, settings) {
+                                    onConsumerKey(mk.code); onUpdateLastKey(mk.label)
+                                }
+                            }
+                        }
                     }
                 }
-            }
-        }
 
-        // ── Volume & Brightness — always media card ──
-        KbCard("Volume & Brightness") {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                (MEDIA_VOLUME + MEDIA_BRIGHT).forEach { mk ->
-                    MediaKeyBtn(mk.icon, mk.label, Modifier.weight(1f), mediaH - 8.dp, settings) {
-                        onConsumerKey(mk.code); onUpdateLastKey(mk.label)
+                MediaTabSection.VOLUME_BRIGHTNESS -> {
+                    KbCard("Volume & Brightness") {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            (MEDIA_VOLUME + MEDIA_BRIGHT).forEach { mk ->
+                                MediaKeyBtn(mk.icon, mk.label, Modifier.weight(1f), mediaH - 8.dp, settings) {
+                                    onConsumerKey(mk.code); onUpdateLastKey(mk.label)
+                                }
+                            }
+                        }
                     }
                 }
-            }
-        }
 
-        // ── Shared sections ──
-        if (isCompact) {
-            val showNav = settings.mediaTabShowNavigation
-            val showArrows = settings.mediaTabShowArrowKeys
-
-            if (showNav && showArrows) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Box(Modifier.weight(1f)) {
+                MediaTabSection.NAVIGATION -> {
+                    if (isCompact) {
                         NavigationSection(st, settings, style, onKeyPress)
+                    } else {
+                        KbCard("Navigation") {
+                            NavigationSectionContent(st, settings, style, onKeyPress)
+                        }
                     }
-                    Box(Modifier.weight(1f)) {
+                }
+
+                MediaTabSection.ARROW_KEYS -> {
+                    if (isCompact) {
                         ArrowKeysSection(st, settings, style, onKeyPress)
+                    } else {
+                        KbCard("Arrow Keys") {
+                            ArrowKeysSectionContent(st, settings, style, onKeyPress)
+                        }
                     }
                 }
-            } else {
-                if (showNav) {
-                    NavigationSection(st, settings, style, onKeyPress)
-                }
-                if (showArrows) {
-                    ArrowKeysSection(st, settings, style, onKeyPress)
-                }
-            }
 
-            val mergeMedia = settings.shouldMergeSystemMods(settings.mediaTabMergeSystemAndMods)
-            val showSystem = settings.mediaTabShowSystemKeys
-            val showMods = settings.mediaTabShowQuickMods
-
-            if (mergeMedia && showSystem && showMods) {
-                MergedSystemModsSection(st, settings, style, onKeyPress, onClearMods)
-            } else {
-                if (showSystem) {
-                    SystemKeysSection(st, settings, style, onKeyPress)
-                }
-                if (showMods) {
-                    QuickModsSection(st, settings, style, onKeyPress, onClearMods)
-                }
-            }
-        } else {
-            if (settings.mediaTabShowNavigation) {
-                KbCard("Navigation") {
-                    NavigationSectionContent(st, settings, style, onKeyPress)
-                }
-            }
-            if (settings.mediaTabShowArrowKeys) {
-                KbCard("Arrow Keys") {
-                    ArrowKeysSectionContent(st, settings, style, onKeyPress)
-                }
-            }
-            val mergeMedia = settings.shouldMergeSystemMods(settings.mediaTabMergeSystemAndMods)
-            val showSystem = settings.mediaTabShowSystemKeys
-            val showMods = settings.mediaTabShowQuickMods
-
-            if (mergeMedia && showSystem && showMods) {
-                KbCard("System & Modifiers") {
-                    MergedSystemModsSectionContent(st, settings, style, onKeyPress, onClearMods)
-                }
-            } else {
-                if (showSystem) {
-                    KbCard("System Keys") {
-                        SystemKeysSectionContent(st, settings, style, onKeyPress)
+                MediaTabSection.SYSTEM_KEYS -> {
+                    if (isCompact) {
+                        SystemKeysSection(st, settings, style, onKeyPress)
+                    } else {
+                        KbCard("System Keys") {
+                            SystemKeysSectionContent(st, settings, style, onKeyPress)
+                        }
                     }
                 }
-                if (showMods) {
-                    KbCard("Quick Modifiers") {
-                        QuickModsSectionContent(st, settings, style, onKeyPress, onClearMods)
+
+                MediaTabSection.QUICK_MODS -> {
+                    if (isCompact) {
+                        QuickModsSection(st, settings, style, onKeyPress, onClearMods)
+                    } else {
+                        KbCard("Quick Modifiers") {
+                            QuickModsSectionContent(st, settings, style, onKeyPress, onClearMods)
+                        }
+                    }
+                }
+
+                MediaTabSection.MERGED_SYSTEM_MODS -> {
+                    if (isCompact) {
+                        MergedSystemModsSection(st, settings, style, onKeyPress, onClearMods)
+                    } else {
+                        KbCard("System & Modifiers") {
+                            MergedSystemModsSectionContent(st, settings, style, onKeyPress, onClearMods)
+                        }
                     }
                 }
             }
