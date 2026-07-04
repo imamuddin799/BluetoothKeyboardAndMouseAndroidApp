@@ -28,12 +28,26 @@ data class KeyboardSettings(
     val showKeyHints: Boolean = true,
     val highContrastMode: Boolean = false,
 
+    // Keys tab — section visibility
+    val keysTabShowNavigation: Boolean = true,
+    val keysTabShowArrowKeys: Boolean = true,
+    val keysTabShowSystemKeys: Boolean = true,
+    val keysTabShowQuickMods: Boolean = true,
+    val keysTabSectionStyle: SectionStyle = SectionStyle.COMPACT,
+
     // Numpad
     val numpadStartsLocked: Boolean = true,
     val numpadShowHints: Boolean = true,
 
     // Media
     val mediaKeySize: MediaKeySize = MediaKeySize.MEDIUM,
+
+    // Media tab — section visibility
+    val mediaTabShowNavigation: Boolean = false,
+    val mediaTabShowArrowKeys: Boolean = true,
+    val mediaTabShowSystemKeys: Boolean = true,
+    val mediaTabShowQuickMods: Boolean = true,
+    val mediaTabSectionStyle: SectionStyle = SectionStyle.MEDIA,
 
     // Media Quick Row
     val showMediaRowInKeyboard: Boolean = false,
@@ -56,6 +70,11 @@ data class KeyboardSettings(
     // Default tab
     val defaultTab: Int = 0,
 )
+
+enum class SectionStyle(val label: String) {
+    COMPACT("Standard"),
+    MEDIA("Comfort"),
+}
 
 enum class MediaRowGroup(val label: String, val icon: String) {
     TRANSPORT("Transport", "⏯"),

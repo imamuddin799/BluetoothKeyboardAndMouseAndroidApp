@@ -391,6 +391,52 @@ private fun AppearanceSection(
         }
     }
 
+    SettingsCard("Keys Tab Sections", spacing) {
+        SizeSelector(
+            title = "Section Style",
+            subtitle = "Visual style for sections in Keys tab",
+            options = SectionStyle.entries.map { it.label },
+            selectedIndex = settings.keysTabSectionStyle.ordinal,
+            spacing = spacing,
+        ) {
+            onChange(settings.copy(keysTabSectionStyle = SectionStyle.entries[it]))
+        }
+
+        Spacer(Modifier.height(4.dp))
+
+        SettingsToggle(
+            "Navigation",
+            "Home, End, PgUp, PgDn, Ins, Del",
+            settings.keysTabShowNavigation
+        ) {
+            onChange(settings.copy(keysTabShowNavigation = it))
+        }
+
+        SettingsToggle(
+            "Arrow Keys",
+            "← ↑ ↓ → directional keys",
+            settings.keysTabShowArrowKeys
+        ) {
+            onChange(settings.copy(keysTabShowArrowKeys = it))
+        }
+
+        SettingsToggle(
+            "System Keys",
+            "Esc, Tab, BkSp, Del, Enter, PrtSc, ScrLk, Pause, Ins, Menu",
+            settings.keysTabShowSystemKeys
+        ) {
+            onChange(settings.copy(keysTabShowSystemKeys = it))
+        }
+
+        SettingsToggle(
+            "Quick Modifiers",
+            "Ctrl, Shift, Alt, Win, AltGr, Menu",
+            settings.keysTabShowQuickMods
+        ) {
+            onChange(settings.copy(keysTabShowQuickMods = it))
+        }
+    }
+
     // ── Nav Row Settings ──
     SettingsCard("Navigation Quick Row", spacing) {
         Text(
@@ -721,6 +767,51 @@ private fun MediaRowSection(
     spacing: AdaptiveSpacing,
     onChange: (KeyboardSettings) -> Unit,
 ) {
+    SettingsCard("Media Tab Sections", spacing) {
+        SizeSelector(
+            title = "Section Style",
+            subtitle = "Visual style for sections in Media tab",
+            options = SectionStyle.entries.map { it.label },
+            selectedIndex = settings.mediaTabSectionStyle.ordinal,
+            spacing = spacing,
+        ) {
+            onChange(settings.copy(mediaTabSectionStyle = SectionStyle.entries[it]))
+        }
+
+        Spacer(Modifier.height(4.dp))
+
+        SettingsToggle(
+            "Navigation",
+            "Home, End, PgUp, PgDn, Ins, Del",
+            settings.mediaTabShowNavigation
+        ) {
+            onChange(settings.copy(mediaTabShowNavigation = it))
+        }
+
+        SettingsToggle(
+            "Arrow Keys",
+            "← ↑ ↓ → directional keys",
+            settings.mediaTabShowArrowKeys
+        ) {
+            onChange(settings.copy(mediaTabShowArrowKeys = it))
+        }
+
+        SettingsToggle(
+            "System Keys",
+            "Esc, Tab, BkSp, Del, Enter, PrtSc, ScrLk, Pause, Ins, Menu",
+            settings.mediaTabShowSystemKeys
+        ) {
+            onChange(settings.copy(mediaTabShowSystemKeys = it))
+        }
+
+        SettingsToggle(
+            "Quick Modifiers",
+            "Ctrl, Shift, Alt, Win, AltGr, Menu",
+            settings.mediaTabShowQuickMods
+        ) {
+            onChange(settings.copy(mediaTabShowQuickMods = it))
+        }
+    }
     SettingsCard("Visibility", spacing) {
         SettingsToggle(
             "Show in Keyboard Tab",

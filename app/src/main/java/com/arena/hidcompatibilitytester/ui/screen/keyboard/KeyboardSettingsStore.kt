@@ -23,9 +23,25 @@ object KeyboardSettingsStore {
             putString("keyFontSize", s.keyFontSize.name)
             putBoolean("showKeyHints", s.showKeyHints)
             putBoolean("highContrastMode", s.highContrastMode)
+
+            // Keys tab sections
+            putBoolean("keysTabShowNavigation", s.keysTabShowNavigation)
+            putBoolean("keysTabShowArrowKeys", s.keysTabShowArrowKeys)
+            putBoolean("keysTabShowSystemKeys", s.keysTabShowSystemKeys)
+            putBoolean("keysTabShowQuickMods", s.keysTabShowQuickMods)
+            putString("keysTabSectionStyle", s.keysTabSectionStyle.name)
+
             putBoolean("numpadStartsLocked", s.numpadStartsLocked)
             putBoolean("numpadShowHints", s.numpadShowHints)
             putString("mediaKeySize", s.mediaKeySize.name)
+
+            // Media tab sections
+            putBoolean("mediaTabShowNavigation", s.mediaTabShowNavigation)
+            putBoolean("mediaTabShowArrowKeys", s.mediaTabShowArrowKeys)
+            putBoolean("mediaTabShowSystemKeys", s.mediaTabShowSystemKeys)
+            putBoolean("mediaTabShowQuickMods", s.mediaTabShowQuickMods)
+            putString("mediaTabSectionStyle", s.mediaTabSectionStyle.name)
+
             putBoolean("showMediaRowInKeyboard", s.showMediaRowInKeyboard)
             putBoolean("showMediaRowInTrackpad", s.showMediaRowInTrackpad)
             putBoolean("mediaRowShowTransport", s.mediaRowShowTransport)
@@ -34,8 +50,10 @@ object KeyboardSettingsStore {
             putBoolean("mediaRowRepeatVolume", s.mediaRowRepeatVolume)
             putBoolean("mediaRowRepeatBrightness", s.mediaRowRepeatBrightness)
             putString("mediaRowGroupOrder", s.mediaRowGroupOrder.joinToString(",") { it.name })
+
             putBoolean("showNavRowInKeyboard", s.showNavRowInKeyboard)
             putBoolean("showNavRowInTrackpad", s.showNavRowInTrackpad)
+
             putInt("defaultTab", s.defaultTab)
             apply()
         }
@@ -65,11 +83,29 @@ object KeyboardSettingsStore {
             }.getOrDefault(KeyFontSize.MEDIUM),
             showKeyHints = p.getBoolean("showKeyHints", true),
             highContrastMode = p.getBoolean("highContrastMode", false),
+
+            keysTabShowNavigation = p.getBoolean("keysTabShowNavigation", true),
+            keysTabShowArrowKeys = p.getBoolean("keysTabShowArrowKeys", true),
+            keysTabShowSystemKeys = p.getBoolean("keysTabShowSystemKeys", true),
+            keysTabShowQuickMods = p.getBoolean("keysTabShowQuickMods", true),
+            keysTabSectionStyle = runCatching {
+                SectionStyle.valueOf(p.getString("keysTabSectionStyle", "COMPACT")!!)
+            }.getOrDefault(SectionStyle.COMPACT),
+
             numpadStartsLocked = p.getBoolean("numpadStartsLocked", true),
             numpadShowHints = p.getBoolean("numpadShowHints", true),
             mediaKeySize = runCatching {
                 MediaKeySize.valueOf(p.getString("mediaKeySize", "MEDIUM")!!)
             }.getOrDefault(MediaKeySize.MEDIUM),
+
+            mediaTabShowNavigation = p.getBoolean("mediaTabShowNavigation", false),
+            mediaTabShowArrowKeys = p.getBoolean("mediaTabShowArrowKeys", true),
+            mediaTabShowSystemKeys = p.getBoolean("mediaTabShowSystemKeys", true),
+            mediaTabShowQuickMods = p.getBoolean("mediaTabShowQuickMods", true),
+            mediaTabSectionStyle = runCatching {
+                SectionStyle.valueOf(p.getString("mediaTabSectionStyle", "MEDIA")!!)
+            }.getOrDefault(SectionStyle.MEDIA),
+
             showMediaRowInKeyboard = p.getBoolean("showMediaRowInKeyboard", false),
             showMediaRowInTrackpad = p.getBoolean("showMediaRowInTrackpad", false),
             mediaRowShowTransport = p.getBoolean("mediaRowShowTransport", true),
@@ -93,8 +129,10 @@ object KeyboardSettingsStore {
                     MediaRowGroup.BRIGHTNESS
                 )
             ),
+
             showNavRowInKeyboard = p.getBoolean("showNavRowInKeyboard", false),
             showNavRowInTrackpad = p.getBoolean("showNavRowInTrackpad", false),
+
             defaultTab = p.getInt("defaultTab", 0),
         )
     }

@@ -1,19 +1,13 @@
-// ui/screen/keyboard/tabs/MediaTab.kt
 package com.arena.hidcompatibilitytester.ui.screen.keyboard.tabs
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.*
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.components.*
 
@@ -26,17 +20,19 @@ internal fun MediaTab(
     onClearMods: () -> Unit,
     onUpdateLastKey: (String) -> Unit,
 ) {
-    val navH   = settings.keyHeight.navDp.dp
     val mediaH = settings.mediaKeySize.heightDp.dp
+    val style = settings.mediaTabSectionStyle
+    val isCompact = style == SectionStyle.COMPACT
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF080F18))
             .verticalScroll(rememberScrollState())
-            .padding(8.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+            .padding(if (isCompact) 4.dp else 8.dp),
+        verticalArrangement = Arrangement.spacedBy(if (isCompact) 3.dp else 10.dp),
     ) {
+        // ── Transport — always media card ──
         KbCard("Transport") {
             Row(
                 Modifier.fillMaxWidth(),
@@ -50,6 +46,7 @@ internal fun MediaTab(
             }
         }
 
+        // ── Volume & Brightness — always media card ──
         KbCard("Volume & Brightness") {
             Row(
                 Modifier.fillMaxWidth(),
@@ -63,81 +60,57 @@ internal fun MediaTab(
             }
         }
 
-        KbCard("Arrow Keys") {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
+        // ── Shared sections ──
+        if (isCompact) {
+            val showNav = settings.mediaTabShowNavigation
+            val showArrows = settings.mediaTabShowArrowKeys
+
+            if (showNav && showArrows) {
                 Row(
-                    Modifier.fillMaxWidth(0.66f),
-                    horizontalArrangement = Arrangement.Center,
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    KBtn(
-                        key = KEY_UP, modifier = Modifier.weight(1f), h = navH,
-                        settings = settings, mainLabel = "↑", scrollable = true,
-                        onPress = { onKeyPress(KEY_UP) },
-                    )
-                }
-                Row(Modifier.fillMaxWidth(0.66f)) {
-                    listOf(KEY_LEFT, KEY_DOWN, KEY_RIGHT).forEach { k ->
-                        KBtn(
-                            key = k, modifier = Modifier.weight(1f), h = navH,
-                            settings = settings, mainLabel = k.label, scrollable = true,
-                            onPress = { onKeyPress(k) },
-                        )
+                    Box(Modifier.weight(1f)) {
+                        NavigationSection(st, settings, style, onKeyPress)
+                    }
+                    Box(Modifier.weight(1f)) {
+                        ArrowKeysSection(st, settings, style, onKeyPress)
                     }
                 }
+            } else {
+                if (showNav) {
+                    NavigationSection(st, settings, style, onKeyPress)
+                }
+                if (showArrows) {
+                    ArrowKeysSection(st, settings, style, onKeyPress)
+                }
             }
-        }
 
-        KbCard("System Keys") {
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Row(Modifier.fillMaxWidth()) {
-                    SYSTEM_ROW1.forEach { k ->
-                        KBtn(
-                            key = k, modifier = Modifier.weight(1f), h = navH,
-                            settings = settings, active = isKeyActive(k, st),
-                            mainLabel = displayMain(k, st), scrollable = true,
-                            onPress = { onKeyPress(k) },
-                        )
-                    }
-                }
-                Row(Modifier.fillMaxWidth()) {
-                    SYSTEM_ROW2.forEach { k ->
-                        KBtn(
-                            key = k, modifier = Modifier.weight(1f), h = navH,
-                            settings = settings, active = isKeyActive(k, st),
-                            mainLabel = displayMain(k, st), scrollable = true,
-                            onPress = { onKeyPress(k) },
-                        )
-                    }
+            if (settings.mediaTabShowSystemKeys) {
+                SystemKeysSection(st, settings, style, onKeyPress)
+            }
+            if (settings.mediaTabShowQuickMods) {
+                QuickModsSection(st, settings, style, onKeyPress, onClearMods)
+            }
+        } else {
+            if (settings.mediaTabShowNavigation) {
+                KbCard("Navigation") {
+                    NavigationSectionContent(st, settings, style, onKeyPress)
                 }
             }
-        }
-
-        KbCard("Quick Modifiers") {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                QUICK_MODIFIERS.forEach { k ->
-                    KBtn(
-                        key = k, modifier = Modifier.weight(1f), h = navH - 2.dp,
-                        settings = settings, active = isKeyActive(k, st),
-                        mainLabel = k.label, scrollable = true,
-                        onPress = { onKeyPress(k) },
-                    )
+            if (settings.mediaTabShowArrowKeys) {
+                KbCard("Arrow Keys") {
+                    ArrowKeysSectionContent(st, settings, style, onKeyPress)
                 }
             }
-            if (st.anyMod) {
-                Spacer(Modifier.height(4.dp))
-                OutlinedButton(
-                    onClick = onClearMods,
-                    modifier = Modifier.fillMaxWidth(),
-                    border = BorderStroke(1.dp, Color(0xFFEF9A9A).copy(0.5f)),
-                ) {
-                    Text("✕ Clear All Modifiers", color = Color(0xFFEF9A9A), fontSize = 12.sp)
+            if (settings.mediaTabShowSystemKeys) {
+                KbCard("System Keys") {
+                    SystemKeysSectionContent(st, settings, style, onKeyPress)
+                }
+            }
+            if (settings.mediaTabShowQuickMods) {
+                KbCard("Quick Modifiers") {
+                    QuickModsSectionContent(st, settings, style, onKeyPress, onClearMods)
                 }
             }
         }
