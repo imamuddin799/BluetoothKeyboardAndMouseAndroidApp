@@ -70,14 +70,24 @@ internal fun KeysTab(
                     }
                 }
 
-                if (settings.keysTabShowSystemKeys) {
-                    KbCard("System Keys") {
-                        SystemKeysSectionContent(st, settings, style, onKeyPress)
+                val mergeKeys = settings.shouldMergeSystemMods(settings.keysTabMergeSystemAndMods)
+                val showSystem = settings.keysTabShowSystemKeys
+                val showMods = settings.keysTabShowQuickMods
+
+                if (mergeKeys && showSystem && showMods) {
+                    KbCard("System & Modifiers") {
+                        MergedSystemModsSectionContent(st, settings, style, onKeyPress, onClearMods)
                     }
-                }
-                if (settings.keysTabShowQuickMods) {
-                    KbCard("Quick Modifiers") {
-                        QuickModsSectionContent(st, settings, style, onKeyPress, onClearMods)
+                } else {
+                    if (showSystem) {
+                        KbCard("System Keys") {
+                            SystemKeysSectionContent(st, settings, style, onKeyPress)
+                        }
+                    }
+                    if (showMods) {
+                        KbCard("Quick Modifiers") {
+                            QuickModsSectionContent(st, settings, style, onKeyPress, onClearMods)
+                        }
                     }
                 }
             } else {
@@ -101,11 +111,19 @@ internal fun KeysTab(
                         ArrowKeysSection(st, settings, style, onKeyPress)
                     }
                 }
-                if (settings.keysTabShowSystemKeys) {
-                    SystemKeysSection(st, settings, style, onKeyPress)
-                }
-                if (settings.keysTabShowQuickMods) {
-                    QuickModsSection(st, settings, style, onKeyPress, onClearMods)
+                val mergeKeys = settings.shouldMergeSystemMods(settings.keysTabMergeSystemAndMods)
+                val showSystem = settings.keysTabShowSystemKeys
+                val showMods = settings.keysTabShowQuickMods
+
+                if (mergeKeys && showSystem && showMods) {
+                    MergedSystemModsSection(st, settings, style, onKeyPress, onClearMods)
+                } else {
+                    if (showSystem) {
+                        SystemKeysSection(st, settings, style, onKeyPress)
+                    }
+                    if (showMods) {
+                        QuickModsSection(st, settings, style, onKeyPress, onClearMods)
+                    }
                 }
             }
         }

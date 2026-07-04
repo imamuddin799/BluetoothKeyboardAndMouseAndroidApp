@@ -333,6 +333,22 @@ private fun BehaviorSection(
         }
     }
 
+    SettingsCard("Merge System & Modifiers", spacing) {
+        SettingsToggle(
+            "Merge All Tabs",
+            "Combine System Keys + Quick Modifiers into one section across all tabs",
+            settings.mergeSystemAndModsGlobal
+        ) {
+            val newSettings = settings.copy(
+                mergeSystemAndModsGlobal = it,
+                keysTabMergeSystemAndMods = it,
+                mediaTabMergeSystemAndMods = it,
+                navTabMergeSystemAndMods = it,
+            )
+            onChange(newSettings)
+        }
+    }
+
     SettingsCard("Default Tab", spacing) {
         DefaultTabSelector(
             selected = settings.defaultTab,
@@ -341,6 +357,7 @@ private fun BehaviorSection(
             onChange(settings.copy(defaultTab = it))
         }
     }
+
 }
 
 @Composable
@@ -435,6 +452,26 @@ private fun AppearanceSection(
         ) {
             onChange(settings.copy(keysTabShowQuickMods = it))
         }
+        AnimatedVisibility(
+            visible = settings.keysTabShowSystemKeys && settings.keysTabShowQuickMods
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                SettingsToggle(
+                    "Merge System & Modifiers",
+                    if (settings.mergeSystemAndModsGlobal)
+                        "Controlled by global merge — turn off global to customize"
+                    else
+                        "Combine into one section with 3 rows",
+                    settings.keysTabMergeSystemAndMods,
+                    enabled = !settings.mergeSystemAndModsGlobal,
+                ) {
+                    onChange(settings.copy(keysTabMergeSystemAndMods = it))
+                }
+                if (settings.mergeSystemAndModsGlobal) {
+                    GlobalMergeHint()
+                }
+            }
+        }
     }
 
     // ── Nav Row Settings ──
@@ -520,6 +557,26 @@ private fun NumpadMediaSection(
         ) {
             onChange(settings.copy(navTabShowQuickMods = it))
         }
+        AnimatedVisibility(
+            visible = settings.navTabShowSystemKeys && settings.navTabShowQuickMods
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                SettingsToggle(
+                    "Merge System & Modifiers",
+                    if (settings.mergeSystemAndModsGlobal)
+                        "Controlled by global merge — turn off global to customize"
+                    else
+                        "Combine into one section with 3 rows",
+                    settings.navTabMergeSystemAndMods,
+                    enabled = !settings.mergeSystemAndModsGlobal,
+                ) {
+                    onChange(settings.copy(navTabMergeSystemAndMods = it))
+                }
+                if (settings.mergeSystemAndModsGlobal) {
+                    GlobalMergeHint()
+                }
+            }
+        }
 
         SettingsToggle(
             "Type & Send Text",
@@ -581,34 +638,71 @@ private fun SettingsToggle(
     title: String,
     subtitle: String,
     checked: Boolean,
+    enabled: Boolean = true,
     onToggle: (Boolean) -> Unit,
 ) {
+    val alpha = if (enabled) 1f else 0.4f
+
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+        Column(
+            Modifier
+                .weight(1f)
+                .padding(end = 12.dp)
+        ) {
             Text(
                 title, fontWeight = FontWeight.SemiBold,
-                fontSize = 14.sp, color = Color.White,
+                fontSize = 14.sp,
+                color = Color.White.copy(alpha = alpha),
                 maxLines = 1, overflow = TextOverflow.Ellipsis
             )
             Text(
-                subtitle, fontSize = 11.sp, color = Color(0xFF607D8B),
+                subtitle, fontSize = 11.sp,
+                color = Color(0xFF607D8B).copy(alpha = alpha),
                 maxLines = 2, overflow = TextOverflow.Ellipsis
             )
         }
         Switch(
             checked = checked,
-            onCheckedChange = onToggle,
+            onCheckedChange = { if (enabled) onToggle(it) },
+            enabled = enabled,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = Color(0xFF4A90D9),
                 checkedTrackColor = Color(0xFF4A90D9).copy(0.5f),
                 uncheckedThumbColor = Color(0xFF607D8B),
-                uncheckedTrackColor = Color.White.copy(0.2f)
+                uncheckedTrackColor = Color.White.copy(0.2f),
+                disabledCheckedThumbColor = Color(0xFF4A90D9).copy(0.4f),
+                disabledCheckedTrackColor = Color(0xFF4A90D9).copy(0.2f),
+                disabledUncheckedThumbColor = Color(0xFF607D8B).copy(0.4f),
+                disabledUncheckedTrackColor = Color.White.copy(0.1f),
             )
         )
+    }
+}
+
+@Composable
+private fun GlobalMergeHint() {
+    Surface(
+        color = Color(0xFF1565C0).copy(0.1f),
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("🔒", fontSize = 14.sp)
+            Text(
+                "Global merge is ON. Go to Behavior → Merge System & Modifiers to turn it off.",
+                fontSize = 11.sp,
+                color = Color(0xFF90CAF9),
+                maxLines = 2,
+            )
+        }
     }
 }
 
@@ -860,6 +954,26 @@ private fun MediaRowSection(
             settings.mediaTabShowQuickMods
         ) {
             onChange(settings.copy(mediaTabShowQuickMods = it))
+        }
+        AnimatedVisibility(
+            visible = settings.mediaTabShowSystemKeys && settings.mediaTabShowQuickMods
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                SettingsToggle(
+                    "Merge System & Modifiers",
+                    if (settings.mergeSystemAndModsGlobal)
+                        "Controlled by global merge — turn off global to customize"
+                    else
+                        "Combine into one section with 3 rows",
+                    settings.mediaTabMergeSystemAndMods,
+                    enabled = !settings.mergeSystemAndModsGlobal,
+                ) {
+                    onChange(settings.copy(mediaTabMergeSystemAndMods = it))
+                }
+                if (settings.mergeSystemAndModsGlobal) {
+                    GlobalMergeHint()
+                }
+            }
         }
     }
     SettingsCard("Visibility", spacing) {

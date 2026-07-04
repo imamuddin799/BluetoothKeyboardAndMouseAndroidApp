@@ -86,11 +86,19 @@ internal fun MediaTab(
                 }
             }
 
-            if (settings.mediaTabShowSystemKeys) {
-                SystemKeysSection(st, settings, style, onKeyPress)
-            }
-            if (settings.mediaTabShowQuickMods) {
-                QuickModsSection(st, settings, style, onKeyPress, onClearMods)
+            val mergeMedia = settings.shouldMergeSystemMods(settings.mediaTabMergeSystemAndMods)
+            val showSystem = settings.mediaTabShowSystemKeys
+            val showMods = settings.mediaTabShowQuickMods
+
+            if (mergeMedia && showSystem && showMods) {
+                MergedSystemModsSection(st, settings, style, onKeyPress, onClearMods)
+            } else {
+                if (showSystem) {
+                    SystemKeysSection(st, settings, style, onKeyPress)
+                }
+                if (showMods) {
+                    QuickModsSection(st, settings, style, onKeyPress, onClearMods)
+                }
             }
         } else {
             if (settings.mediaTabShowNavigation) {
@@ -103,14 +111,24 @@ internal fun MediaTab(
                     ArrowKeysSectionContent(st, settings, style, onKeyPress)
                 }
             }
-            if (settings.mediaTabShowSystemKeys) {
-                KbCard("System Keys") {
-                    SystemKeysSectionContent(st, settings, style, onKeyPress)
+            val mergeMedia = settings.shouldMergeSystemMods(settings.mediaTabMergeSystemAndMods)
+            val showSystem = settings.mediaTabShowSystemKeys
+            val showMods = settings.mediaTabShowQuickMods
+
+            if (mergeMedia && showSystem && showMods) {
+                KbCard("System & Modifiers") {
+                    MergedSystemModsSectionContent(st, settings, style, onKeyPress, onClearMods)
                 }
-            }
-            if (settings.mediaTabShowQuickMods) {
-                KbCard("Quick Modifiers") {
-                    QuickModsSectionContent(st, settings, style, onKeyPress, onClearMods)
+            } else {
+                if (showSystem) {
+                    KbCard("System Keys") {
+                        SystemKeysSectionContent(st, settings, style, onKeyPress)
+                    }
+                }
+                if (showMods) {
+                    KbCard("Quick Modifiers") {
+                        QuickModsSectionContent(st, settings, style, onKeyPress, onClearMods)
+                    }
                 }
             }
         }

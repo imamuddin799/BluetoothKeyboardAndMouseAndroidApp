@@ -61,6 +61,11 @@ object KeyboardSettingsStore {
             putBoolean("navTabShowSystemKeys", s.navTabShowSystemKeys)
             putBoolean("navTabShowQuickMods", s.navTabShowQuickMods)
 
+            putBoolean("mergeSystemAndModsGlobal", s.mergeSystemAndModsGlobal)
+            putBoolean("keysTabMergeSystemAndMods", s.keysTabMergeSystemAndMods)
+            putBoolean("mediaTabMergeSystemAndMods", s.mediaTabMergeSystemAndMods)
+            putBoolean("navTabMergeSystemAndMods", s.navTabMergeSystemAndMods)
+            
             putInt("defaultTab", s.defaultTab)
             apply()
         }
@@ -146,6 +151,11 @@ object KeyboardSettingsStore {
             navTabShowTypeText = p.getBoolean("navTabShowTypeText", true),
             navTabShowSystemKeys = p.getBoolean("navTabShowSystemKeys", true),
             navTabShowQuickMods = p.getBoolean("navTabShowQuickMods", true),
+
+            mergeSystemAndModsGlobal = p.getBoolean("mergeSystemAndModsGlobal", false),
+            keysTabMergeSystemAndMods = p.getBoolean("keysTabMergeSystemAndMods", false),
+            mediaTabMergeSystemAndMods = p.getBoolean("mediaTabMergeSystemAndMods", false),
+            navTabMergeSystemAndMods = p.getBoolean("navTabMergeSystemAndMods", false),
 
             defaultTab = p.getInt("defaultTab", 0),
         )

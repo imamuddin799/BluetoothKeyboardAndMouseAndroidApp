@@ -75,10 +75,19 @@ data class KeyboardSettings(
     val showNavRowInKeyboard: Boolean = false,
     val showNavRowInTrackpad: Boolean = false,
 
+    // Merge System Keys + Quick Modifiers
+    val mergeSystemAndModsGlobal: Boolean = false,
+    val keysTabMergeSystemAndMods: Boolean = false,
+    val mediaTabMergeSystemAndMods: Boolean = false,
+    val navTabMergeSystemAndMods: Boolean = false,
+
     // Default tab
     val defaultTab: Int = 0,
-)
-
+) {
+    fun shouldMergeSystemMods(tabMerge: Boolean): Boolean {
+        return mergeSystemAndModsGlobal || tabMerge
+    }
+}
 enum class SectionStyle(val label: String) {
     COMPACT("Standard"),
     MEDIA("Comfort"),

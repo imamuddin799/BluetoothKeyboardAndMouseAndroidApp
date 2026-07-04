@@ -122,25 +122,38 @@ internal fun NavNumpadTab(
                 }
             }
 
-            // ── System Keys ──
-            if (settings.navTabShowSystemKeys) {
-                if (isComfort) {
-                    KbCard("System Keys") {
-                        SystemKeysSectionContent(st, settings, style, onKeyPress)
-                    }
-                } else {
-                    SystemKeysSection(st, settings, style, onKeyPress)
-                }
-            }
+            // ── System Keys + Quick Modifiers ──
+            val mergeNav = settings.shouldMergeSystemMods(settings.navTabMergeSystemAndMods)
+            val showSystem = settings.navTabShowSystemKeys
+            val showMods = settings.navTabShowQuickMods
 
-            // ── Quick Modifiers ──
-            if (settings.navTabShowQuickMods) {
-                if (isComfort) {
-                    KbCard("Quick Modifiers") {
-                        QuickModsSectionContent(st, settings, style, onKeyPress, onClearMods)
+            if (isComfort) {
+                if (mergeNav && showSystem && showMods) {
+                    KbCard("System & Modifiers") {
+                        MergedSystemModsSectionContent(st, settings, style, onKeyPress, onClearMods)
                     }
                 } else {
-                    QuickModsSection(st, settings, style, onKeyPress, onClearMods)
+                    if (showSystem) {
+                        KbCard("System Keys") {
+                            SystemKeysSectionContent(st, settings, style, onKeyPress)
+                        }
+                    }
+                    if (showMods) {
+                        KbCard("Quick Modifiers") {
+                            QuickModsSectionContent(st, settings, style, onKeyPress, onClearMods)
+                        }
+                    }
+                }
+            } else {
+                if (mergeNav && showSystem && showMods) {
+                    MergedSystemModsSection(st, settings, style, onKeyPress, onClearMods)
+                } else {
+                    if (showSystem) {
+                        SystemKeysSection(st, settings, style, onKeyPress)
+                    }
+                    if (showMods) {
+                        QuickModsSection(st, settings, style, onKeyPress, onClearMods)
+                    }
                 }
             }
 

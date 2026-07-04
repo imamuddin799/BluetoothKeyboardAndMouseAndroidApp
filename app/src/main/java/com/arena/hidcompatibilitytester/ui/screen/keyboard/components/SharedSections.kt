@@ -327,6 +327,151 @@ fun QuickModsSectionContent(
 }
 
 // ═════════════════════════════════════════════════════════════════
+// Merged System Keys + Quick Modifiers
+// ═════════════════════════════════════════════════════════════════
+
+@Composable
+fun MergedSystemModsSection(
+    st: KbState,
+    settings: KeyboardSettings,
+    style: SectionStyle,
+    onKeyPress: (Key) -> Unit,
+    onClearMods: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        SectionTitle("System & Modifiers")
+        MergedSystemModsSectionContent(st, settings, style, onKeyPress, onClearMods)
+    }
+}
+
+@Composable
+fun MergedSystemModsSectionContent(
+    st: KbState,
+    settings: KeyboardSettings,
+    style: SectionStyle,
+    onKeyPress: (Key) -> Unit,
+    onClearMods: () -> Unit,
+) {
+    val navH = settings.keyHeight.navDp.dp
+    val gap = if (style == SectionStyle.MEDIA) 4.dp else 1.dp
+
+    when (style) {
+        SectionStyle.COMPACT -> {
+            Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(gap),
+                ) {
+                    SYSTEM_ROW1.forEach { k ->
+                        KBtn(
+                            key = k, modifier = Modifier.weight(1f), h = navH,
+                            settings = settings, active = isKeyActive(k, st),
+                            mainLabel = displayMain(k, st), scrollable = true,
+                            onPress = { onKeyPress(k) },
+                        )
+                    }
+                }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(gap),
+                ) {
+                    SYSTEM_ROW2.forEach { k ->
+                        KBtn(
+                            key = k, modifier = Modifier.weight(1f), h = navH,
+                            settings = settings, active = isKeyActive(k, st),
+                            mainLabel = displayMain(k, st), scrollable = true,
+                            onPress = { onKeyPress(k) },
+                        )
+                    }
+                }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(gap),
+                ) {
+                    QUICK_MODIFIERS_WITH_MENU.forEach { k ->
+                        KBtn(
+                            key = k, modifier = Modifier.weight(1f), h = navH,
+                            settings = settings, active = isKeyActive(k, st),
+                            mainLabel = k.label, scrollable = true,
+                            onPress = { onKeyPress(k) },
+                        )
+                    }
+                }
+                if (st.anyMod) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        TextButton(
+                            onClick = onClearMods,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        ) {
+                            Text(
+                                "Clear Modifiers", fontSize = 11.sp,
+                                color = Color(0xFFEF9A9A),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        SectionStyle.MEDIA -> {
+            Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(gap),
+                ) {
+                    SYSTEM_ROW1.forEach { k ->
+                        KBtn(
+                            key = k, modifier = Modifier.weight(1f), h = navH,
+                            settings = settings, active = isKeyActive(k, st),
+                            mainLabel = displayMain(k, st), scrollable = true,
+                            onPress = { onKeyPress(k) },
+                        )
+                    }
+                }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(gap),
+                ) {
+                    SYSTEM_ROW2.forEach { k ->
+                        KBtn(
+                            key = k, modifier = Modifier.weight(1f), h = navH,
+                            settings = settings, active = isKeyActive(k, st),
+                            mainLabel = displayMain(k, st), scrollable = true,
+                            onPress = { onKeyPress(k) },
+                        )
+                    }
+                }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(gap),
+                ) {
+                    QUICK_MODIFIERS.forEach { k ->
+                        KBtn(
+                            key = k, modifier = Modifier.weight(1f), h = navH - 2.dp,
+                            settings = settings, active = isKeyActive(k, st),
+                            mainLabel = k.label, scrollable = true,
+                            onPress = { onKeyPress(k) },
+                        )
+                    }
+                }
+                if (st.anyMod) {
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedButton(
+                        onClick = onClearMods,
+                        modifier = Modifier.fillMaxWidth(),
+                        border = BorderStroke(1.dp, Color(0xFFEF9A9A).copy(0.5f)),
+                    ) {
+                        Text("✕ Clear All Modifiers", color = Color(0xFFEF9A9A), fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════
 // Shared helpers
 // ═════════════════════════════════════════════════════════════════
 
