@@ -54,6 +54,13 @@ object KeyboardSettingsStore {
             putBoolean("showNavRowInKeyboard", s.showNavRowInKeyboard)
             putBoolean("showNavRowInTrackpad", s.showNavRowInTrackpad)
 
+            putBoolean("navTabShowNavigation", s.navTabShowNavigation)
+            putBoolean("navTabShowArrowKeys", s.navTabShowArrowKeys)
+            putBoolean("navTabShowInsertToggle", s.navTabShowInsertToggle)
+            putBoolean("navTabShowTypeText", s.navTabShowTypeText)
+            putBoolean("navTabShowSystemKeys", s.navTabShowSystemKeys)
+            putBoolean("navTabShowQuickMods", s.navTabShowQuickMods)
+
             putInt("defaultTab", s.defaultTab)
             apply()
         }
@@ -132,6 +139,13 @@ object KeyboardSettingsStore {
 
             showNavRowInKeyboard = p.getBoolean("showNavRowInKeyboard", false),
             showNavRowInTrackpad = p.getBoolean("showNavRowInTrackpad", false),
+
+            navTabShowNavigation = p.getBoolean("navTabShowNavigation", true),
+            navTabShowArrowKeys = p.getBoolean("navTabShowArrowKeys", true),
+            navTabShowInsertToggle = p.getBoolean("navTabShowInsertToggle", true),
+            navTabShowTypeText = p.getBoolean("navTabShowTypeText", true),
+            navTabShowSystemKeys = p.getBoolean("navTabShowSystemKeys", true),
+            navTabShowQuickMods = p.getBoolean("navTabShowQuickMods", true),
 
             defaultTab = p.getInt("defaultTab", 0),
         )

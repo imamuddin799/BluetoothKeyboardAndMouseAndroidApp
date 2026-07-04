@@ -115,7 +115,8 @@ internal fun NumpadLayout(
     onKey     : (code: Int, label: String) -> Unit,
 ) {
     val cellH = 52.dp
-    val tallH = cellH * 2 + 2.dp
+    val gap   = 4.dp
+    val tallH = cellH * 2 + gap
 
     fun lbl(on: String, off: String): String {
         val effective = if (shift) !numLock else numLock
@@ -128,78 +129,142 @@ internal fun NumpadLayout(
         return if (effective) off else on
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(gap)) {
 
-        // Row 0: NumLk / * -
-        Row(Modifier.fillMaxWidth()) {
+        // Row 0: NumLk ÷ × −
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(gap),
+        ) {
             NumpadCell(
                 mainLabel = "NumLk", color = KC.MOD, isActive = numLock,
                 modifier = Modifier.weight(1f), h = cellH, settings = settings,
                 doRepeat = false, onTap = onNumLock,
             )
-            NumpadCell("÷", color = KC.SPECIAL, modifier = Modifier.weight(1f),
-                h = cellH, settings = settings, onTap = { onKey(0x54, "/") })
-            NumpadCell("×", color = KC.SPECIAL, modifier = Modifier.weight(1f),
-                h = cellH, settings = settings, onTap = { onKey(0x55, "*") })
-            NumpadCell("−", color = KC.SPECIAL, modifier = Modifier.weight(1f),
-                h = cellH, settings = settings, onTap = { onKey(0x56, "-") })
+            NumpadCell(
+                mainLabel = "÷", color = KC.SPECIAL, isActive = false,
+                modifier = Modifier.weight(1f), h = cellH, settings = settings,
+                doRepeat = true, onTap = { onKey(0x54, "/") },
+            )
+            NumpadCell(
+                mainLabel = "×", color = KC.SPECIAL, isActive = false,
+                modifier = Modifier.weight(1f), h = cellH, settings = settings,
+                doRepeat = true, onTap = { onKey(0x55, "*") },
+            )
+            NumpadCell(
+                mainLabel = "−", color = KC.SPECIAL, isActive = false,
+                modifier = Modifier.weight(1f), h = cellH, settings = settings,
+                doRepeat = true, onTap = { onKey(0x56, "-") },
+            )
         }
 
         // Rows 1-2: 7 8 9 [+tall] / 4 5 6
-        Row(Modifier.fillMaxWidth().height(tallH)) {
-            Column(Modifier.weight(3f)) {
-                Row(Modifier.fillMaxWidth().weight(1f)) {
-                    NumpadCell(lbl("7", "Home"), top("7", "Home"),
+        Row(
+            Modifier.fillMaxWidth().height(tallH),
+            horizontalArrangement = Arrangement.spacedBy(gap),
+        ) {
+            Column(
+                Modifier.weight(3f),
+                verticalArrangement = Arrangement.spacedBy(gap),
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(gap),
+                ) {
+                    NumpadCell(
+                        mainLabel = lbl("7", "Home"), topLabel = top("7", "Home"),
                         modifier = Modifier.weight(1f), h = cellH, settings = settings,
-                        onTap = { onKey(0x5F, lbl("7", "Home")) })
-                    NumpadCell(lbl("8", "↑"), top("8", "↑"),
+                        onTap = { onKey(0x5F, lbl("7", "Home")) },
+                    )
+                    NumpadCell(
+                        mainLabel = lbl("8", "↑"), topLabel = top("8", "↑"),
                         modifier = Modifier.weight(1f), h = cellH, settings = settings,
-                        onTap = { onKey(0x60, lbl("8", "↑")) })
-                    NumpadCell(lbl("9", "PgUp"), top("9", "PgUp"),
+                        onTap = { onKey(0x60, lbl("8", "↑")) },
+                    )
+                    NumpadCell(
+                        mainLabel = lbl("9", "PgUp"), topLabel = top("9", "PgUp"),
                         modifier = Modifier.weight(1f), h = cellH, settings = settings,
-                        onTap = { onKey(0x61, lbl("9", "PgUp")) })
+                        onTap = { onKey(0x61, lbl("9", "PgUp")) },
+                    )
                 }
-                Row(Modifier.fillMaxWidth().weight(1f)) {
-                    NumpadCell(lbl("4", "←"), top("4", "←"),
+                Row(
+                    Modifier.fillMaxWidth().weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(gap),
+                ) {
+                    NumpadCell(
+                        mainLabel = lbl("4", "←"), topLabel = top("4", "←"),
                         modifier = Modifier.weight(1f), h = cellH, settings = settings,
-                        onTap = { onKey(0x5C, lbl("4", "←")) })
-                    NumpadCell(lbl("5", "·"), top("5", "·"),
+                        onTap = { onKey(0x5C, lbl("4", "←")) },
+                    )
+                    NumpadCell(
+                        mainLabel = lbl("5", "·"), topLabel = top("5", "·"),
                         modifier = Modifier.weight(1f), h = cellH, settings = settings,
-                        onTap = { onKey(0x5D, lbl("5", "·")) })
-                    NumpadCell(lbl("6", "→"), top("6", "→"),
+                        onTap = { onKey(0x5D, lbl("5", "·")) },
+                    )
+                    NumpadCell(
+                        mainLabel = lbl("6", "→"), topLabel = top("6", "→"),
                         modifier = Modifier.weight(1f), h = cellH, settings = settings,
-                        onTap = { onKey(0x5E, lbl("6", "→")) })
+                        onTap = { onKey(0x5E, lbl("6", "→")) },
+                    )
                 }
             }
-            NumpadCell("+", color = KC.ACCENT, modifier = Modifier.weight(1f),
-                h = tallH, settings = settings, onTap = { onKey(0x57, "+") })
+            NumpadCell(
+                mainLabel = "+", color = KC.ACCENT, isActive = false,
+                modifier = Modifier.weight(1f), h = tallH, settings = settings,
+                doRepeat = true, onTap = { onKey(0x57, "+") },
+            )
         }
 
         // Rows 3-4: 1 2 3 [↵tall] / 0wide .
-        Row(Modifier.fillMaxWidth().height(tallH)) {
-            Column(Modifier.weight(3f)) {
-                Row(Modifier.fillMaxWidth().weight(1f)) {
-                    NumpadCell(lbl("1", "End"), top("1", "End"),
+        Row(
+            Modifier.fillMaxWidth().height(tallH),
+            horizontalArrangement = Arrangement.spacedBy(gap),
+        ) {
+            Column(
+                Modifier.weight(3f),
+                verticalArrangement = Arrangement.spacedBy(gap),
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(gap),
+                ) {
+                    NumpadCell(
+                        mainLabel = lbl("1", "End"), topLabel = top("1", "End"),
                         modifier = Modifier.weight(1f), h = cellH, settings = settings,
-                        onTap = { onKey(0x59, lbl("1", "End")) })
-                    NumpadCell(lbl("2", "↓"), top("2", "↓"),
+                        onTap = { onKey(0x59, lbl("1", "End")) },
+                    )
+                    NumpadCell(
+                        mainLabel = lbl("2", "↓"), topLabel = top("2", "↓"),
                         modifier = Modifier.weight(1f), h = cellH, settings = settings,
-                        onTap = { onKey(0x5A, lbl("2", "↓")) })
-                    NumpadCell(lbl("3", "PgDn"), top("3", "PgDn"),
+                        onTap = { onKey(0x5A, lbl("2", "↓")) },
+                    )
+                    NumpadCell(
+                        mainLabel = lbl("3", "PgDn"), topLabel = top("3", "PgDn"),
                         modifier = Modifier.weight(1f), h = cellH, settings = settings,
-                        onTap = { onKey(0x5B, lbl("3", "PgDn")) })
+                        onTap = { onKey(0x5B, lbl("3", "PgDn")) },
+                    )
                 }
-                Row(Modifier.fillMaxWidth().weight(1f)) {
-                    NumpadCell(lbl("0", "Ins"), top("0", "Ins"),
+                Row(
+                    Modifier.fillMaxWidth().weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(gap),
+                ) {
+                    NumpadCell(
+                        mainLabel = lbl("0", "Ins"), topLabel = top("0", "Ins"),
                         modifier = Modifier.weight(2f), h = cellH, settings = settings,
-                        onTap = { onKey(0x62, lbl("0", "Ins")) })
-                    NumpadCell(lbl(".", "Del"), top(".", "Del"),
+                        onTap = { onKey(0x62, lbl("0", "Ins")) },
+                    )
+                    NumpadCell(
+                        mainLabel = lbl(".", "Del"), topLabel = top(".", "Del"),
                         modifier = Modifier.weight(1f), h = cellH, settings = settings,
-                        onTap = { onKey(0x63, lbl(".", "Del")) })
+                        onTap = { onKey(0x63, lbl(".", "Del")) },
+                    )
                 }
             }
-            NumpadCell("↵", color = KC.ACCENT, modifier = Modifier.weight(1f),
-                h = tallH, settings = settings, onTap = { onKey(0x58, "↵") })
+            NumpadCell(
+                mainLabel = "↵", color = KC.ACCENT, isActive = false,
+                modifier = Modifier.weight(1f), h = tallH, settings = settings,
+                doRepeat = true, onTap = { onKey(0x58, "↵") },
+            )
         }
     }
 }

@@ -41,6 +41,11 @@ internal fun MediaKeyBtn(
         tween(60), label = "mb",
     )
 
+    val isSmall = h <= 48.dp
+    val iconSize = if (isSmall) 16.sp else 22.sp
+    val labelSize = if (isSmall) 7.sp else 8.sp
+    val innerPadding = if (isSmall) 1.dp else 2.dp
+
     Column(
         modifier = modifier
             .height(h)
@@ -63,12 +68,21 @@ internal fun MediaKeyBtn(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(icon, fontSize = 22.sp, textAlign = TextAlign.Center)
         Text(
-            label, fontSize = 8.sp, color = Color(0xFF78909C),
-            textAlign = TextAlign.Center, maxLines = 1,
-            modifier = Modifier.padding(horizontal = 2.dp),
-            overflow = TextOverflow.Ellipsis,
+            icon,
+            fontSize = iconSize,
+            textAlign = TextAlign.Center,
         )
+        if (!isSmall) {
+            Text(
+                label,
+                fontSize = labelSize,
+                color = Color(0xFF78909C),
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                modifier = Modifier.padding(horizontal = innerPadding),
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }

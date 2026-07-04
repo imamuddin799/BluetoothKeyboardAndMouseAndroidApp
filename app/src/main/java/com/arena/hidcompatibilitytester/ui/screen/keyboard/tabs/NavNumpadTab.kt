@@ -1,4 +1,3 @@
-// ui/screen/keyboard/tabs/NavNumpadTab.kt
 package com.arena.hidcompatibilitytester.ui.screen.keyboard.tabs
 
 import androidx.compose.foundation.BorderStroke
@@ -40,178 +39,268 @@ internal fun NavNumpadTab(
     onTypeText: (String) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val navH  = settings.keyHeight.navDp.dp
+    val style = settings.keysTabSectionStyle
+    val isComfort = style == SectionStyle.MEDIA
+
+    val showNav = settings.navTabShowNavigation
+    val showArrows = settings.navTabShowArrowKeys
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF080F18))
-            .verticalScroll(rememberScrollState())
-            .imePadding()
-            .padding(8.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+            .background(Color(0xFF080F18)),
     ) {
-        // Nav cluster + Arrows
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        // ── Scrollable upper content ──
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .imePadding()
+                .padding(
+                    horizontal = if (isComfort) 8.dp else 4.dp,
+                    vertical = if (isComfort) 4.dp else 2.dp
+                ),
+            verticalArrangement = Arrangement.spacedBy(if (isComfort) 10.dp else 3.dp),
         ) {
-            KbCard("Navigation", modifier = Modifier.weight(1f)) {
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Row(Modifier.fillMaxWidth()) {
-                        NAV_ROW1.forEach { k ->
-                            KBtn(
-                                key = k, modifier = Modifier.weight(1f), h = navH,
-                                settings = settings, active = isKeyActive(k, st),
-                                mainLabel = displayMain(k, st), scrollable = true,
-                                onPress = { onKeyPress(k) },
-                            )
-                        }
-                    }
-                    Row(Modifier.fillMaxWidth()) {
-                        NAV_ROW2.forEach { k ->
-                            KBtn(
-                                key = k, modifier = Modifier.weight(1f), h = navH,
-                                settings = settings, active = isKeyActive(k, st),
-                                mainLabel = displayMain(k, st), scrollable = true,
-                                onPress = { onKeyPress(k) },
-                            )
-                        }
-                    }
-                }
-            }
-            KbCard("Arrows", modifier = Modifier.weight(1f)) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                ) {
+            // ── Navigation + Arrows ──
+            if (isComfort) {
+                if (showNav && showArrows) {
                     Row(
                         Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        KBtn(
-                            key = KEY_UP, modifier = Modifier.weight(1f), h = navH,
-                            settings = settings, mainLabel = "↑", scrollable = true,
-                            onPress = { onKeyPress(KEY_UP) },
-                        )
+                        KbCard("Navigation", modifier = Modifier.weight(1f)) {
+                            NavigationSectionContent(st, settings, style, onKeyPress)
+                        }
+                        KbCard("Arrows", modifier = Modifier.weight(1f)) {
+                            ArrowKeysSectionContent(st, settings, style, onKeyPress)
+                        }
                     }
-                    Row(Modifier.fillMaxWidth()) {
-                        listOf(KEY_LEFT, KEY_DOWN, KEY_RIGHT).forEach { k ->
-                            KBtn(
-                                key = k, modifier = Modifier.weight(1f), h = navH,
-                                settings = settings, mainLabel = k.label, scrollable = true,
-                                onPress = { onKeyPress(k) },
-                            )
+                } else {
+                    if (showNav) {
+                        KbCard("Navigation") {
+                            NavigationSectionContent(st, settings, style, onKeyPress)
+                        }
+                    }
+                    if (showArrows) {
+                        KbCard("Arrow Keys") {
+                            ArrowKeysSectionContent(st, settings, style, onKeyPress)
                         }
                     }
                 }
-            }
-        }
-
-        // Insert mode toggle
-        Surface(
-            color = if (st.insertMode) Color(0xFF0D1F0D) else Color(0xFF2A1800),
-            shape = RoundedCornerShape(8.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onInsertToggle() },
-        ) {
-            Row(
-                modifier = Modifier.padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(
-                    if (st.insertMode) "INSERT" else "OVERWRITE",
-                    color = if (st.insertMode) Color(0xFF81C784) else Color(0xFFFFB74D),
-                    fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    if (st.insertMode) "Tap to switch → Overwrite mode"
-                    else "Tap to switch → Insert mode",
-                    color = Color.Gray, fontSize = 11.sp,
-                )
-            }
-        }
-
-        // Numpad
-        KbCard("Numpad") {
-            Surface(
-                color = if (st.numLock) Color(0xFF1565C0) else Color(0xFF4A1800),
-                shape = RoundedCornerShape(5.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    if (st.numLock) "NumLock ON — typing numbers"
-                    else "NumLock OFF — navigation mode",
-                    color = Color.White.copy(0.85f), fontSize = 10.sp,
-                    modifier = Modifier.padding(8.dp),
-                )
-            }
-            Spacer(Modifier.height(4.dp))
-            NumpadLayout(
-                numLock = st.numLock,
-                shift = st.shift,
-                settings = settings,
-                onNumLock = onNumLock,
-                onKey = onNumpadKey,
-            )
-        }
-
-        // Type & Send Text
-        val bringIntoViewRequester = remember { BringIntoViewRequester() }
-        val keyboardController = LocalSoftwareKeyboardController.current
-
-        KbCard("Type & Send Text") {
-            OutlinedTextField(
-                value = typeText,
-                onValueChange = { newText ->
-                    when {
-                        newText.length > typeText.length -> {
-                            val added = newText.substring(typeText.length)
-                            if (added.isNotEmpty()) onTypeText(added)
+            } else {
+                if (showNav && showArrows) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Box(Modifier.weight(1f)) {
+                            NavigationSection(st, settings, style, onKeyPress)
                         }
-                        newText.length < typeText.length -> {
-                            repeat(typeText.length - newText.length) {
-                                onSendKey(0, listOf(0x2A))
-                            }
+                        Box(Modifier.weight(1f)) {
+                            ArrowKeysSection(st, settings, style, onKeyPress)
                         }
                     }
-                    onTypeTextChanged(newText)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .bringIntoViewRequester(bringIntoViewRequester)
-                    .onFocusChanged { state ->
-                        if (state.isFocused) {
-                            keyboardController?.show()
-                            scope.launch {
-                                delay(250)
-                                bringIntoViewRequester.bringIntoView()
-                            }
-                        }
-                    },
-                placeholder = { Text("Type here…", color = Color.Gray) },
-                maxLines = 4,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedBorderColor = Color(0xFF4A90D9),
-                    unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                    cursorColor = Color(0xFF4A90D9),
-                ),
-            )
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = { onTypeTextChanged("") },
-                modifier = Modifier.fillMaxWidth(),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
-            ) {
-                Text("Clear", color = Color.White)
+                } else {
+                    if (showNav) {
+                        NavigationSection(st, settings, style, onKeyPress)
+                    }
+                    if (showArrows) {
+                        ArrowKeysSection(st, settings, style, onKeyPress)
+                    }
+                }
             }
+
+            // ── Insert mode toggle ──
+            if (settings.navTabShowInsertToggle) {
+                if (isComfort) {
+                    KbCard("Mode") {
+                        InsertToggleContent(st, onInsertToggle)
+                    }
+                } else {
+                    InsertToggleContent(st, onInsertToggle)
+                }
+            }
+
+            // ── System Keys ──
+            if (settings.navTabShowSystemKeys) {
+                if (isComfort) {
+                    KbCard("System Keys") {
+                        SystemKeysSectionContent(st, settings, style, onKeyPress)
+                    }
+                } else {
+                    SystemKeysSection(st, settings, style, onKeyPress)
+                }
+            }
+
+            // ── Quick Modifiers ──
+            if (settings.navTabShowQuickMods) {
+                if (isComfort) {
+                    KbCard("Quick Modifiers") {
+                        QuickModsSectionContent(st, settings, style, onKeyPress, onClearMods)
+                    }
+                } else {
+                    QuickModsSection(st, settings, style, onKeyPress, onClearMods)
+                }
+            }
+
+            // ── Type & Send Text ──
+            if (settings.navTabShowTypeText) {
+                val bringIntoViewRequester = remember { BringIntoViewRequester() }
+                val keyboardController = LocalSoftwareKeyboardController.current
+
+                if (isComfort) {
+                    KbCard("Type & Send Text") {
+                        TypeTextContent(
+                            typeText = typeText,
+                            onTypeTextChanged = onTypeTextChanged,
+                            onSendKey = onSendKey,
+                            onTypeText = onTypeText,
+                            bringIntoViewRequester = bringIntoViewRequester,
+                            keyboardController = keyboardController,
+                            scope = scope,
+                        )
+                    }
+                } else {
+                    TypeTextContent(
+                        typeText = typeText,
+                        onTypeTextChanged = onTypeTextChanged,
+                        onSendKey = onSendKey,
+                        onTypeText = onTypeText,
+                        bringIntoViewRequester = bringIntoViewRequester,
+                        keyboardController = keyboardController,
+                        scope = scope,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
         }
 
-        Spacer(Modifier.height(16.dp))
+        // ── Fixed Numpad at bottom ──
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF080F18))
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Surface(
+                    color = if (st.numLock) Color(0xFF1565C0) else Color(0xFF4A1800),
+                    shape = RoundedCornerShape(5.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        if (st.numLock) "NumLock ON — typing numbers"
+                        else "NumLock OFF — navigation mode",
+                        color = Color.White.copy(0.85f), fontSize = 10.sp,
+                        modifier = Modifier.padding(8.dp),
+                    )
+                }
+
+                NumpadLayout(
+                    numLock = st.numLock,
+                    shift = st.shift,
+                    settings = settings,
+                    onNumLock = onNumLock,
+                    onKey = onNumpadKey,
+                )
+            }
+        }
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════
+// Extracted composables
+// ═════════════════════════════════════════════════════════════════
+
+@Composable
+private fun InsertToggleContent(
+    st: KbState,
+    onInsertToggle: () -> Unit,
+) {
+    Surface(
+        color = if (st.insertMode) Color(0xFF0D1F0D) else Color(0xFF2A1800),
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onInsertToggle() },
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                if (st.insertMode) "INSERT" else "OVERWRITE",
+                color = if (st.insertMode) Color(0xFF81C784) else Color(0xFFFFB74D),
+                fontSize = 13.sp, fontWeight = FontWeight.Bold,
+            )
+            Text(
+                if (st.insertMode) "Tap to switch → Overwrite mode"
+                else "Tap to switch → Insert mode",
+                color = Color.Gray, fontSize = 11.sp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TypeTextContent(
+    typeText: String,
+    onTypeTextChanged: (String) -> Unit,
+    onSendKey: (Int, List<Int>) -> Unit,
+    onTypeText: (String) -> Unit,
+    bringIntoViewRequester: BringIntoViewRequester,
+    keyboardController: androidx.compose.ui.platform.SoftwareKeyboardController?,
+    scope: kotlinx.coroutines.CoroutineScope,
+) {
+    Column {
+        OutlinedTextField(
+            value = typeText,
+            onValueChange = { newText ->
+                when {
+                    newText.length > typeText.length -> {
+                        val added = newText.substring(typeText.length)
+                        if (added.isNotEmpty()) onTypeText(added)
+                    }
+                    newText.length < typeText.length -> {
+                        repeat(typeText.length - newText.length) {
+                            onSendKey(0, listOf(0x2A))
+                        }
+                    }
+                }
+                onTypeTextChanged(newText)
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .bringIntoViewRequester(bringIntoViewRequester)
+                .onFocusChanged { state ->
+                    if (state.isFocused) {
+                        keyboardController?.show()
+                        scope.launch {
+                            delay(250)
+                            bringIntoViewRequester.bringIntoView()
+                        }
+                    }
+                },
+            placeholder = { Text("Type here…", color = Color.Gray) },
+            maxLines = 4,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedBorderColor = Color(0xFF4A90D9),
+                unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                cursorColor = Color(0xFF4A90D9),
+            ),
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = { onTypeTextChanged("") },
+            modifier = Modifier.fillMaxWidth(),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+        ) {
+            Text("Clear", color = Color.White)
+        }
     }
 }

@@ -49,6 +49,14 @@ data class KeyboardSettings(
     val mediaTabShowQuickMods: Boolean = true,
     val mediaTabSectionStyle: SectionStyle = SectionStyle.MEDIA,
 
+    // Nav+Numpad tab — section visibility
+    val navTabShowNavigation: Boolean = true,
+    val navTabShowArrowKeys: Boolean = true,
+    val navTabShowInsertToggle: Boolean = false,
+    val navTabShowSystemKeys: Boolean = false,
+    val navTabShowQuickMods: Boolean = false,
+    val navTabShowTypeText: Boolean = true,
+
     // Media Quick Row
     val showMediaRowInKeyboard: Boolean = false,
     val showMediaRowInTrackpad: Boolean = false,

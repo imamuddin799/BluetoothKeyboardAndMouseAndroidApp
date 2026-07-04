@@ -480,6 +480,56 @@ private fun NumpadMediaSection(
     spacing: AdaptiveSpacing,
     onChange: (KeyboardSettings) -> Unit,
 ) {
+    SettingsCard("Nav+Numpad Tab Sections", spacing) {
+        SettingsToggle(
+            "Navigation",
+            "Home, End, PgUp, PgDn, Ins, Del",
+            settings.navTabShowNavigation
+        ) {
+            onChange(settings.copy(navTabShowNavigation = it))
+        }
+
+        SettingsToggle(
+            "Arrow Keys",
+            "← ↑ ↓ → directional keys",
+            settings.navTabShowArrowKeys
+        ) {
+            onChange(settings.copy(navTabShowArrowKeys = it))
+        }
+
+        SettingsToggle(
+            "Insert/Overwrite Toggle",
+            "Switch between insert and overwrite mode",
+            settings.navTabShowInsertToggle
+        ) {
+            onChange(settings.copy(navTabShowInsertToggle = it))
+        }
+
+        SettingsToggle(
+            "System Keys",
+            "Esc, Tab, BkSp, Del, Enter, PrtSc, ScrLk, Pause, Ins, Menu",
+            settings.navTabShowSystemKeys
+        ) {
+            onChange(settings.copy(navTabShowSystemKeys = it))
+        }
+
+        SettingsToggle(
+            "Quick Modifiers",
+            "Ctrl, Shift, Alt, Win, AltGr, Menu",
+            settings.navTabShowQuickMods
+        ) {
+            onChange(settings.copy(navTabShowQuickMods = it))
+        }
+
+        SettingsToggle(
+            "Type & Send Text",
+            "Text field to type and send via system keyboard",
+            settings.navTabShowTypeText
+        ) {
+            onChange(settings.copy(navTabShowTypeText = it))
+        }
+    }
+
     SettingsCard("Numpad", spacing) {
         SettingsToggle(
             "Start with NumLock On",
@@ -495,18 +545,6 @@ private fun NumpadMediaSection(
             settings.numpadShowHints
         ) {
             onChange(settings.copy(numpadShowHints = it))
-        }
-    }
-
-    SettingsCard("Media Keys", spacing) {
-        SizeSelector(
-            title = "Media Key Size",
-            subtitle = "Height of transport and volume buttons",
-            options = MediaKeySize.entries.map { it.label },
-            selectedIndex = settings.mediaKeySize.ordinal,
-            spacing = spacing,
-        ) {
-            onChange(settings.copy(mediaKeySize = MediaKeySize.entries[it]))
         }
     }
 }
@@ -767,6 +805,18 @@ private fun MediaRowSection(
     spacing: AdaptiveSpacing,
     onChange: (KeyboardSettings) -> Unit,
 ) {
+    // ── Media Key Size ──
+    SettingsCard("Media Key Size", spacing) {
+        SizeSelector(
+            title = "Button Size",
+            subtitle = "Height of transport and volume buttons",
+            options = MediaKeySize.entries.map { it.label },
+            selectedIndex = settings.mediaKeySize.ordinal,
+            spacing = spacing,
+        ) {
+            onChange(settings.copy(mediaKeySize = MediaKeySize.entries[it]))
+        }
+    }
     SettingsCard("Media Tab Sections", spacing) {
         SizeSelector(
             title = "Section Style",
