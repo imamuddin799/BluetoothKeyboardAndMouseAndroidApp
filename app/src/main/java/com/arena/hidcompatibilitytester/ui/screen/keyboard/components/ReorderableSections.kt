@@ -30,6 +30,9 @@ private val SCROLL_ZONE_DP = 72.dp
 private const val MAX_SPEED = 20f
 private const val AUTO_SCROLL_TICK_MS = 16L
 
+// 0.35f means reorder once ~35% of the neighbour item is crossed
+private const val SWAP_THRESHOLD_RATIO = 0.35f
+
 @Composable
 fun <T> ReorderableSectionColumn(
     items: List<T>,
@@ -56,7 +59,7 @@ fun <T> ReorderableSectionColumn(
     var orderList by remember(items) { mutableStateOf(items.toList()) }
     var draggingIdx by remember { mutableStateOf(-1) }
     var dragYAccum by remember { mutableStateOf(0f) }
-    var lastInsertIdx by remember { mutableStateOf(-1) }
+    var lastTargetIdx by remember { mutableStateOf(-1) }
     var isCommitting by remember { mutableStateOf(false) }
 
     var fingerYInRoot by remember { mutableStateOf(0f) }
@@ -146,40 +149,61 @@ fun <T> ReorderableSectionColumn(
     }
 
     /**
-     * Returns insertion index in the list AFTER removing the dragged item.
+     * Finds target index using edge-crossing threshold instead of waiting too long.
      *
-     * This is the key fix:
-     * we do NOT count the dragged item's original slot while computing target.
+     * Dragging downward:
+     *   swap once dragged bottom crosses ~35% of next item
+     *
+     * Dragging upward:
+     *   swap once dragged top crosses ~35% of previous item from its bottom side
      */
-    fun findInsertIndex(draggedIdx: Int, accumY: Float): Int {
+    fun findTargetIndex(draggedIdx: Int, accumY: Float): Int {
         val draggedTop = getSlotTop(draggedIdx) + accumY
-        val draggedCenter = draggedTop + getItemHeight(draggedIdx) / 2f
+        val draggedHeight = getItemHeight(draggedIdx)
+        val draggedBottom = draggedTop + draggedHeight
 
-        var insertIdx = 0
-        var currentTop = 0f
+        var target = draggedIdx
 
-        for (i in orderList.indices) {
-            if (i == draggedIdx) continue
+        if (accumY > 0f) {
+            // Moving downward
+            while (target < orderList.lastIndex) {
+                val next = target + 1
+                val nextTop = getSlotTop(next)
+                val nextHeight = getItemHeight(next)
 
-            val h = getItemHeight(i)
-            val midpoint = currentTop + h / 2f
+                val swapLine = nextTop + (nextHeight * SWAP_THRESHOLD_RATIO)
 
-            if (draggedCenter > midpoint) {
-                insertIdx++
-                currentTop += h + spacingPx
-            } else {
-                break
+                if (draggedBottom > swapLine) {
+                    target++
+                } else {
+                    break
+                }
+            }
+        } else if (accumY < 0f) {
+            // Moving upward
+            while (target > 0) {
+                val prev = target - 1
+                val prevTop = getSlotTop(prev)
+                val prevHeight = getItemHeight(prev)
+
+                val swapLine = prevTop + (prevHeight * (1f - SWAP_THRESHOLD_RATIO))
+
+                if (draggedTop < swapLine) {
+                    target--
+                } else {
+                    break
+                }
             }
         }
 
-        return insertIdx
+        return target
     }
 
-    val targetInsertIdx =
-        if (draggingIdx >= 0) findInsertIndex(draggingIdx, dragYAccum) else -1
+    val targetIdx =
+        if (draggingIdx >= 0) findTargetIndex(draggingIdx, dragYAccum) else -1
 
-    LaunchedEffect(targetInsertIdx) {
-        if (targetInsertIdx >= 0) lastInsertIdx = targetInsertIdx
+    LaunchedEffect(targetIdx) {
+        if (targetIdx >= 0) lastTargetIdx = targetIdx
     }
 
     LaunchedEffect(draggingIdx) {
@@ -192,7 +216,7 @@ fun <T> ReorderableSectionColumn(
             previousScroll = currentScroll
 
             if (draggingIdx >= 0 && delta != 0 && !isCommitting) {
-                // keep dragged item under finger while content auto-scrolls
+                // keep dragged item visually under finger during auto-scroll
                 dragYAccum += delta.toFloat()
             }
         }
@@ -204,19 +228,14 @@ fun <T> ReorderableSectionColumn(
 
         val targetPx = when {
             isDragged -> dragYAccum
-
             draggingIdx < 0 -> 0f
 
-            // dragging downward:
-            // items between old position and insert position move up
-            targetInsertIdx > draggingIdx &&
-                index in (draggingIdx + 1)..targetInsertIdx ->
+            targetIdx > draggingIdx &&
+                index in (draggingIdx + 1)..targetIdx ->
                 -(draggedHeight + spacingPx)
 
-            // dragging upward:
-            // items between insert position and old position move down
-            targetInsertIdx < draggingIdx &&
-                index in targetInsertIdx until draggingIdx ->
+            targetIdx < draggingIdx &&
+                index in targetIdx until draggingIdx ->
                 draggedHeight + spacingPx
 
             else -> 0f
@@ -241,11 +260,11 @@ fun <T> ReorderableSectionColumn(
         stopAutoScroll()
 
         val from = draggingIdx
-        val to = lastInsertIdx
+        val to = lastTargetIdx
 
         draggingIdx = -1
         dragYAccum = 0f
-        lastInsertIdx = -1
+        lastTargetIdx = -1
 
         if (from < 0) return
 
@@ -279,7 +298,7 @@ fun <T> ReorderableSectionColumn(
         val idx = draggingIdx
         draggingIdx = -1
         dragYAccum = 0f
-        lastInsertIdx = -1
+        lastTargetIdx = -1
 
         if (idx >= 0) {
             scope.launch {
@@ -313,7 +332,7 @@ fun <T> ReorderableSectionColumn(
                             if (startOffset.y <= accumulated + h) {
                                 draggingIdx = i
                                 dragYAccum = 0f
-                                lastInsertIdx = i
+                                lastTargetIdx = i
                                 fingerYInRoot = columnTopInRoot + startOffset.y
                                 break
                             }
