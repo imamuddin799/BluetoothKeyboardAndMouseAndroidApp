@@ -15,14 +15,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.*
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.components.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 internal fun NavNumpadTab(
@@ -46,110 +48,126 @@ internal fun NavNumpadTab(
     val inPlaceReorder = settings.shouldAllowInPlaceReorder(settings.navTabInPlaceReorder)
     val swapped = settings.navTabNavArrowsSwapped
 
-    // Build visible sections based on order
     val visibleSections = settings.navTabSectionOrder.filter { section ->
         when (section) {
-            NavTabSection.NAV_ARROWS ->
-                settings.navTabShowNavigation || settings.navTabShowArrowKeys
-            NavTabSection.INSERT_TOGGLE ->
-                settings.navTabShowInsertToggle
-            NavTabSection.SYSTEM_KEYS ->
-                settings.navTabShowSystemKeys && !merge
-            NavTabSection.QUICK_MODS ->
-                settings.navTabShowQuickMods && !merge
+            NavTabSection.NAV_ARROWS -> settings.navTabShowNavigation || settings.navTabShowArrowKeys
+            NavTabSection.INSERT_TOGGLE -> settings.navTabShowInsertToggle
+            NavTabSection.SYSTEM_KEYS -> settings.navTabShowSystemKeys && !merge
+            NavTabSection.QUICK_MODS -> settings.navTabShowQuickMods && !merge
             NavTabSection.MERGED_SYSTEM_MODS ->
                 merge && settings.navTabShowSystemKeys && settings.navTabShowQuickMods
-            NavTabSection.TYPE_TEXT ->
-                settings.navTabShowTypeText
+            NavTabSection.TYPE_TEXT -> settings.navTabShowTypeText
         }
     }
+
+    val scrollState = rememberScrollState()
+    var viewportTopPx by remember { mutableStateOf(0f) }
+    var viewportBottomPx by remember { mutableStateOf(0f) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF080F18)),
+            .background(Color(0xFF080F18))
     ) {
-        // ── Scrollable upper content ──
-        Column(
+        Box(
             modifier = Modifier
                 .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .imePadding()
-                .padding(
-                    horizontal = if (isComfort) 8.dp else 4.dp,
-                    vertical = if (isComfort) 4.dp else 2.dp
-                ),
-        ) {
-            ReorderableSectionColumn(
-                items = visibleSections,
-                enabled = inPlaceReorder,
-                sectionSpacing = if (isComfort) 10.dp else 3.dp,
-                onReorder = { newOrder ->
-                    val allSections = NavTabSection.entries.toMutableList()
-                    val reordered = newOrder.toMutableList()
-                    allSections.forEach { s ->
-                        if (s !in reordered) reordered.add(s)
-                    }
-                    onSettingsChange?.invoke(
-                        settings.copy(navTabSectionOrder = reordered)
-                    )
+                .onGloballyPositioned { coords ->
+                    viewportTopPx = coords.positionInRoot().y
+                    viewportBottomPx = viewportTopPx + coords.size.height
                 }
-            ) { _, section, _ ->
-                when (section) {
-                    NavTabSection.NAV_ARROWS -> {
-                        NavTabNavArrowsSection(
-                            st = st, settings = settings, style = style,
-                            swapped = swapped, isComfort = isComfort,
-                            onKeyPress = onKeyPress,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .imePadding()
+                    .padding(
+                        horizontal = if (isComfort) 8.dp else 4.dp,
+                        vertical = if (isComfort) 4.dp else 2.dp
+                    )
+            ) {
+                ReorderableSectionColumn(
+                    items = visibleSections,
+                    enabled = inPlaceReorder,
+                    scrollState = scrollState,
+                    viewportTopPx = viewportTopPx,
+                    viewportBottomPx = viewportBottomPx,
+                    sectionSpacing = if (isComfort) 10.dp else 3.dp,
+                    onReorder = { newOrder ->
+                        val reordered = newOrder.toMutableList()
+                        NavTabSection.entries.forEach { s ->
+                            if (s !in reordered) reordered.add(s)
+                        }
+                        onSettingsChange?.invoke(
+                            settings.copy(navTabSectionOrder = reordered)
                         )
                     }
+                ) { _, section, _ ->
+                    when (section) {
+                        NavTabSection.NAV_ARROWS ->
+                            NavTabNavArrowsSection(
+                                st = st,
+                                settings = settings,
+                                style = style,
+                                swapped = swapped,
+                                isComfort = isComfort,
+                                onKeyPress = onKeyPress
+                            )
 
-                    NavTabSection.INSERT_TOGGLE -> {
-                        if (isComfort) {
-                            KbCard("Mode") {
+                        NavTabSection.INSERT_TOGGLE ->
+                            if (isComfort) {
+                                KbCard("Mode") {
+                                    InsertToggleContent(st, onInsertToggle)
+                                }
+                            } else {
                                 InsertToggleContent(st, onInsertToggle)
                             }
-                        } else {
-                            InsertToggleContent(st, onInsertToggle)
-                        }
-                    }
 
-                    NavTabSection.SYSTEM_KEYS -> {
-                        if (isComfort) {
-                            KbCard("System Keys") {
-                                SystemKeysSectionContent(st, settings, style, onKeyPress)
+                        NavTabSection.SYSTEM_KEYS ->
+                            if (isComfort) {
+                                KbCard("System Keys") {
+                                    SystemKeysSectionContent(st, settings, style, onKeyPress)
+                                }
+                            } else {
+                                SystemKeysSection(st, settings, style, onKeyPress)
                             }
-                        } else {
-                            SystemKeysSection(st, settings, style, onKeyPress)
-                        }
-                    }
 
-                    NavTabSection.QUICK_MODS -> {
-                        if (isComfort) {
-                            KbCard("Quick Modifiers") {
-                                QuickModsSectionContent(st, settings, style, onKeyPress, onClearMods)
+                        NavTabSection.QUICK_MODS ->
+                            if (isComfort) {
+                                KbCard("Quick Modifiers") {
+                                    QuickModsSectionContent(st, settings, style, onKeyPress, onClearMods)
+                                }
+                            } else {
+                                QuickModsSection(st, settings, style, onKeyPress, onClearMods)
                             }
-                        } else {
-                            QuickModsSection(st, settings, style, onKeyPress, onClearMods)
-                        }
-                    }
 
-                    NavTabSection.MERGED_SYSTEM_MODS -> {
-                        if (isComfort) {
-                            KbCard("System & Modifiers") {
-                                MergedSystemModsSectionContent(st, settings, style, onKeyPress, onClearMods)
+                        NavTabSection.MERGED_SYSTEM_MODS ->
+                            if (isComfort) {
+                                KbCard("System & Modifiers") {
+                                    MergedSystemModsSectionContent(st, settings, style, onKeyPress, onClearMods)
+                                }
+                            } else {
+                                MergedSystemModsSection(st, settings, style, onKeyPress, onClearMods)
                             }
-                        } else {
-                            MergedSystemModsSection(st, settings, style, onKeyPress, onClearMods)
-                        }
-                    }
 
-                    NavTabSection.TYPE_TEXT -> {
-                        val bringIntoViewRequester = remember { BringIntoViewRequester() }
-                        val keyboardController = LocalSoftwareKeyboardController.current
+                        NavTabSection.TYPE_TEXT -> {
+                            val bringIntoViewRequester = remember { BringIntoViewRequester() }
+                            val keyboardController = LocalSoftwareKeyboardController.current
 
-                        if (isComfort) {
-                            KbCard("Type & Send Text") {
+                            if (isComfort) {
+                                KbCard("Type & Send Text") {
+                                    TypeTextContent(
+                                        typeText = typeText,
+                                        onTypeTextChanged = onTypeTextChanged,
+                                        onSendKey = onSendKey,
+                                        onTypeText = onTypeText,
+                                        bringIntoViewRequester = bringIntoViewRequester,
+                                        keyboardController = keyboardController,
+                                        scope = scope
+                                    )
+                                }
+                            } else {
                                 TypeTextContent(
                                     typeText = typeText,
                                     onTypeTextChanged = onTypeTextChanged,
@@ -157,28 +175,17 @@ internal fun NavNumpadTab(
                                     onTypeText = onTypeText,
                                     bringIntoViewRequester = bringIntoViewRequester,
                                     keyboardController = keyboardController,
-                                    scope = scope,
+                                    scope = scope
                                 )
                             }
-                        } else {
-                            TypeTextContent(
-                                typeText = typeText,
-                                onTypeTextChanged = onTypeTextChanged,
-                                onSendKey = onSendKey,
-                                onTypeText = onTypeText,
-                                bringIntoViewRequester = bringIntoViewRequester,
-                                keyboardController = keyboardController,
-                                scope = scope,
-                            )
                         }
                     }
                 }
-            }
 
-            Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(4.dp))
+            }
         }
 
-        // ── Fixed Numpad at bottom ──
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -189,13 +196,14 @@ internal fun NavNumpadTab(
                 Surface(
                     color = if (st.numLock) Color(0xFF1565C0) else Color(0xFF4A1800),
                     shape = RoundedCornerShape(5.dp),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
                         if (st.numLock) "NumLock ON — typing numbers"
                         else "NumLock OFF — navigation mode",
-                        color = Color.White.copy(0.85f), fontSize = 10.sp,
-                        modifier = Modifier.padding(8.dp),
+                        color = Color.White.copy(0.85f),
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(8.dp)
                     )
                 }
 
@@ -204,7 +212,7 @@ internal fun NavNumpadTab(
                     shift = st.shift,
                     settings = settings,
                     onNumLock = onNumLock,
-                    onKey = onNumpadKey,
+                    onKey = onNumpadKey
                 )
             }
         }
@@ -227,20 +235,20 @@ private fun NavTabNavArrowsSection(
         if (showNav && showArrows) {
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (swapped) {
-                    KbCard("Arrows", modifier = Modifier.weight(1f)) {
+                    KbCard("Arrows", Modifier.weight(1f)) {
                         ArrowKeysSectionContent(st, settings, style, onKeyPress)
                     }
-                    KbCard("Navigation", modifier = Modifier.weight(1f)) {
+                    KbCard("Navigation", Modifier.weight(1f)) {
                         NavigationSectionContent(st, settings, style, onKeyPress)
                     }
                 } else {
-                    KbCard("Navigation", modifier = Modifier.weight(1f)) {
+                    KbCard("Navigation", Modifier.weight(1f)) {
                         NavigationSectionContent(st, settings, style, onKeyPress)
                     }
-                    KbCard("Arrows", modifier = Modifier.weight(1f)) {
+                    KbCard("Arrows", Modifier.weight(1f)) {
                         ArrowKeysSectionContent(st, settings, style, onKeyPress)
                     }
                 }
@@ -261,7 +269,7 @@ private fun NavTabNavArrowsSection(
         if (showNav && showArrows) {
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 if (swapped) {
                     Box(Modifier.weight(1f)) {
@@ -280,19 +288,11 @@ private fun NavTabNavArrowsSection(
                 }
             }
         } else {
-            if (showNav) {
-                NavigationSection(st, settings, style, onKeyPress)
-            }
-            if (showArrows) {
-                ArrowKeysSection(st, settings, style, onKeyPress)
-            }
+            if (showNav) NavigationSection(st, settings, style, onKeyPress)
+            if (showArrows) ArrowKeysSection(st, settings, style, onKeyPress)
         }
     }
 }
-
-// ═════════════════════════════════════════════════════════════════
-// Extracted composables
-// ═════════════════════════════════════════════════════════════════
 
 @Composable
 private fun InsertToggleContent(
@@ -304,22 +304,24 @@ private fun InsertToggleContent(
         shape = RoundedCornerShape(8.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onInsertToggle() },
+            .clickable { onInsertToggle() }
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
                 if (st.insertMode) "INSERT" else "OVERWRITE",
                 color = if (st.insertMode) Color(0xFF81C784) else Color(0xFFFFB74D),
-                fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
             )
             Text(
                 if (st.insertMode) "Tap to switch → Overwrite mode"
                 else "Tap to switch → Insert mode",
-                color = Color.Gray, fontSize = 11.sp,
+                color = Color.Gray,
+                fontSize = 11.sp
             )
         }
     }
@@ -344,6 +346,7 @@ private fun TypeTextContent(
                         val added = newText.substring(typeText.length)
                         if (added.isNotEmpty()) onTypeText(added)
                     }
+
                     newText.length < typeText.length -> {
                         repeat(typeText.length - newText.length) {
                             onSendKey(0, listOf(0x2A))
@@ -370,15 +373,17 @@ private fun TypeTextContent(
                 focusedTextColor = Color.White,
                 unfocusedTextColor = Color.White,
                 focusedBorderColor = Color(0xFF4A90D9),
-                unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                cursorColor = Color(0xFF4A90D9),
-            ),
+                unfocusedBorderColor = Color.White.copy(0.2f),
+                cursorColor = Color(0xFF4A90D9)
+            )
         )
+
         Spacer(Modifier.height(8.dp))
+
         OutlinedButton(
             onClick = { onTypeTextChanged("") },
             modifier = Modifier.fillMaxWidth(),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+            border = BorderStroke(1.dp, Color.White.copy(0.2f))
         ) {
             Text("Clear", color = Color.White)
         }
