@@ -24,7 +24,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private val SCROLL_ZONE_DP = 72.dp
@@ -57,10 +56,9 @@ fun <T> ReorderableSectionColumn(
     var orderList by remember(items) { mutableStateOf(items.toList()) }
     var draggingIdx by remember { mutableStateOf(-1) }
     var dragYAccum by remember { mutableStateOf(0f) }
-    var lastTargetIdx by remember { mutableStateOf(-1) }
+    var lastInsertIdx by remember { mutableStateOf(-1) }
     var isCommitting by remember { mutableStateOf(false) }
 
-    // Finger Y in ROOT coordinates
     var fingerYInRoot by remember { mutableStateOf(0f) }
 
     val density = LocalDensity.current
@@ -75,7 +73,6 @@ fun <T> ReorderableSectionColumn(
         offsetAnims.getOrPut(i) { Animatable(0f) }
     }
 
-    // Cleanup stale indices if list shrinks
     LaunchedEffect(orderList.size) {
         val valid = orderList.indices.toSet()
         offsetAnims.keys.toList().forEach { if (it !in valid) offsetAnims.remove(it) }
@@ -136,38 +133,55 @@ fun <T> ReorderableSectionColumn(
         }
     }
 
-    fun getSlotCenter(index: Int): Float {
+    fun getSlotTop(index: Int): Float {
         var y = 0f
         for (i in 0 until index) {
             y += (sectionHeights[i] ?: 100f) + spacingPx
         }
-        y += (sectionHeights[index] ?: 100f) / 2f
         return y
     }
 
-    fun findTarget(draggedIdx: Int, accumY: Float): Int {
-        val draggedCenter = getSlotCenter(draggedIdx) + accumY
-        var closest = draggedIdx
-        var minDist = Float.MAX_VALUE
+    fun getItemHeight(index: Int): Float {
+        return sectionHeights[index] ?: 100f
+    }
 
-        orderList.indices.forEach { i ->
-            val d = abs(draggedCenter - getSlotCenter(i))
-            if (d < minDist) {
-                minDist = d
-                closest = i
+    /**
+     * Returns insertion index in the list AFTER removing the dragged item.
+     *
+     * This is the key fix:
+     * we do NOT count the dragged item's original slot while computing target.
+     */
+    fun findInsertIndex(draggedIdx: Int, accumY: Float): Int {
+        val draggedTop = getSlotTop(draggedIdx) + accumY
+        val draggedCenter = draggedTop + getItemHeight(draggedIdx) / 2f
+
+        var insertIdx = 0
+        var currentTop = 0f
+
+        for (i in orderList.indices) {
+            if (i == draggedIdx) continue
+
+            val h = getItemHeight(i)
+            val midpoint = currentTop + h / 2f
+
+            if (draggedCenter > midpoint) {
+                insertIdx++
+                currentTop += h + spacingPx
+            } else {
+                break
             }
         }
-        return closest
+
+        return insertIdx
     }
 
-    val targetIdx = if (draggingIdx >= 0) findTarget(draggingIdx, dragYAccum) else -1
+    val targetInsertIdx =
+        if (draggingIdx >= 0) findInsertIndex(draggingIdx, dragYAccum) else -1
 
-    LaunchedEffect(targetIdx) {
-        if (targetIdx >= 0) lastTargetIdx = targetIdx
+    LaunchedEffect(targetInsertIdx) {
+        if (targetInsertIdx >= 0) lastInsertIdx = targetInsertIdx
     }
 
-    // IMPORTANT:
-    // When auto-scroll moves the content, keep the dragged item under the finger
     LaunchedEffect(draggingIdx) {
         if (draggingIdx < 0) return@LaunchedEffect
 
@@ -178,6 +192,7 @@ fun <T> ReorderableSectionColumn(
             previousScroll = currentScroll
 
             if (draggingIdx >= 0 && delta != 0 && !isCommitting) {
+                // keep dragged item under finger while content auto-scrolls
                 dragYAccum += delta.toFloat()
             }
         }
@@ -185,14 +200,24 @@ fun <T> ReorderableSectionColumn(
 
     orderList.indices.forEach { index ->
         val isDragged = draggingIdx == index
+        val draggedHeight = if (draggingIdx >= 0) getItemHeight(draggingIdx) else 0f
+
         val targetPx = when {
             isDragged -> dragYAccum
-            draggingIdx < 0 -> 0f
-            targetIdx > draggingIdx && index in (draggingIdx + 1)..targetIdx ->
-                -(sectionHeights[draggingIdx] ?: 100f) - spacingPx
 
-            targetIdx < draggingIdx && index in targetIdx until draggingIdx ->
-                (sectionHeights[draggingIdx] ?: 100f) + spacingPx
+            draggingIdx < 0 -> 0f
+
+            // dragging downward:
+            // items between old position and insert position move up
+            targetInsertIdx > draggingIdx &&
+                index in (draggingIdx + 1)..targetInsertIdx ->
+                -(draggedHeight + spacingPx)
+
+            // dragging upward:
+            // items between insert position and old position move down
+            targetInsertIdx < draggingIdx &&
+                index in targetInsertIdx until draggingIdx ->
+                draggedHeight + spacingPx
 
             else -> 0f
         }
@@ -216,23 +241,27 @@ fun <T> ReorderableSectionColumn(
         stopAutoScroll()
 
         val from = draggingIdx
-        val to = lastTargetIdx
+        val to = lastInsertIdx
 
         draggingIdx = -1
         dragYAccum = 0f
-        lastTargetIdx = -1
+        lastInsertIdx = -1
 
         if (from < 0) return
 
         if (to < 0 || to == from) {
             scope.launch {
-                offsetAnims[from]?.animateTo(0f, spring(dampingRatio = 0.7f, stiffness = 250f))
+                offsetAnims[from]?.animateTo(
+                    0f,
+                    spring(dampingRatio = 0.7f, stiffness = 250f)
+                )
             }
             return
         }
 
         val newList = orderList.toMutableList().also {
-            it.add(to, it.removeAt(from))
+            val moved = it.removeAt(from)
+            it.add(to, moved)
         }
 
         scope.launch {
@@ -250,11 +279,14 @@ fun <T> ReorderableSectionColumn(
         val idx = draggingIdx
         draggingIdx = -1
         dragYAccum = 0f
-        lastTargetIdx = -1
+        lastInsertIdx = -1
 
         if (idx >= 0) {
             scope.launch {
-                offsetAnims[idx]?.animateTo(0f, spring(dampingRatio = 0.65f, stiffness = 200f))
+                offsetAnims[idx]?.animateTo(
+                    0f,
+                    spring(dampingRatio = 0.65f, stiffness = 200f)
+                )
             }
         }
     }
@@ -277,14 +309,11 @@ fun <T> ReorderableSectionColumn(
 
                         var accumulated = 0f
                         for (i in orderList.indices) {
-                            val h = sectionHeights[i] ?: 100f
+                            val h = getItemHeight(i)
                             if (startOffset.y <= accumulated + h) {
                                 draggingIdx = i
                                 dragYAccum = 0f
-                                lastTargetIdx = i
-
-                                // FIXED:
-                                // local pointer Y + current column root Y = actual finger root Y
+                                lastInsertIdx = i
                                 fingerYInRoot = columnTopInRoot + startOffset.y
                                 break
                             }
@@ -292,12 +321,13 @@ fun <T> ReorderableSectionColumn(
                         }
                     },
                     onDrag = { change, amount ->
-                        if (draggingIdx < 0 || isCommitting) return@detectDragGesturesAfterLongPress
+                        if (draggingIdx < 0 || isCommitting) {
+                            return@detectDragGesturesAfterLongPress
+                        }
 
                         change.consume()
                         dragYAccum += amount.y
                         fingerYInRoot += amount.y
-
                         startAutoScrollIfNeeded()
                     },
                     onDragEnd = {
