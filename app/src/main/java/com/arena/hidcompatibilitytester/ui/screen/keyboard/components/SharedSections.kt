@@ -302,7 +302,7 @@ fun QuickModsSectionContent(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    QUICK_MODIFIERS.forEach { k ->
+                    QUICK_MODIFIERS_WITH_MENU.forEach { k ->
                         KBtn(
                             key = k, modifier = Modifier.weight(1f), h = navH - 2.dp,
                             settings = settings, active = isKeyActive(k, st),
@@ -388,7 +388,7 @@ fun MergedSystemModsSectionContent(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(gap),
                 ) {
-                    QUICK_MODIFIERS_WITH_MENU.forEach { k ->
+                    QUICK_MODIFIERS.forEach { k ->
                         KBtn(
                             key = k, modifier = Modifier.weight(1f), h = navH,
                             settings = settings, active = isKeyActive(k, st),
