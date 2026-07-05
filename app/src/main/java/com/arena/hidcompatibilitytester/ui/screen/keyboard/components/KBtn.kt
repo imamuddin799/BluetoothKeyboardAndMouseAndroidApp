@@ -25,6 +25,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalView
+import android.view.SoundEffectConstants
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -43,10 +45,21 @@ internal fun KBtn(
     scrollable : Boolean = false,
     onPress    : () -> Unit,
 ) {
-    val haptic  = LocalHapticFeedback.current
+    val haptic = LocalHapticFeedback.current
+    val view = LocalView.current
     val scope   = rememberCoroutineScope()
     var pressed by remember { mutableStateOf(false) }
     var holdJob by remember { mutableStateOf<Job?>(null) }
+
+    
+    val doFeedback: () -> Unit = {
+        if (settings.hapticEnabled) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
+        if (settings.soundOnPress) {
+            view.playSoundEffect(SoundEffectConstants.CLICK)
+        }
+    }
 
     val bg by animateColorAsState(
         keyBg(key.color, active, pressed, settings.highContrastMode),
@@ -77,9 +90,7 @@ internal fun KBtn(
                 initialDelayMs   = settings.repeatInitialDelayMs,
                 repeatIntervalMs = settings.repeatIntervalMs,
                 onTap = {
-                    if (settings.hapticEnabled) {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    }
+                    doFeedback()
                     onPress()
                 },
             )
@@ -91,9 +102,7 @@ internal fun KBtn(
             detectTapGestures(
                 onPress = {
                     pressed = true
-                    if (settings.hapticEnabled) {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    }
+                    doFeedback()
                     onPress()
                     if (doRepeat) {
                         holdJob = scope.launch {
