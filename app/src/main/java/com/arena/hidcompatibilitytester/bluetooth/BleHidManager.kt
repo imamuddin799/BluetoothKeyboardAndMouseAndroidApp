@@ -234,6 +234,8 @@ class BleHidManager(private val context: Context) {
     // Public API
     // ═════════════════════════════════════════════════════════════════════════
 
+    fun getCurrentState(): BleHidState = currentState
+    
     fun isSupported() = try {
         adapter != null && adapter.isEnabled && adapter.isMultipleAdvertisementSupported
     } catch (e: Exception) { false }

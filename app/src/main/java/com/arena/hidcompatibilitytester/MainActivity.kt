@@ -4,12 +4,15 @@ import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.IBinder
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -39,17 +42,23 @@ import com.arena.hidcompatibilitytester.ui.theme.HIDCompatibilityTesterTheme
 class MainActivity : ComponentActivity(),
     BluetoothDeviceManager.BluetoothStateListener {
 
-    private lateinit var deviceManager: BluetoothDeviceManager
-    private lateinit var bleHidManager: BleHidManager
-    private var trackpadSettings  by mutableStateOf(TrackpadSettings())
-    private var keyboardSettings  by mutableStateOf(KeyboardSettings())
-    private var showTrackpadSettingsSheet  by mutableStateOf(false)
+    // ── BLE — now lives in service ────────────────────────────────────────────
+    private var bleHidManager: BleHidManager? = null
+    private var hidService: HidInputService? = null
+    private var serviceBound = false
+
+    // ── Settings ──────────────────────────────────────────────────────────────
+    private var trackpadSettings          by mutableStateOf(TrackpadSettings())
+    private var keyboardSettings          by mutableStateOf(KeyboardSettings())
+    private var showTrackpadSettingsSheet by mutableStateOf(false)
     private var showKeyboardSettingsSheet by mutableStateOf(false)
 
+    // ── Device lists ──────────────────────────────────────────────────────────
     private val pairedDevices     = androidx.compose.runtime.snapshots.SnapshotStateList<BluetoothDevice>()
     private val nearbyDevices     = androidx.compose.runtime.snapshots.SnapshotStateList<BluetoothDevice>()
     private val connectedHostList = androidx.compose.runtime.snapshots.SnapshotStateList<BleHidManager.DeviceInfo>()
 
+    // ── UI state ──────────────────────────────────────────────────────────────
     private var isScanningState            by mutableStateOf(false)
     private var showLocationServicesDialog by mutableStateOf(false)
     private var bleHidState                by mutableStateOf<BleHidState>(BleHidState.IDLE)
@@ -58,35 +67,29 @@ class MainActivity : ComponentActivity(),
     private var pairRequiredAddress        by mutableStateOf<String?>(null)
     private var showExitConfirmation       by mutableStateOf(false)
 
-    private val bluetoothStateReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
-            when (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)) {
-                BluetoothAdapter.STATE_ON  -> { statusMessage = "Bluetooth on"; bleHidManager.start() }
-                BluetoothAdapter.STATE_OFF -> {
-                    bleHidManager.onBluetoothOff()
-                    bleHidState = BleHidState.IDLE
-                    statusMessage = "Bluetooth turned off"
-                    runOnUiThread { connectedHostList.clear() }
-                }
-            }
+    // ── Device manager ────────────────────────────────────────────────────────
+    private lateinit var deviceManager: BluetoothDeviceManager
+
+    // ── Service connection ────────────────────────────────────────────────────
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, iBinder: IBinder?) {
+            val binder = iBinder as HidInputService.LocalBinder
+            hidService = binder.getService()
+            bleHidManager = binder.getService().bleHidManager
+            serviceBound = true
+            bleSupported = bleHidManager?.isSupported() ?: false
+            setupBleHidCallbacks()
+            refreshDeviceLists()
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            serviceBound = false
+            hidService = null
+            bleHidManager = null
         }
     }
 
-    private val bondStateReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action != BluetoothDevice.ACTION_BOND_STATE_CHANGED) return
-            val device: BluetoothDevice = (
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
-                    intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-                else
-                    @Suppress("DEPRECATION") intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-            ) ?: return
-            val bondState = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
-            bleHidManager.onBondStateChanged(device, bondState)
-        }
-    }
-
+    // ── Permissions ───────────────────────────────────────────────────────────
     private fun requiredPermissions() =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) arrayOf(
             Manifest.permission.BLUETOOTH_SCAN,
@@ -102,49 +105,36 @@ class MainActivity : ComponentActivity(),
         )
 
     private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()) { _ -> executeBluetoothOperations() }
+        ActivityResultContracts.RequestMultiplePermissions()) { _ ->
+        executeBluetoothOperations()
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Lifecycle
+    // ═════════════════════════════════════════════════════════════════════════
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        trackpadSettings  = TrackpadSettingsStore.load(this)
-        keyboardSettings  = KeyboardSettingsStore.load(this)
-
-        bleHidManager = BleHidManager(this)
-        bleSupported  = bleHidManager.isSupported()
-
-        bleHidManager.onStateChanged = { state ->
-            bleHidState = state
-            when (state) {
-                is BleHidState.ADVERTISING -> statusMessage = "📡 Advertising…"
-                is BleHidState.CONNECTED   -> statusMessage = "✓ Host connected"
-                is BleHidState.ERROR       -> statusMessage = "✗ ${state.message}"
-                else -> {}
-            }
-        }
-        bleHidManager.onDeviceListChanged = { list ->
-            runOnUiThread { connectedHostList.clear(); connectedHostList.addAll(list) }
-        }
-        bleHidManager.onDeviceSubscribed = { device ->
-            runOnUiThread { statusMessage = "✓ Host ready: ${device.address}" }
-        }
-        bleHidManager.onPairRequired = { address -> pairRequiredAddress = address }
+        trackpadSettings = TrackpadSettingsStore.load(this)
+        keyboardSettings = KeyboardSettingsStore.load(this)
 
         deviceManager = BluetoothDeviceManager(this) { newDevice ->
             val known = pairedDevices.any { it.address == newDevice.address } ||
                         nearbyDevices.any { it.address == newDevice.address }
             if (!known) nearbyDevices.add(newDevice)
         }
-        deviceManager.onScanFinished = { runOnUiThread { isScanningState = false } }
+        deviceManager.onScanFinished = {
+            runOnUiThread { isScanningState = false }
+        }
         deviceManager.onLocationServicesRequired = {
             runOnUiThread { isScanningState = false; showLocationServicesDialog = true }
         }
 
-        registerReceiverCompat(bluetoothStateReceiver,
-            IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
-        registerReceiverCompat(bondStateReceiver,
-            IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
+        // Start service first, then bind
+        startPersistentHidService()
+        bindToHidService()
 
         checkAndRequestPermissions()
 
@@ -161,6 +151,82 @@ class MainActivity : ComponentActivity(),
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        deviceManager.stopNearbyScanning()
+        hidService?.clearActivityCallbacks()
+        if (serviceBound) {
+            unbindService(serviceConnection)
+            serviceBound = false
+        }
+        // Service keeps running — BLE stays alive
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Service
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private fun startPersistentHidService() {
+        val intent = Intent(this, HidInputService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            startForegroundService(intent)
+        else
+            startService(intent)
+    }
+
+    private fun bindToHidService() {
+        val intent = Intent(this, HidInputService::class.java)
+        bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+    }
+
+    private fun setupBleHidCallbacks() {
+        val manager = bleHidManager ?: return
+        val service = hidService ?: return
+
+        // Read current state immediately
+        bleHidState = manager.getCurrentState()
+        bleSupported = manager.isSupported()
+
+        // Sync current device list
+        val currentDevices = manager.getConnectedDeviceInfoList()
+        runOnUiThread {
+            connectedHostList.clear()
+            connectedHostList.addAll(currentDevices)
+        }
+
+        // Set forwarded callbacks on the service
+        service.activityStateCallback = { state ->
+            bleHidState = state
+            when (state) {
+                is BleHidState.ADVERTISING -> statusMessage = "📡 Advertising…"
+                is BleHidState.CONNECTED   -> statusMessage = "✓ Host connected"
+                is BleHidState.ERROR       -> statusMessage = "✗ ${state.message}"
+                else -> {}
+            }
+        }
+
+        service.activityDeviceListCallback = { list ->
+            runOnUiThread {
+                connectedHostList.clear()
+                connectedHostList.addAll(list)
+            }
+        }
+
+        service.activityDeviceSubscribedCallback = { device ->
+            runOnUiThread {
+                statusMessage = "✓ Host ready: ${device.address}"
+            }
+        }
+
+        service.activityPairRequiredCallback = { address ->
+            pairRequiredAddress = address
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Composable UI
+    // ═════════════════════════════════════════════════════════════════════════
+
     @Composable
     private fun MainContent() {
         if (showLocationServicesDialog) {
@@ -175,7 +241,9 @@ class MainActivity : ComponentActivity(),
                     }) { Text("Open Settings") }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showLocationServicesDialog = false }) { Text("Cancel") }
+                    TextButton(onClick = { showLocationServicesDialog = false }) {
+                        Text("Cancel")
+                    }
                 }
             )
         }
@@ -195,7 +263,7 @@ class MainActivity : ComponentActivity(),
             AlertDialog(
                 onDismissRequest = { showExitConfirmation = false },
                 title = { Text("Exit App?") },
-                text  = { Text("This will stop the HID service and disconnect all hosts. Are you sure you want to exit?") },
+                text  = { Text("The HID service will keep running in the background.\nUse 'Stop HID' in the notification to fully disconnect.") },
                 confirmButton = {
                     TextButton(onClick = {
                         showExitConfirmation = false
@@ -227,28 +295,38 @@ class MainActivity : ComponentActivity(),
                     showSettingsSheet      = showTrackpadSettingsSheet,
                     onToggleBleHid         = { toggleBleHid() },
                     onSendMouse            = { dx, dy, buttons, wheel ->
-                        if (!bleHidManager.sendMouseReport(dx, dy, buttons, wheel))
+                        if (bleHidManager?.sendMouseReport(dx, dy, buttons, wheel) == false)
                             statusMessage = "✗ No subscribed host"
                     },
-                    onSendKey              = { mod, keys -> bleHidManager.sendKeyboardReport(mod, keys) },
-                    onReleaseKeys          = { bleHidManager.releaseKeys() },
-                    onConsumerKey          = { usage -> bleHidManager.sendConsumerKey(usage) },
-                    onTypeText             = { text -> bleHidManager.typeText(text) },
+                    onSendKey              = { mod, keys ->
+                        bleHidManager?.sendKeyboardReport(mod, keys)
+                    },
+                    onReleaseKeys          = {
+                        bleHidManager?.releaseKeys()
+                    },
+                    onConsumerKey          = { usage ->
+                        bleHidManager?.sendConsumerKey(usage)
+                    },
+                    onTypeText             = { text ->
+                        bleHidManager?.typeText(text)
+                    },
                     onToggleScan           = { toggleScanState() },
                     onPairClick            = { deviceManager.pairDevice(it) },
                     onUnpairClick          = {
                         deviceManager.removePairedDevice(it)
-                        bleHidManager.forgetDevice(it.address)
+                        bleHidManager?.forgetDevice(it.address)
                         refreshDeviceLists()
                     },
-                    onDisconnectHost       = { address -> bleHidManager.disconnectDevice(address) },
+                    onDisconnectHost       = { address ->
+                        bleHidManager?.disconnectDevice(address)
+                    },
                     onReconnectHost        = { device ->
-                        bleHidManager.inviteReconnect(device)
+                        bleHidManager?.inviteReconnect(device)
                         statusMessage = "Inviting ${device.address}…"
                     },
                     onShowTrackpadSettings = { showTrackpadSettingsSheet = true },
                     onShowKeyboardSettings = { showKeyboardSettingsSheet = true },
-                    onSettingsChange = { newSettings ->
+                    onSettingsChange       = { newSettings ->
                         keyboardSettings = newSettings
                         KeyboardSettingsStore.save(this@MainActivity, newSettings)
                     },
@@ -265,7 +343,6 @@ class MainActivity : ComponentActivity(),
                     ) { Text(msg) }
                 }
 
-                // Trackpad settings overlay
                 if (showTrackpadSettingsSheet) {
                     TrackpadSettingsSheet(
                         settings  = trackpadSettings,
@@ -277,7 +354,6 @@ class MainActivity : ComponentActivity(),
                     )
                 }
 
-                // Keyboard settings overlay
                 if (showKeyboardSettingsSheet) {
                     KeyboardSettingsSheet(
                         settings  = keyboardSettings,
@@ -292,10 +368,15 @@ class MainActivity : ComponentActivity(),
         }
     }
 
+    // ═════════════════════════════════════════════════════════════════════════
+    // Bluetooth helpers
+    // ═════════════════════════════════════════════════════════════════════════
+
     private fun toggleBleHid() {
+        val manager = bleHidManager ?: return
         when (bleHidState) {
-            is BleHidState.IDLE, is BleHidState.ERROR -> bleHidManager.start()
-            else -> bleHidManager.stop()
+            is BleHidState.IDLE, is BleHidState.ERROR -> manager.start()
+            else -> manager.stop()
         }
     }
 
@@ -308,28 +389,24 @@ class MainActivity : ComponentActivity(),
     }
 
     private fun executeBluetoothOperations() {
-        startPersistentHidService()
         deviceManager.registerStateListener(this)
         refreshDeviceLists()
-        if (bleHidManager.isSupported() &&
-            (bleHidState is BleHidState.IDLE || bleHidState is BleHidState.ERROR))
-            bleHidManager.start()
+        // BleHidManager.start() is handled by the service in onStartCommand
     }
 
     private fun toggleScanState() {
-        if (isScanningState) { deviceManager.stopNearbyScanning(); isScanningState = false }
-        else { nearbyDevices.clear(); if (deviceManager.startNearbyScanning()) isScanningState = true }
+        if (isScanningState) {
+            deviceManager.stopNearbyScanning()
+            isScanningState = false
+        } else {
+            nearbyDevices.clear()
+            if (deviceManager.startNearbyScanning()) isScanningState = true
+        }
     }
 
     private fun refreshDeviceLists() {
         pairedDevices.clear()
         pairedDevices.addAll(deviceManager.getPairedDevices())
-    }
-
-    private fun startPersistentHidService() {
-        val intent = Intent(this, HidInputService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
-        else startService(intent)
     }
 
     override fun onBondStateChanged(device: BluetoothDevice, state: Int) {
@@ -349,17 +426,5 @@ class MainActivity : ComponentActivity(),
             registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
         else
             registerReceiver(receiver, filter)
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        try { unregisterReceiver(bluetoothStateReceiver) } catch (_: Exception) {}
-        try { unregisterReceiver(bondStateReceiver)       } catch (_: Exception) {}
-        deviceManager.stopNearbyScanning()
-        deviceManager.unregisterStateListener()
-        val stopIntent = Intent(this, HidInputService::class.java).apply {
-            action = HidInputService.ACTION_STOP
-        }
-        stopService(stopIntent)
     }
 }
