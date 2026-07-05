@@ -21,13 +21,13 @@ import com.arena.hidcompatibilitytester.ui.screen.keyboard.tabs.NavNumpadTab
 
 @Composable
 fun KeyboardScreen(
-    isReady        : Boolean,
-    settings       : KeyboardSettings,
-    onSendKey      : (modifiers: Int, keyCodes: List<Int>) -> Unit,
-    onReleaseKeys  : () -> Unit,
-    onConsumerKey  : (Int) -> Unit,
-    onTypeText     : (String) -> Unit,
-    onShowSettings : () -> Unit,
+    isReady         : Boolean,
+    settings        : KeyboardSettings,
+    onSendKey       : (modifiers: Int, keyCodes: List<Int>) -> Unit,
+    onReleaseKeys   : () -> Unit,
+    onConsumerKey   : (Int) -> Unit,
+    onTypeText      : (String) -> Unit,
+    onShowSettings  : () -> Unit,
     onSettingsChange: ((KeyboardSettings) -> Unit)? = null,
 ) {
     var st by remember(settings.numpadStartsLocked, settings.defaultTab) {
@@ -41,9 +41,10 @@ fun KeyboardScreen(
     var typeText by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
-    // ── KEY FIX: wrap mutable state writes in rememberUpdatedState so that
-    // coroutines launched before a recomposition always write to the CURRENT
-    // st, not a stale snapshot captured at launch time.
+    // Visibility toggles — temporary UI state (resets on recompose/restart)
+    var showKeyboard by remember { mutableStateOf(true) }
+    var showNumpad   by remember { mutableStateOf(true) }
+
     val currentSt       by rememberUpdatedState(st)
     val currentSettings by rememberUpdatedState(settings)
 
@@ -115,8 +116,10 @@ fun KeyboardScreen(
                         Text(
                             title,
                             fontSize   = 12.sp,
-                            color      = if (st.tab == i) Color(0xFF90CAF9) else Color(0xFF546E7A),
-                            fontWeight = if (st.tab == i) FontWeight.SemiBold else FontWeight.Normal,
+                            color      = if (st.tab == i) Color(0xFF90CAF9)
+                                         else Color(0xFF546E7A),
+                            fontWeight = if (st.tab == i) FontWeight.SemiBold
+                                         else FontWeight.Normal,
                             maxLines   = 1
                         )
                     }
@@ -129,8 +132,13 @@ fun KeyboardScreen(
             isReady          = isReady,
             showFullStatus   = settings.showStatusBar,
             showComboPreview = settings.showComboPreview,
+            showKeyboard     = showKeyboard,
+            showNumpad       = showNumpad,
+            currentTab       = st.tab,
             onClearMods      = { clearMods() },
             onShowSettings   = onShowSettings,
+            onToggleKeyboard = { showKeyboard = !showKeyboard },
+            onToggleNumpad   = { showNumpad = !showNumpad },
         )
 
         if (!isReady) {
@@ -165,19 +173,21 @@ fun KeyboardScreen(
 
         when (st.tab) {
             0 -> KeysTab(
-                st            = st,
-                settings      = settings,
-                onKeyPress    = { handleKey(it) },
-                onClearMods   = { clearMods() },
-                onSendKey     = onSendKey,
-                onReleaseKeys = onReleaseKeys,
-                onConsumerKey = onConsumerKey,
-                onTypeText    = onTypeText,
+                st               = st,
+                settings         = settings,
+                showKeyboard     = showKeyboard,
+                onKeyPress       = { handleKey(it) },
+                onClearMods      = { clearMods() },
+                onSendKey        = onSendKey,
+                onReleaseKeys    = onReleaseKeys,
+                onConsumerKey    = onConsumerKey,
+                onTypeText       = onTypeText,
                 onSettingsChange = onSettingsChange,
             )
             1 -> NavNumpadTab(
                 st                = st,
                 settings          = settings,
+                showNumpad        = showNumpad,
                 typeText          = typeText,
                 onTypeTextChanged = { typeText = it },
                 onKeyPress        = { handleKey(it) },
@@ -190,12 +200,12 @@ fun KeyboardScreen(
                 onSettingsChange  = onSettingsChange,
             )
             2 -> MediaTab(
-                st              = st,
-                settings        = settings,
-                onKeyPress      = { handleKey(it) },
-                onConsumerKey   = onConsumerKey,
-                onClearMods     = { clearMods() },
-                onUpdateLastKey = { st = st.copy(lastKey = it) },
+                st               = st,
+                settings         = settings,
+                onKeyPress       = { handleKey(it) },
+                onConsumerKey    = onConsumerKey,
+                onClearMods      = { clearMods() },
+                onUpdateLastKey  = { st = st.copy(lastKey = it) },
                 onSettingsChange = onSettingsChange,
             )
         }
