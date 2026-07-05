@@ -23,13 +23,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.*
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.components.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+private const val TYPE_SENTINEL = "\u200B"
 
 @Composable
 internal fun NavNumpadTab(
@@ -44,6 +52,7 @@ internal fun NavNumpadTab(
     onInsertToggle: () -> Unit,
     onClearMods: () -> Unit,
     onSendKey: (Int, List<Int>) -> Unit,
+    onReleaseKeys: () -> Unit,
     onTypeText: (String) -> Unit,
     onSettingsChange: ((KeyboardSettings) -> Unit)? = null,
 ) {
@@ -69,6 +78,9 @@ internal fun NavNumpadTab(
     var viewportTopPx    by remember { mutableStateOf(0f) }
     var viewportBottomPx by remember { mutableStateOf(0f) }
 
+    // Track if system keyboard is visible via IME
+    var isImeVisible by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -87,7 +99,10 @@ internal fun NavNumpadTab(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(scrollState)
-                    .imePadding()
+                    .then(
+                        if (!showNumpad) Modifier.imePadding()
+                        else Modifier
+                    )
                     .padding(
                         horizontal = if (isComfort) 8.dp else 4.dp,
                         vertical   = if (isComfort) 4.dp else 2.dp
@@ -138,8 +153,18 @@ internal fun NavNumpadTab(
                             val bringIntoViewRequester = remember { BringIntoViewRequester() }
                             val keyboardController     = LocalSoftwareKeyboardController.current
                             if (isComfort) KbCard("Type & Send Text") {
-                                TypeTextContent(typeText, onTypeTextChanged, onSendKey, onTypeText, bringIntoViewRequester, keyboardController, scope)
-                            } else TypeTextContent(typeText, onTypeTextChanged, onSendKey, onTypeText, bringIntoViewRequester, keyboardController, scope)
+                                TypeTextContent(
+                                    typeText, onTypeTextChanged,
+                                    onSendKey, onReleaseKeys, onTypeText,
+                                    bringIntoViewRequester, keyboardController, scope
+                                )
+                            } else {
+                                TypeTextContent(
+                                    typeText, onTypeTextChanged,
+                                    onSendKey, onReleaseKeys, onTypeText,
+                                    bringIntoViewRequester, keyboardController, scope
+                                )
+                            }
                         }
                     }
                 }
@@ -283,27 +308,119 @@ private fun TypeTextContent(
     typeText: String,
     onTypeTextChanged: (String) -> Unit,
     onSendKey: (Int, List<Int>) -> Unit,
+    onReleaseKeys: () -> Unit,
     onTypeText: (String) -> Unit,
     bringIntoViewRequester: BringIntoViewRequester,
     keyboardController: androidx.compose.ui.platform.SoftwareKeyboardController?,
     scope: kotlinx.coroutines.CoroutineScope,
 ) {
+    // Use sentinel-based TextFieldValue to reliably detect backspace even when text is empty
+    var fieldValue by remember(typeText) {
+        mutableStateOf(
+            TextFieldValue(
+                text = TYPE_SENTINEL + typeText,
+                selection = TextRange((TYPE_SENTINEL + typeText).length)
+            )
+        )
+    }
+
+    // Sync when typeText changes externally (e.g. Clear button)
+    LaunchedEffect(typeText) {
+        val expected = TYPE_SENTINEL + typeText
+        if (fieldValue.text != expected) {
+            fieldValue = TextFieldValue(
+                text = expected,
+                selection = TextRange(expected.length)
+            )
+        }
+    }
+
     Column {
         OutlinedTextField(
-            value         = typeText,
-            onValueChange = { newText ->
+            value         = fieldValue,
+            onValueChange = { newValue ->
+                val newRaw = newValue.text
+                val oldContent = fieldValue.text.removePrefix(TYPE_SENTINEL)
+                val newContent = newRaw.removePrefix(TYPE_SENTINEL)
+
+                val expectedEnd = (TYPE_SENTINEL + newContent).length
+
                 when {
-                    newText.length > typeText.length -> {
-                        val added = newText.substring(typeText.length)
-                        if (added.isNotEmpty()) onTypeText(added)
-                    }
-                    newText.length < typeText.length -> {
-                        repeat(typeText.length - newText.length) {
+                    // Sentinel was deleted — treat as backspace
+                    !newRaw.startsWith(TYPE_SENTINEL) -> {
+                        val deletedCount = (TYPE_SENTINEL.length + oldContent.length) - newRaw.length
+                        repeat(deletedCount.coerceAtLeast(1)) {
                             onSendKey(0, listOf(0x2A))
+                            onReleaseKeys()
+                        }
+                        val remaining = if (oldContent.isNotEmpty()) {
+                            oldContent.dropLast(deletedCount.coerceAtMost(oldContent.length))
+                        } else ""
+                        val restored = TYPE_SENTINEL + remaining
+                        fieldValue = TextFieldValue(
+                            text = restored,
+                            selection = TextRange(restored.length)
+                        )
+                        onTypeTextChanged(remaining)
+                    }
+
+                    newContent.length > oldContent.length -> {
+                        // Check if insertion was at the end
+                        val insertedAtEnd = newContent.endsWith(
+                            newContent.takeLast(newContent.length - oldContent.length)
+                        ) && newContent.dropLast(newContent.length - oldContent.length) == oldContent
+
+                        if (insertedAtEnd) {
+                            val added = newContent.substring(oldContent.length)
+                            if (added.isNotEmpty()) onTypeText(added)
+                            fieldValue = TextFieldValue(
+                                text = TYPE_SENTINEL + newContent,
+                                selection = TextRange(expectedEnd)
+                            )
+                            onTypeTextChanged(newContent)
+                        } else {
+                            // Mid-text insertion — reject, keep old value, snap cursor to end
+                            val old = TYPE_SENTINEL + oldContent
+                            fieldValue = TextFieldValue(
+                                text = old,
+                                selection = TextRange(old.length)
+                            )
                         }
                     }
+
+                    newContent.length < oldContent.length -> {
+                        // Check if deletion was from the end
+                        val deletedFromEnd = oldContent.startsWith(newContent)
+
+                        if (deletedFromEnd) {
+                            val deletedCount = oldContent.length - newContent.length
+                            repeat(deletedCount) {
+                                onSendKey(0, listOf(0x2A))
+                                onReleaseKeys()
+                            }
+                            fieldValue = TextFieldValue(
+                                text = TYPE_SENTINEL + newContent,
+                                selection = TextRange(expectedEnd)
+                            )
+                            onTypeTextChanged(newContent)
+                        } else {
+                            // Mid-text deletion — reject, keep old value, snap cursor to end
+                            val old = TYPE_SENTINEL + oldContent
+                            fieldValue = TextFieldValue(
+                                text = old,
+                                selection = TextRange(old.length)
+                            )
+                        }
+                    }
+
+                    else -> {
+                        // Text same but cursor moved — snap cursor back to end
+                        fieldValue = TextFieldValue(
+                            text = TYPE_SENTINEL + newContent,
+                            selection = TextRange(expectedEnd)
+                        )
+                    }
                 }
-                onTypeTextChanged(newText)
             },
             modifier      = Modifier
                 .fillMaxWidth()
@@ -317,7 +434,9 @@ private fun TypeTextContent(
                         }
                     }
                 },
-            placeholder   = { Text("Type here…", color = Color.Gray) },
+            placeholder   = {
+                Text("Type here…", color = Color.Gray)
+            },
             maxLines      = 4,
             colors        = OutlinedTextFieldDefaults.colors(
                 focusedTextColor     = Color.White,
@@ -325,7 +444,9 @@ private fun TypeTextContent(
                 focusedBorderColor   = Color(0xFF4A90D9),
                 unfocusedBorderColor = Color.White.copy(0.2f),
                 cursorColor          = Color(0xFF4A90D9)
-            )
+            ),
+            // Hide the sentinel visually
+            visualTransformation = SentinelVisualTransformation()
         )
 
         Spacer(Modifier.height(8.dp))
@@ -337,5 +458,29 @@ private fun TypeTextContent(
         ) {
             Text("Clear", color = Color.White)
         }
+    }
+}
+
+private class SentinelVisualTransformation : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val sentinelLen = TYPE_SENTINEL.length
+        val filtered = if (text.text.startsWith(TYPE_SENTINEL)) {
+            text.text.removePrefix(TYPE_SENTINEL)
+        } else {
+            text.text
+        }
+
+        return TransformedText(
+            AnnotatedString(filtered),
+            object : OffsetMapping {
+                override fun originalToTransformed(offset: Int): Int {
+                    return (offset - sentinelLen).coerceAtLeast(0)
+                }
+
+                override fun transformedToOriginal(offset: Int): Int {
+                    return offset + sentinelLen
+                }
+            }
+        )
     }
 }

@@ -201,6 +201,7 @@ fun KeyboardScreen(
                 onInsertToggle = { handleInsertToggle() },
                 onClearMods = { clearMods() },
                 onSendKey = onSendKey,
+                onReleaseKeys = onReleaseKeys,
                 onTypeText = onTypeText,
                 onSettingsChange = onSettingsChange,
             )

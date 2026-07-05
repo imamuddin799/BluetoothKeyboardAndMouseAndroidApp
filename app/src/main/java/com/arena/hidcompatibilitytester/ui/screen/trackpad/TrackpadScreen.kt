@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
@@ -25,6 +26,8 @@ import com.arena.hidcompatibilitytester.ui.screen.keyboard.KbState
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.KeyboardSettings
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.SharedCompactKeyboard
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.handleKeyPress
+
+private const val IME_SENTINEL = "\u200B"
 
 @Composable
 fun TrackpadScreen(
@@ -46,7 +49,14 @@ fun TrackpadScreen(
     var inAppKbVisible by remember { mutableStateOf(false) }
     var showOptionalRows by remember { mutableStateOf(true) }
 
-    var hiddenText by remember { mutableStateOf(TextFieldValue("")) }
+    var hiddenText by remember {
+        mutableStateOf(
+            TextFieldValue(
+                text = IME_SENTINEL,
+                selection = TextRange(IME_SENTINEL.length)
+            )
+        )
+    }
     val focusRequester = remember { FocusRequester() }
 
     var kbSt by remember { mutableStateOf(KbState()) }
@@ -59,15 +69,29 @@ fun TrackpadScreen(
         keyboardSettings.trackpadOptionalRowOrder
     )
 
+    fun resetHiddenText() {
+        hiddenText = TextFieldValue(
+            text = IME_SENTINEL,
+            selection = TextRange(IME_SENTINEL.length)
+        )
+    }
+
+    fun sendBackspaceTap() {
+        onSendKey(0, listOf(0x2A))
+        onReleaseKeys()
+    }
+
     fun showSystemKeyboard() {
         inAppKbVisible = false
         systemKbVisible = true
+        resetHiddenText()
         focusRequester.requestFocus()
         keyboardController?.show()
     }
 
     fun hideSystemKeyboard() {
         systemKbVisible = false
+        resetHiddenText()
         keyboardController?.hide()
         focusManager.clearFocus()
     }
@@ -106,20 +130,22 @@ fun TrackpadScreen(
         BasicTextField(
             value = hiddenText,
             onValueChange = { newValue ->
-                val oldText = hiddenText.text
                 val newText = newValue.text
+
                 when {
-                    newText.length > oldText.length -> {
-                        val added = newText.substring(oldText.length)
-                        if (added.isNotEmpty()) onTypeText(added)
-                    }
-                    newText.length < oldText.length -> {
-                        repeat(oldText.length - newText.length) {
-                            onSendKey(0, listOf(0x2A))
+                    newText.length > IME_SENTINEL.length -> {
+                        val added = newText.removePrefix(IME_SENTINEL)
+                        if (added.isNotEmpty()) {
+                            onTypeText(added)
                         }
                     }
+
+                    newText.length < IME_SENTINEL.length -> {
+                        sendBackspaceTap()
+                    }
                 }
-                hiddenText = newValue
+
+                resetHiddenText()
             },
             modifier = Modifier
                 .size(1.dp)
