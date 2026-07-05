@@ -298,21 +298,132 @@ private fun BehaviorSection(
         StickyModsExplainCard(settings.stickyModifiers, settings.keepModsAfterTab)
     }
 
-    SettingsCard("Media Quick Row", spacing) {
+    // ══════════════════════════════════════════════
+    // Optional Rows — unified visibility control
+    // ══════════════════════════════════════════════
+    SettingsCard("Optional Rows", spacing) {
         SettingsToggle(
-            "Show in Keyboard Tab",
-            "Transport, volume & brightness row above function keys",
-            settings.showMediaRowInKeyboard
+            "Global Visibility",
+            "Use same optional row visibility across all keyboards",
+            settings.globalOptionalRowVisibility,
         ) {
-            onChange(settings.copy(showMediaRowInKeyboard = it))
+            onChange(settings.copy(globalOptionalRowVisibility = it))
+        }
+
+        HorizontalDivider(
+            color = Color.White.copy(0.06f),
+            modifier = Modifier.padding(vertical = 4.dp)
+        )
+
+        // ── Media Row ──
+        Text(
+            "🎵 Media Row",
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp,
+            color = Color.White
+        )
+        Text(
+            "Transport, volume & brightness above function keys",
+            fontSize = 11.sp,
+            color = Color(0xFF607D8B)
+        )
+
+        if (settings.globalOptionalRowVisibility) {
+            SettingsToggle(
+                "Show Media Row",
+                "Shown in all keyboards when enabled",
+                settings.globalShowMediaRow,
+            ) {
+                onChange(settings.copy(globalShowMediaRow = it))
+            }
         }
 
         SettingsToggle(
-            "Show in Trackpad Keyboard",
-            "Same row when keyboard is open on trackpad screen",
-            settings.showMediaRowInTrackpad
+            "Keys Tab Keyboard",
+            if (settings.globalOptionalRowVisibility)
+                "Controlled by global — turn off global to customize"
+            else
+                "Show media row in keyboard tab",
+            if (settings.globalOptionalRowVisibility) settings.globalShowMediaRow
+            else settings.keysTabShowMediaRow,
+            enabled = !settings.globalOptionalRowVisibility,
         ) {
-            onChange(settings.copy(showMediaRowInTrackpad = it))
+            onChange(settings.copy(keysTabShowMediaRow = it))
+        }
+
+        SettingsToggle(
+            "Trackpad Keyboard",
+            if (settings.globalOptionalRowVisibility)
+                "Controlled by global — turn off global to customize"
+            else
+                "Show media row in trackpad keyboard",
+            if (settings.globalOptionalRowVisibility) settings.globalShowMediaRow
+            else settings.trackpadShowMediaRow,
+            enabled = !settings.globalOptionalRowVisibility,
+        ) {
+            onChange(settings.copy(trackpadShowMediaRow = it))
+        }
+
+        if (settings.globalOptionalRowVisibility) {
+            GlobalOptionalRowHint()
+        }
+
+        HorizontalDivider(
+            color = Color.White.copy(0.06f),
+            modifier = Modifier.padding(vertical = 4.dp)
+        )
+
+        // ── Nav Row ──
+        Text(
+            "↕ Navigation Row",
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp,
+            color = Color.White
+        )
+        Text(
+            "Home · End · PgUp · PgDn · Ins · ← ↑ ↓ →",
+            fontSize = 11.sp,
+            color = Color(0xFF607D8B)
+        )
+
+        if (settings.globalOptionalRowVisibility) {
+            SettingsToggle(
+                "Show Nav Row",
+                "Shown in all keyboards when enabled",
+                settings.globalShowNavRow,
+            ) {
+                onChange(settings.copy(globalShowNavRow = it))
+            }
+        }
+
+        SettingsToggle(
+            "Keys Tab Keyboard",
+            if (settings.globalOptionalRowVisibility)
+                "Controlled by global — turn off global to customize"
+            else
+                "Show nav row in keyboard tab",
+            if (settings.globalOptionalRowVisibility) settings.globalShowNavRow
+            else settings.keysTabShowNavRow,
+            enabled = !settings.globalOptionalRowVisibility,
+        ) {
+            onChange(settings.copy(keysTabShowNavRow = it))
+        }
+
+        SettingsToggle(
+            "Trackpad Keyboard",
+            if (settings.globalOptionalRowVisibility)
+                "Controlled by global — turn off global to customize"
+            else
+                "Show nav row in trackpad keyboard",
+            if (settings.globalOptionalRowVisibility) settings.globalShowNavRow
+            else settings.trackpadShowNavRow,
+            enabled = !settings.globalOptionalRowVisibility,
+        ) {
+            onChange(settings.copy(trackpadShowNavRow = it))
+        }
+
+        if (settings.globalOptionalRowVisibility) {
+            GlobalOptionalRowHint()
         }
     }
 
@@ -374,7 +485,29 @@ private fun BehaviorSection(
             onChange(settings.copy(defaultTab = it))
         }
     }
+}
 
+@Composable
+private fun GlobalOptionalRowHint() {
+    Surface(
+        color = Color(0xFF1565C0).copy(0.1f),
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("🔒", fontSize = 14.sp)
+            Text(
+                "Global visibility is ON. Turn it off to customize per keyboard.",
+                fontSize = 11.sp,
+                color = Color(0xFF90CAF9),
+                maxLines = 2,
+            )
+        }
+    }
 }
 
 @Composable
@@ -582,32 +715,6 @@ private fun AppearanceSection(
                 onChange(settings.copy(keysTabSectionOrder = newOrder + hidden))
             }
         )
-    }
-
-    // ── Nav Row Settings ──
-    SettingsCard("Navigation Quick Row", spacing) {
-        Text(
-            "Home · End · PgUp · PgDn · Ins · ← ↑ ↓ →",
-            fontSize = 11.sp,
-            color = Color(0xFF607D8B),
-            fontWeight = FontWeight.Medium,
-        )
-
-        SettingsToggle(
-            "Show in Keyboard Tab",
-            "Navigation row between media and function keys",
-            settings.showNavRowInKeyboard
-        ) {
-            onChange(settings.copy(showNavRowInKeyboard = it))
-        }
-
-        SettingsToggle(
-            "Show in Trackpad Keyboard",
-            "Navigation row when keyboard is open on trackpad",
-            settings.showNavRowInTrackpad
-        ) {
-            onChange(settings.copy(showNavRowInTrackpad = it))
-        }
     }
 
     SettingsCard("Optional Row Order", spacing) {
@@ -1310,24 +1417,6 @@ private fun MediaRowSection(
                 onChange(settings.copy(mediaTabSectionOrder = newOrder + hidden))
             }
         )
-    }
-
-    SettingsCard("Visibility", spacing) {
-        SettingsToggle(
-            "Show in Keyboard Tab",
-            "Media ow above function keys in keyboard",
-            settings.showMediaRowInKeyboard
-        ) {
-            onChange(settings.copy(showMediaRowInKeyboard = it))
-        }
-
-        SettingsToggle(
-            "Show in Trackpad Keyboard",
-            "Media row when keyboard is open on trackpad",
-            settings.showMediaRowInTrackpad
-        ) {
-            onChange(settings.copy(showMediaRowInTrackpad = it))
-        }
     }
 
     SettingsCard("Groups", spacing) {

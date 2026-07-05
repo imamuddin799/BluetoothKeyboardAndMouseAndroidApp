@@ -57,9 +57,22 @@ data class KeyboardSettings(
     val navTabShowQuickMods: Boolean = false,
     val navTabShowTypeText: Boolean = true,
 
-    // Media Quick Row
-    val showMediaRowInKeyboard: Boolean = false,
-    val showMediaRowInTrackpad: Boolean = false,
+    // ══════════════════════════════════════════════
+    // Optional Row Visibility (restructured)
+    // ══════════════════════════════════════════════
+    val globalOptionalRowVisibility: Boolean = false,
+
+    // Global toggles — used when globalOptionalRowVisibility is ON
+    val globalShowMediaRow: Boolean = false,
+    val globalShowNavRow: Boolean = false,
+
+    // Per-keyboard toggles — used when globalOptionalRowVisibility is OFF
+    val keysTabShowMediaRow: Boolean = false,
+    val keysTabShowNavRow: Boolean = false,
+    val trackpadShowMediaRow: Boolean = false,
+    val trackpadShowNavRow: Boolean = false,
+
+    // Media row sub-settings (content config — stays separate)
     val mediaRowShowTransport: Boolean = true,
     val mediaRowShowVolume: Boolean = true,
     val mediaRowShowBrightness: Boolean = true,
@@ -70,10 +83,6 @@ data class KeyboardSettings(
         MediaRowGroup.VOLUME,
         MediaRowGroup.BRIGHTNESS,
     ),
-
-    // Nav Quick Row
-    val showNavRowInKeyboard: Boolean = false,
-    val showNavRowInTrackpad: Boolean = false,
 
     // Merge System Keys + Quick Modifiers
     val mergeSystemAndModsGlobal: Boolean = false,
@@ -142,6 +151,23 @@ data class KeyboardSettings(
     fun getOptionalRowOrder(tabOrder: List<KeyboardOptionalRow>): List<KeyboardOptionalRow> {
         return if (globalOptionalRowOrder) keyboardOptionalRowOrder else tabOrder
     }
+
+    // Resolved visibility helpers
+    fun showMediaRowInKeysTab(): Boolean {
+        return if (globalOptionalRowVisibility) globalShowMediaRow else keysTabShowMediaRow
+    }
+
+    fun showNavRowInKeysTab(): Boolean {
+        return if (globalOptionalRowVisibility) globalShowNavRow else keysTabShowNavRow
+    }
+
+    fun showMediaRowInTrackpad(): Boolean {
+        return if (globalOptionalRowVisibility) globalShowMediaRow else trackpadShowMediaRow
+    }
+
+    fun showNavRowInTrackpad(): Boolean {
+        return if (globalOptionalRowVisibility) globalShowNavRow else trackpadShowNavRow
+    }
 }
 
 enum class SectionStyle(val label: String) {
@@ -179,7 +205,6 @@ enum class MediaKeySize(val label: String, val heightDp: Int) {
     LARGE("Large", 80),
 }
 
-// Section identifiers for reordering
 enum class KeysTabSection(val label: String, val icon: String) {
     NAV_ARROWS("Navigation + Arrows", "↕"),
     SYSTEM_KEYS("System Keys", "⌨"),
