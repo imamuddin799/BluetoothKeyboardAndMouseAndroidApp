@@ -151,15 +151,19 @@ class MainActivity : ComponentActivity(),
         }
     }
 
+    // CHANGE 3: Update onDestroy — remove the stopService call that was killing
+    // everything on activity destroy. It should look like this:
+
     override fun onDestroy() {
         super.onDestroy()
         deviceManager.stopNearbyScanning()
+        deviceManager.unregisterStateListener()
         hidService?.clearActivityCallbacks()
         if (serviceBound) {
             unbindService(serviceConnection)
             serviceBound = false
         }
-        // Service keeps running — BLE stays alive
+        // No stopService here — service keeps running unless user chose "Stop & Exit"
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -259,22 +263,48 @@ class MainActivity : ComponentActivity(),
             )
         }
 
+        // In MainActivity.kt
+        // CHANGE 1: Update the exit confirmation dialog in MainContent()
+        // Replace the existing showExitConfirmation AlertDialog block with this:
+
         if (showExitConfirmation) {
             AlertDialog(
                 onDismissRequest = { showExitConfirmation = false },
-                title = { Text("Exit App?") },
-                text  = { Text("The HID service will keep running in the background.\nUse 'Stop HID' in the notification to fully disconnect.") },
+                title = { Text("Close App?") },
+                text = {
+                    Text(
+                        "Keep Running — closes the UI but keeps Bluetooth HID " +
+                        "active in the background.\n\n" +
+                        "Stop & Exit — disconnects all hosts and stops the service."
+                    )
+                },
                 confirmButton = {
-                    TextButton(onClick = {
-                        showExitConfirmation = false
-                        finish()
-                    }) {
-                        Text("Exit", color = MaterialTheme.colorScheme.error)
+                    TextButton(
+                        onClick = {
+                            showExitConfirmation = false
+                            stopHidServiceAndExit()
+                        }
+                    ) {
+                        Text("Stop & Exit", color = MaterialTheme.colorScheme.error)
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showExitConfirmation = false }) {
-                        Text("Cancel")
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TextButton(
+                            onClick = { showExitConfirmation = false }
+                        ) {
+                            Text("Cancel")
+                        }
+                        TextButton(
+                            onClick = {
+                                showExitConfirmation = false
+                                finish() // UI closes, service stays alive
+                            }
+                        ) {
+                            Text("Keep Running")
+                        }
                     }
                 }
             )
@@ -371,6 +401,32 @@ class MainActivity : ComponentActivity(),
     // ═════════════════════════════════════════════════════════════════════════
     // Bluetooth helpers
     // ═════════════════════════════════════════════════════════════════════════
+
+    private fun stopHidServiceAndExit() {
+        // Cancel notification immediately
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE)
+            as android.app.NotificationManager
+        notificationManager.cancelAll()
+
+        // Stop BLE directly via the bound service (no async race)
+        bleHidManager?.stop()
+
+        // Clear callbacks before unbinding
+        hidService?.clearActivityCallbacks()
+        if (serviceBound) {
+            unbindService(serviceConnection)
+            serviceBound = false
+        }
+
+        // Now stop the service completely
+        val stopIntent = Intent(this, HidInputService::class.java).apply {
+            action = HidInputService.ACTION_STOP
+        }
+        stopService(stopIntent)
+
+        finish()
+    }
+
 
     private fun toggleBleHid() {
         val manager = bleHidManager ?: return

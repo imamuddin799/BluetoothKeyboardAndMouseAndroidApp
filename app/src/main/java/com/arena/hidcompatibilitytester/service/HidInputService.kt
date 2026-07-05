@@ -151,6 +151,9 @@ class HidInputService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             bleHidManager.stop()
+            // Explicitly cancel the notification before stopping foreground
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.cancel(notificationId)
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
@@ -179,6 +182,9 @@ class HidInputService : Service() {
         try { unregisterReceiver(bluetoothStateReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(bondStateReceiver) } catch (_: Exception) {}
         bleHidManager.stop()
+        // Cancel notification explicitly so nothing lingers
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.cancel(notificationId)
     }
 
     // ═════════════════════════════════════════════════════════════════════════
