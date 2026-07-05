@@ -95,19 +95,19 @@ object KeyboardSettingsStore {
 
         // Migration: read old field names and map to new ones
         val oldMediaInKb = p.getBoolean("showMediaRowInKeyboard", false)
-        val oldMediaInTp = p.getBoolean("showMediaRowInTrackpad", false)
+        val oldMediaInTp = p.getBoolean("showMediaRowInTrackpad", true)
         val oldNavInKb = p.getBoolean("showNavRowInKeyboard", false)
         val oldNavInTp = p.getBoolean("showNavRowInTrackpad", false)
 
         return KeyboardSettings(
             repeatEnabled = p.getBoolean("repeatEnabled", true),
-            repeatInitialDelayMs = p.getLong("repeatInitialDelayMs", 400L),
-            repeatIntervalMs = p.getLong("repeatIntervalMs", 50L),
+            repeatInitialDelayMs = p.getLong("repeatInitialDelayMs", 350L),
+            repeatIntervalMs = p.getLong("repeatIntervalMs", 30L),
             hapticEnabled = p.getBoolean("hapticEnabled", true),
             hapticIntensity = runCatching {
                 HapticIntensity.valueOf(p.getString("hapticIntensity", "MEDIUM")!!)
             }.getOrDefault(HapticIntensity.MEDIUM),
-            soundOnPress = p.getBoolean("soundOnPress", false),
+            soundOnPress = p.getBoolean("soundOnPress", true),
             keyHeight = runCatching {
                 KeyHeight.valueOf(p.getString("keyHeight", "MEDIUM")!!)
             }.getOrDefault(KeyHeight.MEDIUM),
@@ -125,10 +125,10 @@ object KeyboardSettingsStore {
             keysTabShowNavigation = p.getBoolean("keysTabShowNavigation", true),
             keysTabShowArrowKeys = p.getBoolean("keysTabShowArrowKeys", true),
             keysTabShowSystemKeys = p.getBoolean("keysTabShowSystemKeys", true),
-            keysTabShowQuickMods = p.getBoolean("keysTabShowQuickMods", true),
+            keysTabShowQuickMods = p.getBoolean("keysTabShowQuickMods", false),
             keysTabSectionStyle = runCatching {
-                SectionStyle.valueOf(p.getString("keysTabSectionStyle", "COMPACT")!!)
-            }.getOrDefault(SectionStyle.COMPACT),
+                SectionStyle.valueOf(p.getString("keysTabSectionStyle", "MEDIA")!!)
+            }.getOrDefault(SectionStyle.MEDIA),
 
             numpadStartsLocked = p.getBoolean("numpadStartsLocked", true),
             numpadShowHints = p.getBoolean("numpadShowHints", true),
@@ -139,17 +139,17 @@ object KeyboardSettingsStore {
             mediaTabShowNavigation = p.getBoolean("mediaTabShowNavigation", false),
             mediaTabShowArrowKeys = p.getBoolean("mediaTabShowArrowKeys", true),
             mediaTabShowSystemKeys = p.getBoolean("mediaTabShowSystemKeys", true),
-            mediaTabShowQuickMods = p.getBoolean("mediaTabShowQuickMods", true),
+            mediaTabShowQuickMods = p.getBoolean("mediaTabShowQuickMods", false),
             mediaTabSectionStyle = runCatching {
                 SectionStyle.valueOf(p.getString("mediaTabSectionStyle", "MEDIA")!!)
             }.getOrDefault(SectionStyle.MEDIA),
 
-            navTabShowNavigation = p.getBoolean("navTabShowNavigation", true),
-            navTabShowArrowKeys = p.getBoolean("navTabShowArrowKeys", true),
-            navTabShowInsertToggle = p.getBoolean("navTabShowInsertToggle", true),
+            navTabShowNavigation = p.getBoolean("navTabShowNavigation", false),
+            navTabShowArrowKeys = p.getBoolean("navTabShowArrowKeys", false),
+            navTabShowInsertToggle = p.getBoolean("navTabShowInsertToggle", false),
             navTabShowTypeText = p.getBoolean("navTabShowTypeText", true),
             navTabShowSystemKeys = p.getBoolean("navTabShowSystemKeys", true),
-            navTabShowQuickMods = p.getBoolean("navTabShowQuickMods", true),
+            navTabShowQuickMods = p.getBoolean("navTabShowQuickMods", false),
 
             // Optional row visibility — migrate from old keys
             globalOptionalRowVisibility = p.getBoolean("globalOptionalRowVisibility", false),
@@ -169,8 +169,8 @@ object KeyboardSettingsStore {
                 p.getString("mediaRowGroupOrder", null)
                     ?.split(",")
                     ?.map { MediaRowGroup.valueOf(it.trim()) }
-                    ?: listOf(MediaRowGroup.TRANSPORT, MediaRowGroup.VOLUME, MediaRowGroup.BRIGHTNESS)
-            }.getOrDefault(listOf(MediaRowGroup.TRANSPORT, MediaRowGroup.VOLUME, MediaRowGroup.BRIGHTNESS)),
+                    ?: listOf(MediaRowGroup.VOLUME, MediaRowGroup.BRIGHTNESS, MediaRowGroup.TRANSPORT)
+            }.getOrDefault(listOf(MediaRowGroup.VOLUME, MediaRowGroup.BRIGHTNESS, MediaRowGroup.TRANSPORT)),
 
             mergeSystemAndModsGlobal = p.getBoolean("mergeSystemAndModsGlobal", false),
             keysTabMergeSystemAndMods = p.getBoolean("keysTabMergeSystemAndMods", false),
@@ -178,19 +178,25 @@ object KeyboardSettingsStore {
             navTabMergeSystemAndMods = p.getBoolean("navTabMergeSystemAndMods", false),
 
             keysTabSectionOrder = runCatching {
-                p.getString("keysTabSectionOrder", null)?.split(",")?.map { KeysTabSection.valueOf(it.trim()) }
+                p.getString("keysTabSectionOrder", null)
+                    ?.split(",")
+                    ?.map { KeysTabSection.valueOf(it.trim()) }
                     ?: listOf(KeysTabSection.NAV_ARROWS, KeysTabSection.SYSTEM_KEYS, KeysTabSection.QUICK_MODS)
             }.getOrDefault(listOf(KeysTabSection.NAV_ARROWS, KeysTabSection.SYSTEM_KEYS, KeysTabSection.QUICK_MODS)),
             keysTabNavArrowsSwapped = p.getBoolean("keysTabNavArrowsSwapped", false),
 
             navTabSectionOrder = runCatching {
-                p.getString("navTabSectionOrder", null)?.split(",")?.map { NavTabSection.valueOf(it.trim()) }
+                p.getString("navTabSectionOrder", null)
+                    ?.split(",")
+                    ?.map { NavTabSection.valueOf(it.trim()) }
                     ?: listOf(NavTabSection.NAV_ARROWS, NavTabSection.INSERT_TOGGLE, NavTabSection.SYSTEM_KEYS, NavTabSection.QUICK_MODS, NavTabSection.TYPE_TEXT)
             }.getOrDefault(listOf(NavTabSection.NAV_ARROWS, NavTabSection.INSERT_TOGGLE, NavTabSection.SYSTEM_KEYS, NavTabSection.QUICK_MODS, NavTabSection.TYPE_TEXT)),
             navTabNavArrowsSwapped = p.getBoolean("navTabNavArrowsSwapped", false),
 
             mediaTabSectionOrder = runCatching {
-                p.getString("mediaTabSectionOrder", null)?.split(",")?.map { MediaTabSection.valueOf(it.trim()) }
+                p.getString("mediaTabSectionOrder", null)
+                    ?.split(",")
+                    ?.map { MediaTabSection.valueOf(it.trim()) }
                     ?: listOf(MediaTabSection.TRANSPORT, MediaTabSection.VOLUME_BRIGHTNESS, MediaTabSection.NAVIGATION, MediaTabSection.ARROW_KEYS, MediaTabSection.SYSTEM_KEYS, MediaTabSection.QUICK_MODS)
             }.getOrDefault(listOf(MediaTabSection.TRANSPORT, MediaTabSection.VOLUME_BRIGHTNESS, MediaTabSection.NAVIGATION, MediaTabSection.ARROW_KEYS, MediaTabSection.SYSTEM_KEYS, MediaTabSection.QUICK_MODS)),
 
@@ -201,15 +207,21 @@ object KeyboardSettingsStore {
 
             globalOptionalRowOrder = p.getBoolean("globalOptionalRowOrder", false),
             keyboardOptionalRowOrder = runCatching {
-                p.getString("keyboardOptionalRowOrder", null)?.split(",")?.map { KeyboardOptionalRow.valueOf(it.trim()) }
+                p.getString("keyboardOptionalRowOrder", null)
+                    ?.split(",")
+                    ?.map { KeyboardOptionalRow.valueOf(it.trim()) }
                     ?: listOf(KeyboardOptionalRow.MEDIA_ROW, KeyboardOptionalRow.NAV_ROW)
             }.getOrDefault(listOf(KeyboardOptionalRow.MEDIA_ROW, KeyboardOptionalRow.NAV_ROW)),
             keysTabOptionalRowOrder = runCatching {
-                p.getString("keysTabOptionalRowOrder", null)?.split(",")?.map { KeyboardOptionalRow.valueOf(it.trim()) }
+                p.getString("keysTabOptionalRowOrder", null)
+                    ?.split(",")
+                    ?.map { KeyboardOptionalRow.valueOf(it.trim()) }
                     ?: listOf(KeyboardOptionalRow.MEDIA_ROW, KeyboardOptionalRow.NAV_ROW)
             }.getOrDefault(listOf(KeyboardOptionalRow.MEDIA_ROW, KeyboardOptionalRow.NAV_ROW)),
             trackpadOptionalRowOrder = runCatching {
-                p.getString("trackpadOptionalRowOrder", null)?.split(",")?.map { KeyboardOptionalRow.valueOf(it.trim()) }
+                p.getString("trackpadOptionalRowOrder", null)
+                    ?.split(",")
+                    ?.map { KeyboardOptionalRow.valueOf(it.trim()) }
                     ?: listOf(KeyboardOptionalRow.MEDIA_ROW, KeyboardOptionalRow.NAV_ROW)
             }.getOrDefault(listOf(KeyboardOptionalRow.MEDIA_ROW, KeyboardOptionalRow.NAV_ROW)),
 

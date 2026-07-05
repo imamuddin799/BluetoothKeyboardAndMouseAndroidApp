@@ -3,15 +3,15 @@ package com.arena.hidcompatibilitytester.ui.screen.keyboard
 data class KeyboardSettings(
     // Key repeat
     val repeatEnabled: Boolean = true,
-    val repeatInitialDelayMs: Long = 400L,
-    val repeatIntervalMs: Long = 50L,
+    val repeatInitialDelayMs: Long = 350L,
+    val repeatIntervalMs: Long = 30L,
 
     // Haptics
     val hapticEnabled: Boolean = true,
     val hapticIntensity: HapticIntensity = HapticIntensity.MEDIUM,
 
     // Sound
-    val soundOnPress: Boolean = false,
+    val soundOnPress: Boolean = true,
 
     // Layout
     val keyHeight: KeyHeight = KeyHeight.MEDIUM,
@@ -32,8 +32,8 @@ data class KeyboardSettings(
     val keysTabShowNavigation: Boolean = true,
     val keysTabShowArrowKeys: Boolean = true,
     val keysTabShowSystemKeys: Boolean = true,
-    val keysTabShowQuickMods: Boolean = true,
-    val keysTabSectionStyle: SectionStyle = SectionStyle.COMPACT,
+    val keysTabShowQuickMods: Boolean = false,
+    val keysTabSectionStyle: SectionStyle = SectionStyle.MEDIA,
 
     // Numpad
     val numpadStartsLocked: Boolean = true,
@@ -46,42 +46,40 @@ data class KeyboardSettings(
     val mediaTabShowNavigation: Boolean = false,
     val mediaTabShowArrowKeys: Boolean = true,
     val mediaTabShowSystemKeys: Boolean = true,
-    val mediaTabShowQuickMods: Boolean = true,
+    val mediaTabShowQuickMods: Boolean = false,
     val mediaTabSectionStyle: SectionStyle = SectionStyle.MEDIA,
 
     // Nav+Numpad tab — section visibility
-    val navTabShowNavigation: Boolean = true,
-    val navTabShowArrowKeys: Boolean = true,
+    val navTabShowNavigation: Boolean = false,
+    val navTabShowArrowKeys: Boolean = false,
     val navTabShowInsertToggle: Boolean = false,
-    val navTabShowSystemKeys: Boolean = false,
+    val navTabShowSystemKeys: Boolean = true,
     val navTabShowQuickMods: Boolean = false,
     val navTabShowTypeText: Boolean = true,
 
-    // ══════════════════════════════════════════════
-    // Optional Row Visibility (restructured)
-    // ══════════════════════════════════════════════
+    // Optional Row Visibility
     val globalOptionalRowVisibility: Boolean = false,
 
-    // Global toggles — used when globalOptionalRowVisibility is ON
+    // Global toggles
     val globalShowMediaRow: Boolean = false,
     val globalShowNavRow: Boolean = false,
 
-    // Per-keyboard toggles — used when globalOptionalRowVisibility is OFF
+    // Per-keyboard toggles
     val keysTabShowMediaRow: Boolean = false,
     val keysTabShowNavRow: Boolean = false,
-    val trackpadShowMediaRow: Boolean = false,
+    val trackpadShowMediaRow: Boolean = true,
     val trackpadShowNavRow: Boolean = false,
 
-    // Media row sub-settings (content config — stays separate)
+    // Media row sub-settings
     val mediaRowShowTransport: Boolean = true,
     val mediaRowShowVolume: Boolean = true,
     val mediaRowShowBrightness: Boolean = true,
     val mediaRowRepeatVolume: Boolean = true,
     val mediaRowRepeatBrightness: Boolean = true,
     val mediaRowGroupOrder: List<MediaRowGroup> = listOf(
-        MediaRowGroup.TRANSPORT,
         MediaRowGroup.VOLUME,
         MediaRowGroup.BRIGHTNESS,
+        MediaRowGroup.TRANSPORT,
     ),
 
     // Merge System Keys + Quick Modifiers

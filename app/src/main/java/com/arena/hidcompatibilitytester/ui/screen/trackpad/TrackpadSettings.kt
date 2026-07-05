@@ -4,8 +4,8 @@ import android.content.Context
 import android.content.SharedPreferences
 
 data class TrackpadSettings(
-    val pointerSpeed        : Float         = 1.2f,
-    val scrollSpeed         : Float         = 1.0f,
+    val pointerSpeed        : Float         = 1.0f,
+    val scrollSpeed         : Float         = 0.5f,
     val invertScroll        : Boolean       = false,
     val tapToClick          : Boolean       = true,
     val twoFingerRightClick : Boolean       = true,
@@ -61,8 +61,8 @@ object TrackpadSettingsStore {
         }
 
         return TrackpadSettings(
-            pointerSpeed        = p.getFloat("pointer_speed", 1.2f),
-            scrollSpeed         = p.getFloat("scroll_speed", 1.0f),
+            pointerSpeed        = p.getFloat("pointer_speed", 1.0f),
+            scrollSpeed         = p.getFloat("scroll_speed", 0.5f),
             invertScroll        = p.getBoolean("invert_scroll", false),
             tapToClick          = p.getBoolean("tap_to_click", true),
             twoFingerRightClick = p.getBoolean("two_finger_rc", true),
