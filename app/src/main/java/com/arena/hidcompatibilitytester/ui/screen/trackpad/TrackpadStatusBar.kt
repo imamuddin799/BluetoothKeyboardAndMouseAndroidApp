@@ -29,6 +29,7 @@ fun TrackpadStatusBar(
     systemKbVisible: Boolean,
     inAppKbVisible: Boolean,
     showOptionalRows: Boolean,
+    hasOptionalRows: Boolean, // add this
 ) {
     Column(
         modifier = Modifier
@@ -69,7 +70,7 @@ fun TrackpadStatusBar(
                 ToolbarIcon("⌨", onClick = onToggleInAppKb, active = inAppKbVisible)
 
                 // ± must be to the RIGHT of keyboard toggle
-                if (inAppKbVisible) {
+                if (inAppKbVisible && hasOptionalRows) {
                     Spacer(Modifier.width(2.dp))
                     TrackpadIconToggle(
                         icon = "±",

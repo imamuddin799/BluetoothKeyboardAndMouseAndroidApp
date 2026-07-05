@@ -34,6 +34,7 @@ internal fun KbStatusBar(
     showKeyboard: Boolean,
     showNumpad: Boolean,
     showOptionalRows: Boolean,
+    hasOptionalRows: Boolean, // <-- ADDED THIS PARAMETER
     currentTab: Int,
     onClearMods: () -> Unit,
     onShowSettings: () -> Unit,
@@ -124,8 +125,8 @@ internal fun KbStatusBar(
                     Spacer(Modifier.weight(1f))
 
                     if (showKeyboardToggle) {
-                        // Optional rows toggle — only visible when keyboard is shown
-                        if (showKeyboard) {
+                        // Optional rows toggle — ONLY visible when keyboard is shown AND there are optional rows enabled
+                        if (showKeyboard && hasOptionalRows) {
                             StatusBarIconToggle(
                                 icon = "±",
                                 active = showOptionalRows,

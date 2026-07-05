@@ -136,6 +136,7 @@ fun KeyboardScreen(
             showKeyboard = showKeyboard,
             showNumpad = showNumpad,
             showOptionalRows = showOptionalRows,
+            hasOptionalRows = settings.showMediaRowInKeysTab() || settings.showNavRowInKeysTab(),
             currentTab = st.tab,
             onClearMods = { clearMods() },
             onShowSettings = onShowSettings,

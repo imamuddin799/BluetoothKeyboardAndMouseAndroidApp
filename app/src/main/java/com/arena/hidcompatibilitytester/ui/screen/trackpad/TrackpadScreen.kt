@@ -100,6 +100,7 @@ fun TrackpadScreen(
             systemKbVisible = systemKbVisible,
             inAppKbVisible = inAppKbVisible,
             showOptionalRows = showOptionalRows,
+            hasOptionalRows = keyboardSettings.showMediaRowInTrackpad() || keyboardSettings.showNavRowInTrackpad(),
         )
 
         BasicTextField(
@@ -156,7 +157,7 @@ fun TrackpadScreen(
                         showNavRow = keyboardSettings.showNavRowInTrackpad(),
                         showOptionalRows = showOptionalRows,
                         optionalRowOrder = optionalRowOrder,
-                        showComboPreview = keyboardSettings.showComboPreview,
+                        showComboPreview = false,
                         onKeyPress = { key ->
                             kbSt = handleKeyPress(
                                 key = key,
