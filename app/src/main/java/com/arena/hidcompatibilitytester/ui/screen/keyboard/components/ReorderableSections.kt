@@ -12,8 +12,10 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
@@ -29,9 +31,28 @@ import kotlin.math.roundToInt
 private val SCROLL_ZONE_DP = 72.dp
 private const val MAX_SPEED = 20f
 private const val AUTO_SCROLL_TICK_MS = 16L
-
-// 0.35f means reorder once ~35% of the neighbour item is crossed
 private const val SWAP_THRESHOLD_RATIO = 0.35f
+
+/**
+ * Tracks interactive (key/button) areas so drag doesn't start on them.
+ */
+class InteractiveAreaTracker {
+    private val areas = mutableStateListOf<Rect>()
+
+    fun register(bounds: Rect) {
+        areas.add(bounds)
+    }
+
+    fun clear() {
+        areas.clear()
+    }
+
+    fun isInInteractiveArea(rootX: Float, rootY: Float): Boolean {
+        return areas.any { it.contains(androidx.compose.ui.geometry.Offset(rootX, rootY)) }
+    }
+}
+
+val LocalInteractiveAreaTracker = compositionLocalOf<InteractiveAreaTracker?> { null }
 
 @Composable
 fun <T> ReorderableSectionColumn(
@@ -71,6 +92,7 @@ fun <T> ReorderableSectionColumn(
 
     val sectionHeights = remember { mutableStateMapOf<Int, Float>() }
     val offsetAnims = remember { mutableStateMapOf<Int, Animatable<Float, AnimationVector1D>>() }
+    val sectionBounds = remember { mutableStateMapOf<Int, Rect>() }
 
     orderList.indices.forEach { i ->
         offsetAnims.getOrPut(i) { Animatable(0f) }
@@ -80,6 +102,7 @@ fun <T> ReorderableSectionColumn(
         val valid = orderList.indices.toSet()
         offsetAnims.keys.toList().forEach { if (it !in valid) offsetAnims.remove(it) }
         sectionHeights.keys.toList().forEach { if (it !in valid) sectionHeights.remove(it) }
+        sectionBounds.keys.toList().forEach { if (it !in valid) sectionBounds.remove(it) }
     }
 
     var autoScrollJob by remember { mutableStateOf<Job?>(null) }
@@ -148,15 +171,6 @@ fun <T> ReorderableSectionColumn(
         return sectionHeights[index] ?: 100f
     }
 
-    /**
-     * Finds target index using edge-crossing threshold instead of waiting too long.
-     *
-     * Dragging downward:
-     *   swap once dragged bottom crosses ~35% of next item
-     *
-     * Dragging upward:
-     *   swap once dragged top crosses ~35% of previous item from its bottom side
-     */
     fun findTargetIndex(draggedIdx: Int, accumY: Float): Int {
         val draggedTop = getSlotTop(draggedIdx) + accumY
         val draggedHeight = getItemHeight(draggedIdx)
@@ -165,34 +179,20 @@ fun <T> ReorderableSectionColumn(
         var target = draggedIdx
 
         if (accumY > 0f) {
-            // Moving downward
             while (target < orderList.lastIndex) {
                 val next = target + 1
                 val nextTop = getSlotTop(next)
                 val nextHeight = getItemHeight(next)
-
                 val swapLine = nextTop + (nextHeight * SWAP_THRESHOLD_RATIO)
-
-                if (draggedBottom > swapLine) {
-                    target++
-                } else {
-                    break
-                }
+                if (draggedBottom > swapLine) target++ else break
             }
         } else if (accumY < 0f) {
-            // Moving upward
             while (target > 0) {
                 val prev = target - 1
                 val prevTop = getSlotTop(prev)
                 val prevHeight = getItemHeight(prev)
-
                 val swapLine = prevTop + (prevHeight * (1f - SWAP_THRESHOLD_RATIO))
-
-                if (draggedTop < swapLine) {
-                    target--
-                } else {
-                    break
-                }
+                if (draggedTop < swapLine) target-- else break
             }
         }
 
@@ -216,7 +216,6 @@ fun <T> ReorderableSectionColumn(
             previousScroll = currentScroll
 
             if (draggingIdx >= 0 && delta != 0 && !isCommitting) {
-                // keep dragged item visually under finger during auto-scroll
                 dragYAccum += delta.toFloat()
             }
         }
@@ -231,11 +230,11 @@ fun <T> ReorderableSectionColumn(
             draggingIdx < 0 -> 0f
 
             targetIdx > draggingIdx &&
-                index in (draggingIdx + 1)..targetIdx ->
+                    index in (draggingIdx + 1)..targetIdx ->
                 -(draggedHeight + spacingPx)
 
             targetIdx < draggingIdx &&
-                index in targetIdx until draggingIdx ->
+                    index in targetIdx until draggingIdx ->
                 draggedHeight + spacingPx
 
             else -> 0f
@@ -311,13 +310,16 @@ fun <T> ReorderableSectionColumn(
     }
 
     var columnTopInRoot by remember { mutableStateOf(0f) }
+    var columnLeftInRoot by remember { mutableStateOf(0f) }
 
     Column(
         verticalArrangement = Arrangement.spacedBy(sectionSpacing),
         modifier = Modifier
             .fillMaxWidth()
             .onGloballyPositioned {
-                columnTopInRoot = it.positionInRoot().y
+                val pos = it.positionInRoot()
+                columnTopInRoot = pos.y
+                columnLeftInRoot = pos.x
             }
             .pointerInput(orderList, enabled) {
                 if (!enabled) return@pointerInput
@@ -326,18 +328,42 @@ fun <T> ReorderableSectionColumn(
                     onDragStart = { startOffset ->
                         if (isCommitting) return@detectDragGesturesAfterLongPress
 
+                        // Convert to root coordinates
+                        val rootX = columnLeftInRoot + startOffset.x
+                        val rootY = columnTopInRoot + startOffset.y
+
+                        // Check if touch is inside any section's card header/empty area
+                        // by checking if it's NOT inside interactive content bounds
+                        var touchedSection = -1
                         var accumulated = 0f
                         for (i in orderList.indices) {
                             val h = getItemHeight(i)
                             if (startOffset.y <= accumulated + h) {
-                                draggingIdx = i
-                                dragYAccum = 0f
-                                lastTargetIdx = i
-                                fingerYInRoot = columnTopInRoot + startOffset.y
+                                touchedSection = i
                                 break
                             }
                             accumulated += h + spacingPx
                         }
+
+                        if (touchedSection < 0) return@detectDragGesturesAfterLongPress
+
+                        // Check section bounds — only allow drag from edges/headers
+                        val bounds = sectionBounds[touchedSection]
+                        if (bounds != null) {
+                            val localY = rootY - bounds.top
+                            val headerZone = with(density) { 28.dp.toPx() }
+
+                            // Allow drag only from top header zone of each section
+                            if (localY > headerZone) {
+                                // Touch is inside content area — skip drag, let keys handle it
+                                return@detectDragGesturesAfterLongPress
+                            }
+                        }
+
+                        draggingIdx = touchedSection
+                        dragYAccum = 0f
+                        lastTargetIdx = touchedSection
+                        fingerYInRoot = rootY
                     },
                     onDrag = { change, amount ->
                         if (draggingIdx < 0 || isCommitting) {
@@ -370,6 +396,7 @@ fun <T> ReorderableSectionColumn(
                     .scale(if (isDragged) 1.02f else 1f)
                     .onGloballyPositioned {
                         sectionHeights[index] = it.size.height.toFloat()
+                        sectionBounds[index] = it.boundsInRoot()
                     }
             ) {
                 if (isDragged) {

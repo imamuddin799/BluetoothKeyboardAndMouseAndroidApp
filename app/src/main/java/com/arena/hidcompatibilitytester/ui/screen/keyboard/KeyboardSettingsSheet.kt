@@ -682,39 +682,6 @@ private fun AppearanceSection(
                 onChange(settings.copy(keysTabSectionOrder = newOrder + hidden))
             }
         )
-
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Section Order",
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 14.sp,
-            color = Color.White
-        )
-        Text(
-            "Drag to reorder sections",
-            fontSize = 11.sp,
-            color = Color(0xFF607D8B)
-        )
-        Spacer(Modifier.height(4.dp))
-        GenericDragToReorderList(
-            items = settings.keysTabSectionOrder.filter { section ->
-                val merge = settings.shouldMergeSystemMods(settings.keysTabMergeSystemAndMods)
-                when (section) {
-                    KeysTabSection.NAV_ARROWS -> settings.keysTabShowNavigation || settings.keysTabShowArrowKeys
-                    KeysTabSection.SYSTEM_KEYS -> settings.keysTabShowSystemKeys && !merge
-                    KeysTabSection.QUICK_MODS -> settings.keysTabShowQuickMods && !merge
-                    KeysTabSection.MERGED_SYSTEM_MODS -> merge
-                }
-            },
-            labelProvider = { it.label },
-            iconProvider = { it.icon },
-            onReorder = { newOrder ->
-                val allSections = settings.keysTabSectionOrder.toMutableList()
-                val visible = newOrder.toSet()
-                val hidden = allSections.filter { it !in visible }
-                onChange(settings.copy(keysTabSectionOrder = newOrder + hidden))
-            }
-        )
     }
 
     SettingsCard("Optional Row Order", spacing) {

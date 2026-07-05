@@ -106,13 +106,27 @@ internal fun MediaTab(
                                 Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                (MEDIA_VOLUME + MEDIA_BRIGHT).forEach { mk ->
+                                MEDIA_VOLUME.forEach { mk ->
                                     MediaKeyBtn(
                                         mk.icon,
                                         mk.label,
                                         Modifier.weight(1f),
                                         mediaH - 8.dp,
-                                        settings
+                                        settings,
+                                        mediaGroup = MediaRowGroup.VOLUME,
+                                    ) {
+                                        onConsumerKey(mk.code)
+                                        onUpdateLastKey(mk.label)
+                                    }
+                                }
+                                MEDIA_BRIGHT.forEach { mk ->
+                                    MediaKeyBtn(
+                                        mk.icon,
+                                        mk.label,
+                                        Modifier.weight(1f),
+                                        mediaH - 8.dp,
+                                        settings,
+                                        mediaGroup = MediaRowGroup.BRIGHTNESS,
                                     ) {
                                         onConsumerKey(mk.code)
                                         onUpdateLastKey(mk.label)
