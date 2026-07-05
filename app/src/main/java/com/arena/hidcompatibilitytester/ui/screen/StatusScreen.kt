@@ -2,6 +2,8 @@ package com.arena.hidcompatibilitytester.ui.screen
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
+import android.provider.Settings
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -87,7 +89,12 @@ private fun HowToConnectCard() {
         ) {
             Text("How to connect:", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
             Text("1. Open Bluetooth settings on host (PC / Mac / Phone)", fontSize = 12.sp)
-            Text("2. Find \"${android.os.Build.MODEL}\" in the device list", fontSize = 12.sp)
+            Text("2. Find \"${
+                Settings.Global.getString(
+                    androidx.compose.ui.platform.LocalContext.current.contentResolver,
+                    Settings.Global.DEVICE_NAME
+                ) ?: android.os.Build.MODEL
+            }\" in the device list", fontSize = 12.sp)
             Text("3. Tap/click to pair",                                   fontSize = 12.sp)
             Text("4. Host sees it as mouse + keyboard",                    fontSize = 12.sp)
         }

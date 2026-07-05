@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import android.util.Log
+import android.provider.Settings
 
 @SuppressLint("MissingPermission")
 class BleHidManager(private val context: Context) {
@@ -172,7 +173,13 @@ class BleHidManager(private val context: Context) {
     private val bluetoothManager =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     private val adapter: BluetoothAdapter? = bluetoothManager.adapter
-    private val originalName: String? = try { adapter?.name } catch (e: Exception) { null }
+    private val originalName: String = try {
+        Settings.Global.getString(context.contentResolver, Settings.Global.DEVICE_NAME)
+            ?: adapter?.name
+            ?: android.os.Build.MODEL
+    } catch (e: Exception) {
+        android.os.Build.MODEL
+    }
 
     // ── Persistence ───────────────────────────────────────────────────────────
     private val prefs: SharedPreferences =
@@ -249,6 +256,9 @@ class BleHidManager(private val context: Context) {
         Log.d(TAG, "Known hosts: $knownHostAddresses")
 
         currentState = BleHidState.STARTING
+        try {
+            adapter?.name = originalName
+        } catch (_: Exception) {}
         startGattThread()
         gattHandler?.postDelayed({ openGattServer() }, 500)
     }
@@ -523,7 +533,7 @@ class BleHidManager(private val context: Context) {
     private fun buildGenericAccessService() = BluetoothGattService(
         UUID_GENERIC_ACCESS, BluetoothGattService.SERVICE_TYPE_PRIMARY
     ).also {
-        it.addCharacteristic(readChar(UUID_DEVICE_NAME, (originalName ?: android.os.Build.MODEL).toByteArray()))
+        it.addCharacteristic(readChar(UUID_DEVICE_NAME, originalName.toByteArray()))
         it.addCharacteristic(readChar(UUID_APPEARANCE, APPEARANCE_MOUSE))
     }
 
