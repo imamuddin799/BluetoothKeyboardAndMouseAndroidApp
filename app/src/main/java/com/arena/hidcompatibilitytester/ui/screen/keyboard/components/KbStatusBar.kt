@@ -33,17 +33,19 @@ internal fun KbStatusBar(
     showComboPreview: Boolean,
     showKeyboard: Boolean,
     showNumpad: Boolean,
+    showOptionalRows: Boolean,
     currentTab: Int,
     onClearMods: () -> Unit,
     onShowSettings: () -> Unit,
     onToggleKeyboard: () -> Unit,
     onToggleNumpad: () -> Unit,
+    onToggleOptionalRows: () -> Unit,
 ) {
     var toolbarExpanded by remember { mutableStateOf(false) }
 
-    // 0 = Keys     -> show only keyboard toggle
-    // 1 = Nav+Num  -> show only numpad toggle
-    // 2 = Media    -> no expandable row, show settings directly
+    // 0 = Keys     -> keyboard toggle + optional rows toggle
+    // 1 = Nav+Num  -> numpad toggle only
+    // 2 = Media    -> no expandable row
     val showKeyboardToggle = currentTab == 0
     val showNumpadToggle = currentTab == 1
     val hasExpandableRow = showKeyboardToggle || showNumpadToggle
@@ -122,6 +124,15 @@ internal fun KbStatusBar(
                     Spacer(Modifier.weight(1f))
 
                     if (showKeyboardToggle) {
+                        // Optional rows toggle — only visible when keyboard is shown
+                        if (showKeyboard) {
+                            StatusBarIconToggle(
+                                icon = "±",
+                                active = showOptionalRows,
+                                onClick = onToggleOptionalRows,
+                            )
+                        }
+
                         StatusBarIconToggle(
                             icon = "⌨",
                             active = showKeyboard,

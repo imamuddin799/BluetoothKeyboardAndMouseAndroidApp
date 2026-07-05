@@ -1,10 +1,15 @@
 package com.arena.hidcompatibilitytester.ui.screen.trackpad
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -15,13 +20,15 @@ import com.arena.hidcompatibilitytester.ui.components.ToolbarIcon
 
 @Composable
 fun TrackpadStatusBar(
-    isReady            : Boolean,
-    settings           : TrackpadSettings,
-    onShowSettings     : () -> Unit,
-    onToggleSystemKb   : () -> Unit,
-    onToggleInAppKb    : () -> Unit,
-    systemKbVisible    : Boolean,
-    inAppKbVisible     : Boolean,
+    isReady: Boolean,
+    settings: TrackpadSettings,
+    onShowSettings: () -> Unit,
+    onToggleSystemKb: () -> Unit,
+    onToggleInAppKb: () -> Unit,
+    onToggleOptionalRows: () -> Unit,
+    systemKbVisible: Boolean,
+    inAppKbVisible: Boolean,
+    showOptionalRows: Boolean,
 ) {
     Column(
         modifier = Modifier
@@ -32,13 +39,13 @@ fun TrackpadStatusBar(
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(3.dp),
-            verticalAlignment     = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            LedBadge("TPD", isReady)
-            LedBadge("TAP", settings.tapToClick)
-            LedBadge("ACC", settings.accelerationEnabled)
-            LedBadge("LCK", settings.dragLockMode)
-            if (settings.showArrowKeys) LedBadge("ARR", true)
+            TrackpadLedBadge("TPD", isReady)
+            TrackpadLedBadge("TAP", settings.tapToClick)
+            TrackpadLedBadge("ACC", settings.accelerationEnabled)
+            TrackpadLedBadge("LCK", settings.dragLockMode)
+            if (settings.showArrowKeys) TrackpadLedBadge("ARR", true)
 
             Spacer(Modifier.weight(1f))
 
@@ -60,12 +67,22 @@ fun TrackpadStatusBar(
             if (settings.showInAppKeyboard) {
                 Spacer(Modifier.width(2.dp))
                 ToolbarIcon("⌨", onClick = onToggleInAppKb, active = inAppKbVisible)
+
+                // ± must be to the RIGHT of keyboard toggle
+                if (inAppKbVisible) {
+                    Spacer(Modifier.width(2.dp))
+                    TrackpadIconToggle(
+                        icon = "±",
+                        active = showOptionalRows,
+                        onClick = onToggleOptionalRows,
+                    )
+                }
             }
         }
 
         Surface(
-            color    = Color(0xFF0A1828),
-            shape    = RoundedCornerShape(5.dp),
+            color = Color(0xFF0A1828),
+            shape = RoundedCornerShape(5.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
@@ -74,12 +91,67 @@ fun TrackpadStatusBar(
                     if (settings.tapToClick) append(" · tap✓")
                     if (settings.dragLockMode) append(" · lock✓") else append(" · hold")
                 },
-                fontSize   = 10.sp,
-                color      = Color(0xFF90CAF9),
+                fontSize = 10.sp,
+                color = Color(0xFF90CAF9),
                 fontWeight = FontWeight.Medium,
-                modifier   = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                maxLines   = 1
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                maxLines = 1
             )
         }
+    }
+}
+
+@Composable
+private fun TrackpadIconToggle(
+    icon: String,
+    active: Boolean,
+    onClick: () -> Unit,
+) {
+    val bg by animateColorAsState(
+        targetValue = if (active) {
+            Color(0xFF1B5E20).copy(alpha = 0.7f)
+        } else {
+            Color.White.copy(alpha = 0.06f)
+        },
+        animationSpec = tween(150),
+        label = "trackpadIconToggleBg",
+    )
+
+    val fg = if (active) Color(0xFF81C784) else Color.White.copy(0.45f)
+
+    Surface(
+        color = bg,
+        shape = RoundedCornerShape(4.dp),
+    ) {
+        Box(
+            modifier = Modifier.clickable(onClick = onClick)
+        ) {
+            Text(
+                text = icon,
+                fontSize = 13.sp,
+                color = fg,
+                maxLines = 1,
+                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TrackpadLedBadge(label: String, active: Boolean) {
+    val bg by animateColorAsState(
+        targetValue = if (active) Color(0xFF1565C0) else Color.White.copy(0.04f),
+        animationSpec = tween(100),
+        label = "trackpadLed",
+    )
+    Surface(shape = RoundedCornerShape(3.dp), color = bg) {
+        Text(
+            label,
+            fontSize = 7.sp,
+            color = if (active) Color.White else Color(0xFF3A4A5A),
+            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+            maxLines = 1
+        )
     }
 }

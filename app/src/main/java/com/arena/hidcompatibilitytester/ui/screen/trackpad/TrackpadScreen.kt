@@ -1,9 +1,15 @@
 package com.arena.hidcompatibilitytester.ui.screen.trackpad
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -22,22 +28,23 @@ import com.arena.hidcompatibilitytester.ui.screen.keyboard.handleKeyPress
 
 @Composable
 fun TrackpadScreen(
-    isReady          : Boolean,
-    settings         : TrackpadSettings,
-    keyboardSettings : KeyboardSettings,
-    onSendMouse      : (dx: Int, dy: Int, buttons: Int, wheel: Int) -> Unit,
-    onShowSettings   : () -> Unit,
-    onSendKey        : (Int, List<Int>) -> Unit,
-    onReleaseKeys    : () -> Unit,
-    onConsumerKey    : (Int) -> Unit,
-    onTypeText       : (String) -> Unit,
+    isReady: Boolean,
+    settings: TrackpadSettings,
+    keyboardSettings: KeyboardSettings,
+    onSendMouse: (dx: Int, dy: Int, buttons: Int, wheel: Int) -> Unit,
+    onShowSettings: () -> Unit,
+    onSendKey: (Int, List<Int>) -> Unit,
+    onReleaseKeys: () -> Unit,
+    onConsumerKey: (Int) -> Unit,
+    onTypeText: (String) -> Unit,
 ) {
     val physHoldActive = remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
 
     var systemKbVisible by remember { mutableStateOf(false) }
-    var inAppKbVisible  by remember { mutableStateOf(false) }
+    var inAppKbVisible by remember { mutableStateOf(false) }
+    var showOptionalRows by remember { mutableStateOf(true) }
 
     var hiddenText by remember { mutableStateOf(TextFieldValue("")) }
     val focusRequester = remember { FocusRequester() }
@@ -45,9 +52,12 @@ fun TrackpadScreen(
     var kbSt by remember { mutableStateOf(KbState()) }
     val kbScope = rememberCoroutineScope()
 
-    // KEY FIX: same stale-closure fix as KeyboardScreen
-    val currentKbSt       by rememberUpdatedState(kbSt)
+    val currentKbSt by rememberUpdatedState(kbSt)
     val currentKbSettings by rememberUpdatedState(keyboardSettings)
+
+    val optionalRowOrder = keyboardSettings.getOptionalRowOrder(
+        keyboardSettings.trackpadOptionalRowOrder
+    )
 
     fun showSystemKeyboard() {
         inAppKbVisible = false
@@ -81,17 +91,19 @@ fun TrackpadScreen(
             .background(Color(0xFF080F18))
     ) {
         TrackpadStatusBar(
-            isReady          = isReady,
-            settings         = settings,
-            onShowSettings   = onShowSettings,
+            isReady = isReady,
+            settings = settings,
+            onShowSettings = onShowSettings,
             onToggleSystemKb = { toggleSystemKb() },
-            onToggleInAppKb  = { toggleInAppKb() },
-            systemKbVisible  = systemKbVisible,
-            inAppKbVisible   = inAppKbVisible,
+            onToggleInAppKb = { toggleInAppKb() },
+            onToggleOptionalRows = { showOptionalRows = !showOptionalRows },
+            systemKbVisible = systemKbVisible,
+            inAppKbVisible = inAppKbVisible,
+            showOptionalRows = showOptionalRows,
         )
 
         BasicTextField(
-            value         = hiddenText,
+            value = hiddenText,
             onValueChange = { newValue ->
                 val oldText = hiddenText.text
                 val newText = newValue.text
@@ -108,10 +120,10 @@ fun TrackpadScreen(
                 }
                 hiddenText = newValue
             },
-            modifier    = Modifier
+            modifier = Modifier
                 .size(1.dp)
                 .focusRequester(focusRequester),
-            textStyle   = TextStyle(fontSize = 1.sp, color = Color.Transparent),
+            textStyle = TextStyle(fontSize = 1.sp, color = Color.Transparent),
             cursorBrush = SolidColor(Color.Transparent),
         )
 
@@ -119,54 +131,57 @@ fun TrackpadScreen(
             TrackpadNotReadyCard()
         } else {
             TrackpadSurface(
-                modifier       = Modifier.weight(1f),
-                settings       = settings,
-                onSendMouse    = onSendMouse,
+                modifier = Modifier.weight(1f),
+                settings = settings,
+                onSendMouse = onSendMouse,
                 physHoldActive = physHoldActive
             )
 
-            if (inAppKbVisible) {
-                TrackpadClickButtons(
-                    onSendMouse    = onSendMouse,
-                    physHoldActive = physHoldActive
-                )
+            TrackpadClickButtons(
+                onSendMouse = onSendMouse,
+                physHoldActive = physHoldActive
+            )
 
-                SharedCompactKeyboard(
-                    st               = kbSt,
-                    settings         = keyboardSettings,
-                    showDismissBar   = true,
-                    showMediaRow     = keyboardSettings.showMediaRowInTrackpad,
-                    showNavRow       = keyboardSettings.showNavRowInTrackpad,
-                    showComboPreview = keyboardSettings.showComboPreview,
-                    onKeyPress       = { key ->
-                        kbSt = handleKeyPress(
-                            key                  = key,
-                            st                   = currentKbSt,
-                            settings             = currentKbSettings,
-                            scope                = kbScope,
-                            onSendKey            = onSendKey,
-                            onDelayedStateUpdate = { delayedSt -> kbSt = delayedSt }
-                        )
-                    },
-                    onConsumerKey = onConsumerKey,
-                    onClearMods   = {
-                        kbSt = kbSt.releaseMods().copy(lastKey = "")
-                        onSendKey(0, emptyList())
-                    },
-                    onDismiss = { inAppKbVisible = false },
-                )
+            AnimatedVisibility(
+                visible = inAppKbVisible,
+                enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
+                exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut(),
+            ) {
+                Column {
+                    SharedCompactKeyboard(
+                        st = kbSt,
+                        settings = keyboardSettings,
+                        showDismissBar = true,
+                        showMediaRow = keyboardSettings.showMediaRowInTrackpad,
+                        showNavRow = keyboardSettings.showNavRowInTrackpad,
+                        showOptionalRows = showOptionalRows,
+                        optionalRowOrder = optionalRowOrder,
+                        showComboPreview = keyboardSettings.showComboPreview,
+                        onKeyPress = { key ->
+                            kbSt = handleKeyPress(
+                                key = key,
+                                st = currentKbSt,
+                                settings = currentKbSettings,
+                                scope = kbScope,
+                                onSendKey = onSendKey,
+                                onDelayedStateUpdate = { delayedSt -> kbSt = delayedSt }
+                            )
+                        },
+                        onConsumerKey = onConsumerKey,
+                        onClearMods = {
+                            kbSt = kbSt.releaseMods().copy(lastKey = "")
+                            onSendKey(0, emptyList())
+                        },
+                        onDismiss = { inAppKbVisible = false },
+                    )
 
-                Spacer(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(8.dp)
-                        .background(Color(0xFF080F18))
-                )
-            } else {
-                TrackpadClickButtons(
-                    onSendMouse    = onSendMouse,
-                    physHoldActive = physHoldActive
-                )
+                    Spacer(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .background(Color(0xFF080F18))
+                    )
+                }
             }
         }
     }

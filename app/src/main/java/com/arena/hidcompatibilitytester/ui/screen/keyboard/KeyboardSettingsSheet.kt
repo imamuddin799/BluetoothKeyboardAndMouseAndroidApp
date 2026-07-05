@@ -610,6 +610,91 @@ private fun AppearanceSection(
         }
     }
 
+    SettingsCard("Optional Row Order", spacing) {
+        SettingsToggle(
+            "Global Order",
+            "Use same optional row order across all tabs and trackpad",
+            settings.globalOptionalRowOrder,
+        ) {
+            onChange(settings.copy(globalOptionalRowOrder = it))
+        }
+
+        Spacer(Modifier.height(4.dp))
+
+        if (settings.globalOptionalRowOrder) {
+            Text(
+                "Global Order",
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                color = Color.White
+            )
+            Text(
+                "Drag to reorder optional rows (applies everywhere)",
+                fontSize = 11.sp,
+                color = Color(0xFF607D8B)
+            )
+            Spacer(Modifier.height(4.dp))
+            GenericDragToReorderList(
+                items = settings.keyboardOptionalRowOrder,
+                labelProvider = { it.label },
+                iconProvider = { it.icon },
+                onReorder = { newOrder ->
+                    onChange(
+                        settings.copy(
+                            keyboardOptionalRowOrder = newOrder,
+                            keysTabOptionalRowOrder = newOrder,
+                            trackpadOptionalRowOrder = newOrder,
+                        )
+                    )
+                }
+            )
+        } else {
+            Text(
+                "Keys Tab Order",
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                color = Color.White
+            )
+            Text(
+                "Drag to reorder optional rows for Keys tab",
+                fontSize = 11.sp,
+                color = Color(0xFF607D8B)
+            )
+            Spacer(Modifier.height(4.dp))
+            GenericDragToReorderList(
+                items = settings.keysTabOptionalRowOrder,
+                labelProvider = { it.label },
+                iconProvider = { it.icon },
+                onReorder = { newOrder ->
+                    onChange(settings.copy(keysTabOptionalRowOrder = newOrder))
+                }
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            Text(
+                "Trackpad Keyboard Order",
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                color = Color.White
+            )
+            Text(
+                "Drag to reorder optional rows for trackpad keyboard",
+                fontSize = 11.sp,
+                color = Color(0xFF607D8B)
+            )
+            Spacer(Modifier.height(4.dp))
+            GenericDragToReorderList(
+                items = settings.trackpadOptionalRowOrder,
+                labelProvider = { it.label },
+                iconProvider = { it.icon },
+                onReorder = { newOrder ->
+                    onChange(settings.copy(trackpadOptionalRowOrder = newOrder))
+                }
+            )
+        }
+    }
+
     SettingsCard("Visibility", spacing) {
         SettingsToggle(
             "High Contrast Mode",

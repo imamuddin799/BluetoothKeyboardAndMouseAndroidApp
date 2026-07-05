@@ -24,6 +24,7 @@ internal fun KeysTab(
     st: KbState,
     settings: KeyboardSettings,
     showKeyboard: Boolean,
+    showOptionalRows: Boolean,
     onKeyPress: (Key) -> Unit,
     onClearMods: () -> Unit,
     onSendKey: (Int, List<Int>) -> Unit,
@@ -32,23 +33,25 @@ internal fun KeysTab(
     onTypeText: (String) -> Unit,
     onSettingsChange: ((KeyboardSettings) -> Unit)? = null,
 ) {
-    val style          = settings.keysTabSectionStyle
-    val isMedia        = style == SectionStyle.MEDIA
-    val merge          = settings.shouldMergeSystemMods(settings.keysTabMergeSystemAndMods)
+    val style = settings.keysTabSectionStyle
+    val isMedia = style == SectionStyle.MEDIA
+    val merge = settings.shouldMergeSystemMods(settings.keysTabMergeSystemAndMods)
     val inPlaceReorder = settings.shouldAllowInPlaceReorder(settings.keysTabInPlaceReorder)
-    val swapped        = settings.keysTabNavArrowsSwapped
+    val swapped = settings.keysTabNavArrowsSwapped
+
+    val optionalRowOrder = settings.getOptionalRowOrder(settings.keysTabOptionalRowOrder)
 
     val visibleSections = settings.keysTabSectionOrder.filter { section ->
         when (section) {
-            KeysTabSection.NAV_ARROWS         -> settings.keysTabShowNavigation || settings.keysTabShowArrowKeys
-            KeysTabSection.SYSTEM_KEYS        -> settings.keysTabShowSystemKeys && !merge
-            KeysTabSection.QUICK_MODS         -> settings.keysTabShowQuickMods && !merge
+            KeysTabSection.NAV_ARROWS -> settings.keysTabShowNavigation || settings.keysTabShowArrowKeys
+            KeysTabSection.SYSTEM_KEYS -> settings.keysTabShowSystemKeys && !merge
+            KeysTabSection.QUICK_MODS -> settings.keysTabShowQuickMods && !merge
             KeysTabSection.MERGED_SYSTEM_MODS -> merge && settings.keysTabShowSystemKeys && settings.keysTabShowQuickMods
         }
     }
 
     val scrollState = rememberScrollState()
-    var viewportTopPx    by remember { mutableStateOf(0f) }
+    var viewportTopPx by remember { mutableStateOf(0f) }
     var viewportBottomPx by remember { mutableStateOf(0f) }
 
     Column(
@@ -56,12 +59,11 @@ internal fun KeysTab(
             .fillMaxSize()
             .background(Color(0xFF080F18))
     ) {
-        // Scrollable sections area
         Box(
             modifier = Modifier
                 .weight(1f)
                 .onGloballyPositioned { coords ->
-                    viewportTopPx    = coords.positionInRoot().y
+                    viewportTopPx = coords.positionInRoot().y
                     viewportBottomPx = viewportTopPx + coords.size.height
                 }
         ) {
@@ -71,17 +73,17 @@ internal fun KeysTab(
                     .verticalScroll(scrollState)
                     .padding(
                         horizontal = if (isMedia) 8.dp else 4.dp,
-                        vertical   = 2.dp
+                        vertical = 2.dp
                     )
             ) {
                 ReorderableSectionColumn(
-                    items            = visibleSections,
-                    enabled          = inPlaceReorder,
-                    scrollState      = scrollState,
-                    viewportTopPx    = viewportTopPx,
+                    items = visibleSections,
+                    enabled = inPlaceReorder,
+                    scrollState = scrollState,
+                    viewportTopPx = viewportTopPx,
                     viewportBottomPx = viewportBottomPx,
-                    sectionSpacing   = if (isMedia) 10.dp else 3.dp,
-                    onReorder        = { newOrder ->
+                    sectionSpacing = if (isMedia) 10.dp else 3.dp,
+                    onReorder = { newOrder ->
                         val reordered = newOrder.toMutableList()
                         KeysTabSection.entries.forEach { s ->
                             if (s !in reordered) reordered.add(s)
@@ -94,13 +96,14 @@ internal fun KeysTab(
                     when (section) {
                         KeysTabSection.NAV_ARROWS ->
                             KeysTabNavArrowsSection(
-                                st       = st,
+                                st = st,
                                 settings = settings,
-                                style    = style,
-                                swapped  = swapped,
-                                isMedia  = isMedia,
+                                style = style,
+                                swapped = swapped,
+                                isMedia = isMedia,
                                 onKeyPress = onKeyPress
                             )
+
                         KeysTabSection.SYSTEM_KEYS ->
                             if (isMedia) KbCard("System Keys") {
                                 SystemKeysSectionContent(st, settings, style, onKeyPress)
@@ -122,9 +125,9 @@ internal fun KeysTab(
 
         // Fixed compact keyboard — animated show/hide
         AnimatedVisibility(
-            visible   = showKeyboard,
-            enter     = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
-            exit      = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
+            visible = showKeyboard,
+            enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
+            exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut(),
         ) {
             Box(
                 modifier = Modifier
@@ -132,13 +135,15 @@ internal fun KeysTab(
                     .padding(top = 3.dp, bottom = 6.dp)
             ) {
                 SharedCompactKeyboard(
-                    st             = st,
-                    settings       = settings,
+                    st = st,
+                    settings = settings,
                     showDismissBar = false,
-                    showMediaRow   = settings.showMediaRowInKeyboard,
-                    showNavRow     = settings.showNavRowInKeyboard,
-                    onKeyPress     = onKeyPress,
-                    onConsumerKey  = onConsumerKey,
+                    showMediaRow = settings.showMediaRowInKeyboard,
+                    showNavRow = settings.showNavRowInKeyboard,
+                    showOptionalRows = showOptionalRows,
+                    optionalRowOrder = optionalRowOrder,
+                    onKeyPress = onKeyPress,
+                    onConsumerKey = onConsumerKey,
                 )
             }
         }
@@ -154,7 +159,7 @@ private fun KeysTabNavArrowsSection(
     isMedia: Boolean,
     onKeyPress: (Key) -> Unit,
 ) {
-    val showNav    = settings.keysTabShowNavigation
+    val showNav = settings.keysTabShowNavigation
     val showArrows = settings.keysTabShowArrowKeys
 
     if (isMedia) {
@@ -180,7 +185,7 @@ private fun KeysTabNavArrowsSection(
                 }
             }
         } else {
-            if (showNav)    KbCard("Navigation") { NavigationSectionContent(st, settings, style, onKeyPress) }
+            if (showNav) KbCard("Navigation") { NavigationSectionContent(st, settings, style, onKeyPress) }
             if (showArrows) KbCard("Arrow Keys") { ArrowKeysSectionContent(st, settings, style, onKeyPress) }
         }
     } else {
@@ -198,7 +203,7 @@ private fun KeysTabNavArrowsSection(
                 }
             }
         } else {
-            if (showNav)    NavigationSection(st, settings, style, onKeyPress)
+            if (showNav) NavigationSection(st, settings, style, onKeyPress)
             if (showArrows) ArrowKeysSection(st, settings, style, onKeyPress)
         }
     }

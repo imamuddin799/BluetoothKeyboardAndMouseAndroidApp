@@ -21,52 +21,53 @@ import com.arena.hidcompatibilitytester.ui.screen.keyboard.tabs.NavNumpadTab
 
 @Composable
 fun KeyboardScreen(
-    isReady         : Boolean,
-    settings        : KeyboardSettings,
-    onSendKey       : (modifiers: Int, keyCodes: List<Int>) -> Unit,
-    onReleaseKeys   : () -> Unit,
-    onConsumerKey   : (Int) -> Unit,
-    onTypeText      : (String) -> Unit,
-    onShowSettings  : () -> Unit,
+    isReady: Boolean,
+    settings: KeyboardSettings,
+    onSendKey: (modifiers: Int, keyCodes: List<Int>) -> Unit,
+    onReleaseKeys: () -> Unit,
+    onConsumerKey: (Int) -> Unit,
+    onTypeText: (String) -> Unit,
+    onShowSettings: () -> Unit,
     onSettingsChange: ((KeyboardSettings) -> Unit)? = null,
 ) {
     var st by remember(settings.numpadStartsLocked, settings.defaultTab) {
         mutableStateOf(
             KbState(
                 numLock = settings.numpadStartsLocked,
-                tab     = settings.defaultTab,
+                tab = settings.defaultTab,
             )
         )
     }
     var typeText by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
-    // Visibility toggles — temporary UI state (resets on recompose/restart)
+    // Temporary UI visibility toggles
     var showKeyboard by remember { mutableStateOf(true) }
-    var showNumpad   by remember { mutableStateOf(true) }
+    var showNumpad by remember { mutableStateOf(true) }
+    var showOptionalRows by remember { mutableStateOf(true) }
 
-    val currentSt       by rememberUpdatedState(st)
+    val currentSt by rememberUpdatedState(st)
     val currentSettings by rememberUpdatedState(settings)
 
     fun handleKey(key: Key) {
         st = handleKeyPress(
-            key                  = key,
-            st                   = currentSt,
-            settings             = currentSettings,
-            scope                = scope,
-            onSendKey            = onSendKey,
+            key = key,
+            st = currentSt,
+            settings = currentSettings,
+            scope = scope,
+            onSendKey = onSendKey,
             onDelayedStateUpdate = { delayedSt -> st = delayedSt }
         )
     }
 
     fun handleNumCode(code: Int, label: String) {
         st = handleNumpadKey(
-            code                 = code,
-            label                = label,
-            st                   = currentSt,
-            settings             = currentSettings,
-            scope                = scope,
-            onSendKey            = onSendKey,
+            code = code,
+            label = label,
+            st = currentSt,
+            settings = currentSettings,
+            scope = scope,
+            onSendKey = onSendKey,
             onDelayedStateUpdate = { delayedSt -> st = delayedSt }
         )
     }
@@ -91,9 +92,9 @@ fun KeyboardScreen(
         val tabLabels = listOf("⌨ Keys", "↕ Nav+Num", "🎵 Media")
         TabRow(
             selectedTabIndex = st.tab,
-            containerColor   = Color(0xFF050C14),
-            contentColor     = Color.White,
-            indicator        = { tabPositions ->
+            containerColor = Color(0xFF050C14),
+            contentColor = Color.White,
+            indicator = { tabPositions ->
                 if (st.tab < tabPositions.size) {
                     val t = tabPositions[st.tab]
                     Box(
@@ -111,16 +112,16 @@ fun KeyboardScreen(
             tabLabels.forEachIndexed { i, title ->
                 Tab(
                     selected = st.tab == i,
-                    onClick  = { st = st.copy(tab = i) },
-                    text     = {
+                    onClick = { st = st.copy(tab = i) },
+                    text = {
                         Text(
                             title,
-                            fontSize   = 12.sp,
-                            color      = if (st.tab == i) Color(0xFF90CAF9)
-                                         else Color(0xFF546E7A),
+                            fontSize = 12.sp,
+                            color = if (st.tab == i) Color(0xFF90CAF9)
+                            else Color(0xFF546E7A),
                             fontWeight = if (st.tab == i) FontWeight.SemiBold
-                                         else FontWeight.Normal,
-                            maxLines   = 1
+                            else FontWeight.Normal,
+                            maxLines = 1
                         )
                     }
                 )
@@ -128,17 +129,19 @@ fun KeyboardScreen(
         }
 
         KbStatusBar(
-            st               = st,
-            isReady          = isReady,
-            showFullStatus   = settings.showStatusBar,
+            st = st,
+            isReady = isReady,
+            showFullStatus = settings.showStatusBar,
             showComboPreview = settings.showComboPreview,
-            showKeyboard     = showKeyboard,
-            showNumpad       = showNumpad,
-            currentTab       = st.tab,
-            onClearMods      = { clearMods() },
-            onShowSettings   = onShowSettings,
+            showKeyboard = showKeyboard,
+            showNumpad = showNumpad,
+            showOptionalRows = showOptionalRows,
+            currentTab = st.tab,
+            onClearMods = { clearMods() },
+            onShowSettings = onShowSettings,
             onToggleKeyboard = { showKeyboard = !showKeyboard },
-            onToggleNumpad   = { showNumpad = !showNumpad },
+            onToggleNumpad = { showNumpad = !showNumpad },
+            onToggleOptionalRows = { showOptionalRows = !showOptionalRows },
         )
 
         if (!isReady) {
@@ -151,19 +154,19 @@ fun KeyboardScreen(
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier            = Modifier.padding(32.dp)
+                    modifier = Modifier.padding(32.dp)
                 ) {
                     Text("⏳", fontSize = 36.sp)
                     Text(
                         "Host not connected",
-                        color      = Color.White,
-                        fontSize   = 16.sp,
+                        color = Color.White,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
                         "Go to Status tab → Start BLE HID\nPair from host Bluetooth settings",
-                        color     = Color.Gray,
-                        fontSize  = 13.sp,
+                        color = Color.Gray,
+                        fontSize = 13.sp,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -173,39 +176,40 @@ fun KeyboardScreen(
 
         when (st.tab) {
             0 -> KeysTab(
-                st               = st,
-                settings         = settings,
-                showKeyboard     = showKeyboard,
-                onKeyPress       = { handleKey(it) },
-                onClearMods      = { clearMods() },
-                onSendKey        = onSendKey,
-                onReleaseKeys    = onReleaseKeys,
-                onConsumerKey    = onConsumerKey,
-                onTypeText       = onTypeText,
+                st = st,
+                settings = settings,
+                showKeyboard = showKeyboard,
+                showOptionalRows = showOptionalRows,
+                onKeyPress = { handleKey(it) },
+                onClearMods = { clearMods() },
+                onSendKey = onSendKey,
+                onReleaseKeys = onReleaseKeys,
+                onConsumerKey = onConsumerKey,
+                onTypeText = onTypeText,
                 onSettingsChange = onSettingsChange,
             )
             1 -> NavNumpadTab(
-                st                = st,
-                settings          = settings,
-                showNumpad        = showNumpad,
-                typeText          = typeText,
+                st = st,
+                settings = settings,
+                showNumpad = showNumpad,
+                typeText = typeText,
                 onTypeTextChanged = { typeText = it },
-                onKeyPress        = { handleKey(it) },
-                onNumpadKey       = { code, label -> handleNumCode(code, label) },
-                onNumLock         = { doHandleNumLockToggle() },
-                onInsertToggle    = { handleInsertToggle() },
-                onClearMods       = { clearMods() },
-                onSendKey         = onSendKey,
-                onTypeText        = onTypeText,
-                onSettingsChange  = onSettingsChange,
+                onKeyPress = { handleKey(it) },
+                onNumpadKey = { code, label -> handleNumCode(code, label) },
+                onNumLock = { doHandleNumLockToggle() },
+                onInsertToggle = { handleInsertToggle() },
+                onClearMods = { clearMods() },
+                onSendKey = onSendKey,
+                onTypeText = onTypeText,
+                onSettingsChange = onSettingsChange,
             )
             2 -> MediaTab(
-                st               = st,
-                settings         = settings,
-                onKeyPress       = { handleKey(it) },
-                onConsumerKey    = onConsumerKey,
-                onClearMods      = { clearMods() },
-                onUpdateLastKey  = { st = st.copy(lastKey = it) },
+                st = st,
+                settings = settings,
+                onKeyPress = { handleKey(it) },
+                onConsumerKey = onConsumerKey,
+                onClearMods = { clearMods() },
+                onUpdateLastKey = { st = st.copy(lastKey = it) },
                 onSettingsChange = onSettingsChange,
             )
         }

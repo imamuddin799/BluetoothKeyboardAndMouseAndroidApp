@@ -113,6 +113,21 @@ data class KeyboardSettings(
     val mediaTabInPlaceReorder: Boolean = false,
     val navTabInPlaceReorder: Boolean = false,
 
+    // Optional row order
+    val globalOptionalRowOrder: Boolean = false,
+    val keyboardOptionalRowOrder: List<KeyboardOptionalRow> = listOf(
+        KeyboardOptionalRow.MEDIA_ROW,
+        KeyboardOptionalRow.NAV_ROW,
+    ),
+    val keysTabOptionalRowOrder: List<KeyboardOptionalRow> = listOf(
+        KeyboardOptionalRow.MEDIA_ROW,
+        KeyboardOptionalRow.NAV_ROW,
+    ),
+    val trackpadOptionalRowOrder: List<KeyboardOptionalRow> = listOf(
+        KeyboardOptionalRow.MEDIA_ROW,
+        KeyboardOptionalRow.NAV_ROW,
+    ),
+
     // Default tab
     val defaultTab: Int = 0,
 ) {
@@ -123,7 +138,12 @@ data class KeyboardSettings(
     fun shouldAllowInPlaceReorder(tabReorder: Boolean): Boolean {
         return inPlaceReorderGlobal || tabReorder
     }
+
+    fun getOptionalRowOrder(tabOrder: List<KeyboardOptionalRow>): List<KeyboardOptionalRow> {
+        return if (globalOptionalRowOrder) keyboardOptionalRowOrder else tabOrder
+    }
 }
+
 enum class SectionStyle(val label: String) {
     COMPACT("Standard"),
     MEDIA("Comfort"),
@@ -184,4 +204,9 @@ enum class MediaTabSection(val label: String, val icon: String) {
     SYSTEM_KEYS("System Keys", "⌨"),
     QUICK_MODS("Quick Modifiers", "⇧"),
     MERGED_SYSTEM_MODS("System & Modifiers", "⌨⇧"),
+}
+
+enum class KeyboardOptionalRow(val label: String, val icon: String) {
+    MEDIA_ROW("Media Row", "🎵"),
+    NAV_ROW("Navigation Row", "↕"),
 }

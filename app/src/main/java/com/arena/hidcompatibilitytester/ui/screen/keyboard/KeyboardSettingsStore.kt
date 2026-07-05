@@ -76,6 +76,11 @@ object KeyboardSettingsStore {
             putBoolean("mediaTabInPlaceReorder", s.mediaTabInPlaceReorder)
             putBoolean("navTabInPlaceReorder", s.navTabInPlaceReorder)
 
+            putBoolean("globalOptionalRowOrder", s.globalOptionalRowOrder)
+            putString("keyboardOptionalRowOrder", s.keyboardOptionalRowOrder.joinToString(",") { it.name })
+            putString("keysTabOptionalRowOrder", s.keysTabOptionalRowOrder.joinToString(",") { it.name })
+            putString("trackpadOptionalRowOrder", s.trackpadOptionalRowOrder.joinToString(",") { it.name })
+
             putInt("defaultTab", s.defaultTab)
             apply()
         }
@@ -194,6 +199,26 @@ object KeyboardSettingsStore {
             keysTabInPlaceReorder = p.getBoolean("keysTabInPlaceReorder", false),
             mediaTabInPlaceReorder = p.getBoolean("mediaTabInPlaceReorder", false),
             navTabInPlaceReorder = p.getBoolean("navTabInPlaceReorder", false),
+
+            globalOptionalRowOrder = p.getBoolean("globalOptionalRowOrder", false),
+            keyboardOptionalRowOrder = runCatching {
+                p.getString("keyboardOptionalRowOrder", null)
+                    ?.split(",")
+                    ?.map { KeyboardOptionalRow.valueOf(it.trim()) }
+                    ?: listOf(KeyboardOptionalRow.MEDIA_ROW, KeyboardOptionalRow.NAV_ROW)
+            }.getOrDefault(listOf(KeyboardOptionalRow.MEDIA_ROW, KeyboardOptionalRow.NAV_ROW)),
+            keysTabOptionalRowOrder = runCatching {
+                p.getString("keysTabOptionalRowOrder", null)
+                    ?.split(",")
+                    ?.map { KeyboardOptionalRow.valueOf(it.trim()) }
+                    ?: listOf(KeyboardOptionalRow.MEDIA_ROW, KeyboardOptionalRow.NAV_ROW)
+            }.getOrDefault(listOf(KeyboardOptionalRow.MEDIA_ROW, KeyboardOptionalRow.NAV_ROW)),
+            trackpadOptionalRowOrder = runCatching {
+                p.getString("trackpadOptionalRowOrder", null)
+                    ?.split(",")
+                    ?.map { KeyboardOptionalRow.valueOf(it.trim()) }
+                    ?: listOf(KeyboardOptionalRow.MEDIA_ROW, KeyboardOptionalRow.NAV_ROW)
+            }.getOrDefault(listOf(KeyboardOptionalRow.MEDIA_ROW, KeyboardOptionalRow.NAV_ROW)),
 
             defaultTab = p.getInt("defaultTab", 0),
         )
