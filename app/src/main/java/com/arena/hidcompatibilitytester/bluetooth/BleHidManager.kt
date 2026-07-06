@@ -553,26 +553,31 @@ class BleHidManager(private val context: Context) {
     ).also { svc ->
         svc.addCharacteristic(BluetoothGattCharacteristic(
             UUID_BATTERY_LEVEL,
-            BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_NOTIFY,
-            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM
+            BluetoothGattCharacteristic.PROPERTY_READ or
+            BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+            // BEFORE: PERMISSION_READ_ENCRYPTED_MITM
+            // AFTER:  PERMISSION_READ_ENCRYPTED
+            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED
         ).apply { value = byteArrayOf(100); addDescriptor(cccd()) })
     }
 
     private fun buildHidService() = BluetoothGattService(
         UUID_HID_SERVICE, BluetoothGattService.SERVICE_TYPE_PRIMARY
     ).also { svc ->
+        // BEFORE: PERMISSION_READ_ENCRYPTED_MITM
+        // AFTER:  PERMISSION_READ_ENCRYPTED — MITM blocks initial pairing on many hosts
         svc.addCharacteristic(readChar(UUID_HID_INFORMATION, HID_INFORMATION,
-            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM))
+            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED))
         svc.addCharacteristic(readChar(UUID_REPORT_MAP, REPORT_MAP,
-            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM))
+            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED))
         svc.addCharacteristic(BluetoothGattCharacteristic(UUID_HID_CONTROL_POINT,
             BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE,
-            BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM))
+            BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED))
         svc.addCharacteristic(BluetoothGattCharacteristic(UUID_PROTOCOL_MODE,
             BluetoothGattCharacteristic.PROPERTY_READ or
             BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE,
-            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or
-            BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM
+            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED or
+            BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED
         ).apply { value = PROTOCOL_MODE_REPORT })
 
         mouseInputChar    = inputReportChar(REPORT_ID_MOUSE,    0x01)
@@ -598,17 +603,18 @@ class BleHidManager(private val context: Context) {
             BluetoothGattCharacteristic.PROPERTY_READ or
             BluetoothGattCharacteristic.PROPERTY_NOTIFY or
             BluetoothGattCharacteristic.PROPERTY_WRITE,
-            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or
-            BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM
+            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED or
+            BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED
         ).apply {
             addDescriptor(cccd())
             addDescriptor(BluetoothGattDescriptor(UUID_REPORT_REFERENCE,
-                BluetoothGattDescriptor.PERMISSION_READ_ENCRYPTED_MITM
+                BluetoothGattDescriptor.PERMISSION_READ_ENCRYPTED
             ).apply { value = byteArrayOf(reportId.toByte(), reportType.toByte()) })
         }
 
     private fun cccd() = BluetoothGattDescriptor(UUID_CCCD,
-        BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE
+        BluetoothGattDescriptor.PERMISSION_READ_ENCRYPTED or
+        BluetoothGattDescriptor.PERMISSION_WRITE_ENCRYPTED
     ).apply { value = BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -733,6 +739,19 @@ class BleHidManager(private val context: Context) {
             device: BluetoothDevice, requestId: Int, offset: Int,
             characteristic: BluetoothGattCharacteristic
         ) {
+            // If not bonded, trigger bonding before serving encrypted characteristics
+            if (device.bondState == BluetoothDevice.BOND_NONE &&
+                characteristic.permissions and
+                BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED != 0) {
+                gattServer?.sendResponse(
+                    device, requestId,
+                    BluetoothGatt.GATT_INSUFFICIENT_AUTHENTICATION,
+                    0, null
+                )
+                try { device.createBond() } catch (e: Exception) {}
+                return
+            }
+
             val v = characteristic.value ?: byteArrayOf()
             val off = offset.coerceAtMost(v.size)
             gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS,
@@ -762,6 +781,22 @@ class BleHidManager(private val context: Context) {
             descriptor: BluetoothGattDescriptor,
             preparedWrite: Boolean, responseNeeded: Boolean, offset: Int, value: ByteArray?
         ) {
+            // If not bonded yet, request bonding first
+            if (device.bondState == BluetoothDevice.BOND_NONE) {
+                if (responseNeeded) {
+                    gattServer?.sendResponse(
+                        device, requestId,
+                        BluetoothGatt.GATT_INSUFFICIENT_AUTHENTICATION,
+                        0, null
+                    )
+                }
+                // Trigger bonding
+                try { device.createBond() } catch (e: Exception) {
+                    Log.e(TAG, "createBond failed: ${e.message}")
+                }
+                return
+            }
+
             descriptor.value = value
             if (descriptor.uuid == UUID_CCCD) {
                 val enabled = value?.contentEquals(
@@ -772,7 +807,10 @@ class BleHidManager(private val context: Context) {
                         connectedDeviceMap[device.address] = it.copy(isSubscribed = true)
                     }
                     saveKnownHost(device.address)
-                    mainHandler.post { onDeviceSubscribed?.invoke(device); notifyDeviceListChanged() }
+                    mainHandler.post {
+                        onDeviceSubscribed?.invoke(device)
+                        notifyDeviceListChanged()
+                    }
                 } else {
                     subscribedDevices.remove(device)
                     connectedDeviceMap[device.address]?.let {
@@ -782,7 +820,8 @@ class BleHidManager(private val context: Context) {
                 }
             }
             if (responseNeeded)
-                gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
+                gattServer?.sendResponse(device, requestId,
+                    BluetoothGatt.GATT_SUCCESS, 0, null)
         }
 
         override fun onNotificationSent(device: BluetoothDevice, status: Int) {
