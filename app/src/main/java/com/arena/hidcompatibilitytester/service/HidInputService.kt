@@ -29,37 +29,33 @@ class HidInputService : Service() {
 
     private val binder = LocalBinder()
 
-    // Activity-forwarded callbacks
-    var activityStateCallback: ((BleHidState) -> Unit)? = null
-    var activityDeviceListCallback: ((List<BleHidManager.DeviceInfo>) -> Unit)? = null
-    var activityDeviceSubscribedCallback: ((BluetoothDevice) -> Unit)? = null
-    var activityPairRequiredCallback: ((String) -> Unit)? = null
+    var activityStateCallback          : ((BleHidState) -> Unit)?                = null
+    var activityDeviceListCallback     : ((List<BleHidManager.DeviceInfo>) -> Unit)? = null
+    var activityDeviceSubscribedCallback: ((BluetoothDevice) -> Unit)?            = null
+    var activityPairRequiredCallback   : ((String) -> Unit)?                      = null
 
     fun clearActivityCallbacks() {
-        activityStateCallback = null
-        activityDeviceListCallback = null
+        activityStateCallback           = null
+        activityDeviceListCallback      = null
         activityDeviceSubscribedCallback = null
-        activityPairRequiredCallback = null
+        activityPairRequiredCallback    = null
     }
 
     inner class LocalBinder : Binder() {
         fun getService(): HidInputService = this@HidInputService
     }
 
-    // ── Internal Bluetooth state receiver ────────────────────────────────────
     private val bluetoothStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
             when (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)) {
                 BluetoothAdapter.STATE_ON -> {
-                    // Bluetooth turned on — start HID
                     val state = bleHidManager.getCurrentState()
                     if (state is BleHidState.IDLE || state is BleHidState.ERROR) {
                         bleHidManager.start()
                     }
                 }
                 BluetoothAdapter.STATE_OFF -> {
-                    // Bluetooth turned off — clean up
                     bleHidManager.onBluetoothOff()
                     updateNotification("HID Peripheral", "Bluetooth off")
                 }
@@ -67,7 +63,6 @@ class HidInputService : Service() {
         }
     }
 
-    // ── Bond state receiver ───────────────────────────────────────────────────
     private val bondStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != BluetoothDevice.ACTION_BOND_STATE_CHANGED) return
@@ -85,10 +80,6 @@ class HidInputService : Service() {
         }
     }
 
-    // ═════════════════════════════════════════════════════════════════════════
-    // Lifecycle
-    // ═════════════════════════════════════════════════════════════════════════
-
     override fun onCreate() {
         super.onCreate()
 
@@ -98,7 +89,6 @@ class HidInputService : Service() {
         bleHidManager = BleHidManager(this)
         setupServiceCallbacks()
 
-        // Register receivers inside service so they work even when app is closed
         registerReceiverCompat(
             bluetoothStateReceiver,
             IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
@@ -150,8 +140,8 @@ class HidInputService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            bleHidManager.clearAllKnownHosts()
             bleHidManager.stop()
-            // Explicitly cancel the notification before stopping foreground
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.cancel(notificationId)
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -159,7 +149,6 @@ class HidInputService : Service() {
             return START_NOT_STICKY
         }
 
-        // Start BLE only if not already running
         if (bleHidManager.isSupported()) {
             val state = bleHidManager.getCurrentState()
             if (state is BleHidState.IDLE || state is BleHidState.ERROR) {
@@ -174,7 +163,7 @@ class HidInputService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // Do nothing — keep running
+        // Keep running when user swipes app away
     }
 
     override fun onDestroy() {
@@ -182,14 +171,9 @@ class HidInputService : Service() {
         try { unregisterReceiver(bluetoothStateReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(bondStateReceiver) } catch (_: Exception) {}
         bleHidManager.stop()
-        // Cancel notification explicitly so nothing lingers
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.cancel(notificationId)
     }
-
-    // ═════════════════════════════════════════════════════════════════════════
-    // Notification
-    // ═════════════════════════════════════════════════════════════════════════
 
     private fun startForegroundCompat(notification: Notification) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -231,9 +215,9 @@ class HidInputService : Service() {
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
-            .also { builder ->
+            .also { b ->
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    builder.addAction(
+                    b.addAction(
                         Notification.Action.Builder(
                             android.graphics.drawable.Icon.createWithResource(
                                 this,
@@ -245,7 +229,7 @@ class HidInputService : Service() {
                     )
                 } else {
                     @Suppress("DEPRECATION")
-                    builder.addAction(
+                    b.addAction(
                         android.R.drawable.ic_delete,
                         "Stop HID",
                         stopPending

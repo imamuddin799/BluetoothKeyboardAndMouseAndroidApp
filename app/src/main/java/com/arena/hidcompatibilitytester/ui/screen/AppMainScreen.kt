@@ -18,91 +18,100 @@ import com.arena.hidcompatibilitytester.ui.screen.trackpad.TrackpadSettings
 @SuppressLint("MissingPermission")
 @Composable
 fun AppMainScreen(
-    modifier               : Modifier,
-    bleHidState            : BleHidState,
-    bleSupported           : Boolean,
-    connectedHostList      : List<BleHidManager.DeviceInfo>,
-    pairedList             : List<BluetoothDevice>,
-    nearbyList             : List<BluetoothDevice>,
-    isScanningState        : Boolean,
-    trackpadSettings       : TrackpadSettings,
-    keyboardSettings       : KeyboardSettings,
-    showSettingsSheet      : Boolean,
-    onToggleBleHid         : () -> Unit,
-    onSendMouse            : (Int, Int, Int, Int) -> Unit,
-    onSendKey              : (Int, List<Int>) -> Unit,
-    onReleaseKeys          : () -> Unit,
-    onConsumerKey          : (Int) -> Unit,
-    onTypeText             : (String) -> Unit,
-    onToggleScan           : () -> Unit,
-    onPairClick            : (BluetoothDevice) -> Unit,
-    onUnpairClick          : (BluetoothDevice) -> Unit,
-    onDisconnectHost       : (String) -> Unit,
-    onReconnectHost        : (BluetoothDevice) -> Unit,
-    onShowTrackpadSettings : () -> Unit,
-    onShowKeyboardSettings : () -> Unit,
-    onSettingsChange   : ((KeyboardSettings) -> Unit)? = null,
+    modifier: Modifier,
+    bleHidState: BleHidState,
+    bleSupported: Boolean,
+    connectedHostList: List<BleHidManager.DeviceInfo>,
+    pairedList: List<BluetoothDevice>,
+    nearbyList: List<BluetoothDevice>,
+    isScanningState: Boolean,
+    trackpadSettings: TrackpadSettings,
+    keyboardSettings: KeyboardSettings,
+    showSettingsSheet: Boolean,
+    // Target selection
+    targetMode: BleHidManager.TargetMode,
+    targetAddress: String?,
+    onSelectAllTargets: () -> Unit,
+    onSelectTargetDevice: (String) -> Unit,
+    // Actions
+    onToggleBleHid: () -> Unit,
+    onSendMouse: (Int, Int, Int, Int) -> Unit,
+    onSendKey: (Int, List<Int>) -> Unit,
+    onReleaseKeys: () -> Unit,
+    onConsumerKey: (Int) -> Unit,
+    onTypeText: (String) -> Unit,
+    onToggleScan: () -> Unit,
+    onPairClick: (BluetoothDevice) -> Unit,
+    onUnpairClick: (BluetoothDevice) -> Unit,
+    onDisconnectHost: (String) -> Unit,
+    onReconnectHost: (BluetoothDevice) -> Unit,
+    onShowTrackpadSettings: () -> Unit,
+    onShowKeyboardSettings: () -> Unit,
+    onSettingsChange: ((KeyboardSettings) -> Unit)? = null,
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs    = listOf("Status", "Mouse", "Keyboard", "Devices")
+    val tabs = listOf("Status", "Mouse", "Keyboard", "Devices")
     val isReady = connectedHostList.any { it.isSubscribed }
 
     Column(modifier = modifier.fillMaxSize()) {
         AppStatusBar(
-            state             = bleHidState,
-            supported         = bleSupported,
+            state = bleHidState,
+            supported = bleSupported,
             connectedHostList = connectedHostList,
-            onToggle          = onToggleBleHid,
+            targetMode = targetMode,
+            targetAddress = targetAddress,
+            onSelectAllTargets = onSelectAllTargets,
+            onSelectTargetDevice = onSelectTargetDevice,
         )
 
         TabRow(selectedTabIndex = selectedTab) {
             tabs.forEachIndexed { i, title ->
                 Tab(
                     selected = selectedTab == i,
-                    onClick  = { selectedTab = i },
-                    text     = { Text(title, fontSize = 13.sp, maxLines = 1) }
+                    onClick = { selectedTab = i },
+                    text = { Text(title, fontSize = 13.sp, maxLines = 1) }
                 )
             }
         }
 
         when (selectedTab) {
             0 -> StatusScreen(
-                bleHidState       = bleHidState,
-                bleSupported      = bleSupported,
+                bleHidState = bleHidState,
+                bleSupported = bleSupported,
                 connectedHostList = connectedHostList,
-                onToggleBleHid    = onToggleBleHid,
-                onDisconnectHost  = onDisconnectHost,
-                onReconnectHost   = onReconnectHost,
+                onToggleBleHid = onToggleBleHid,
+                onDisconnectHost = onDisconnectHost,
+                onReconnectHost = onReconnectHost,
             )
             1 -> TrackpadScreen(
-                isReady          = isReady,
-                settings         = trackpadSettings,
+                isReady = isReady,
+                settings = trackpadSettings,
                 keyboardSettings = keyboardSettings,
-                onSendMouse      = onSendMouse,
-                onShowSettings   = onShowTrackpadSettings,
-                onSendKey        = onSendKey,
-                onReleaseKeys    = onReleaseKeys,
-                onConsumerKey    = onConsumerKey,
-                onTypeText       = onTypeText,
+                onSendMouse = onSendMouse,
+                onShowSettings = onShowTrackpadSettings,
+                onSendKey = onSendKey,
+                onReleaseKeys = onReleaseKeys,
+                onConsumerKey = onConsumerKey,
+                onTypeText = onTypeText,
             )
             2 -> KeyboardScreen(
-                isReady        = isReady,
-                settings       = keyboardSettings,
-                onSendKey      = onSendKey,
-                onReleaseKeys  = onReleaseKeys,
-                onConsumerKey  = onConsumerKey,
-                onTypeText     = onTypeText,
+                isReady = isReady,
+                settings = keyboardSettings,
+                onSendKey = onSendKey,
+                onReleaseKeys = onReleaseKeys,
+                onConsumerKey = onConsumerKey,
+                onTypeText = onTypeText,
                 onShowSettings = onShowKeyboardSettings,
                 onSettingsChange = onSettingsChange,
             )
             3 -> DevicesScreen(
-                nearbyList      = nearbyList,
-                pairedList      = pairedList,
+                nearbyList = nearbyList,
+                pairedList = pairedList,
                 isScanningState = isScanningState,
-                onToggleScan    = onToggleScan,
-                onPairClick     = onPairClick,
-                onUnpairClick   = onUnpairClick,
-                onReconnect     = onReconnectHost,
+                onToggleScan = onToggleScan,
+                onPairClick = onPairClick,
+                onUnpairClick = onUnpairClick,
+                onReconnect = onReconnectHost,
             )
         }
     }

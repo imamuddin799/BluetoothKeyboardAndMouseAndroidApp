@@ -42,23 +42,19 @@ import com.arena.hidcompatibilitytester.ui.theme.HIDCompatibilityTesterTheme
 class MainActivity : ComponentActivity(),
     BluetoothDeviceManager.BluetoothStateListener {
 
-    // ── BLE — now lives in service ────────────────────────────────────────────
     private var bleHidManager: BleHidManager? = null
     private var hidService: HidInputService? = null
     private var serviceBound = false
 
-    // ── Settings ──────────────────────────────────────────────────────────────
     private var trackpadSettings          by mutableStateOf(TrackpadSettings())
     private var keyboardSettings          by mutableStateOf(KeyboardSettings())
     private var showTrackpadSettingsSheet by mutableStateOf(false)
     private var showKeyboardSettingsSheet by mutableStateOf(false)
 
-    // ── Device lists ──────────────────────────────────────────────────────────
     private val pairedDevices     = androidx.compose.runtime.snapshots.SnapshotStateList<BluetoothDevice>()
     private val nearbyDevices     = androidx.compose.runtime.snapshots.SnapshotStateList<BluetoothDevice>()
     private val connectedHostList = androidx.compose.runtime.snapshots.SnapshotStateList<BleHidManager.DeviceInfo>()
 
-    // ── UI state ──────────────────────────────────────────────────────────────
     private var isScanningState            by mutableStateOf(false)
     private var showLocationServicesDialog by mutableStateOf(false)
     private var bleHidState                by mutableStateOf<BleHidState>(BleHidState.IDLE)
@@ -67,10 +63,12 @@ class MainActivity : ComponentActivity(),
     private var pairRequiredAddress        by mutableStateOf<String?>(null)
     private var showExitConfirmation       by mutableStateOf(false)
 
-    // ── Device manager ────────────────────────────────────────────────────────
+    // Target routing
+    private var targetMode    by mutableStateOf(BleHidManager.TargetMode.ALL)
+    private var targetAddress by mutableStateOf<String?>(null)
+
     private lateinit var deviceManager: BluetoothDeviceManager
 
-    // ── Service connection ────────────────────────────────────────────────────
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, iBinder: IBinder?) {
             val binder = iBinder as HidInputService.LocalBinder
@@ -89,7 +87,6 @@ class MainActivity : ComponentActivity(),
         }
     }
 
-    // ── Permissions ───────────────────────────────────────────────────────────
     private fun requiredPermissions() =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) arrayOf(
             Manifest.permission.BLUETOOTH_SCAN,
@@ -108,10 +105,6 @@ class MainActivity : ComponentActivity(),
         ActivityResultContracts.RequestMultiplePermissions()) { _ ->
         executeBluetoothOperations()
     }
-
-    // ═════════════════════════════════════════════════════════════════════════
-    // Lifecycle
-    // ═════════════════════════════════════════════════════════════════════════
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -132,7 +125,6 @@ class MainActivity : ComponentActivity(),
             runOnUiThread { isScanningState = false; showLocationServicesDialog = true }
         }
 
-        // Start service first, then bind
         startPersistentHidService()
         bindToHidService()
 
@@ -151,9 +143,6 @@ class MainActivity : ComponentActivity(),
         }
     }
 
-    // CHANGE 3: Update onDestroy — remove the stopService call that was killing
-    // everything on activity destroy. It should look like this:
-
     override fun onDestroy() {
         super.onDestroy()
         deviceManager.stopNearbyScanning()
@@ -163,12 +152,7 @@ class MainActivity : ComponentActivity(),
             unbindService(serviceConnection)
             serviceBound = false
         }
-        // No stopService here — service keeps running unless user chose "Stop & Exit"
     }
-
-    // ═════════════════════════════════════════════════════════════════════════
-    // Service
-    // ═════════════════════════════════════════════════════════════════════════
 
     private fun startPersistentHidService() {
         val intent = Intent(this, HidInputService::class.java)
@@ -187,18 +171,15 @@ class MainActivity : ComponentActivity(),
         val manager = bleHidManager ?: return
         val service = hidService ?: return
 
-        // Read current state immediately
-        bleHidState = manager.getCurrentState()
+        bleHidState  = manager.getCurrentState()
         bleSupported = manager.isSupported()
 
-        // Sync current device list
         val currentDevices = manager.getConnectedDeviceInfoList()
         runOnUiThread {
             connectedHostList.clear()
             connectedHostList.addAll(currentDevices)
         }
 
-        // Set forwarded callbacks on the service
         service.activityStateCallback = { state ->
             bleHidState = state
             when (state) {
@@ -225,11 +206,23 @@ class MainActivity : ComponentActivity(),
         service.activityPairRequiredCallback = { address ->
             pairRequiredAddress = address
         }
+
+        // Sync target state from manager
+        targetMode    = manager.getTargetMode()
+        targetAddress = manager.getTargetAddress()
     }
 
-    // ═════════════════════════════════════════════════════════════════════════
-    // Composable UI
-    // ═════════════════════════════════════════════════════════════════════════
+    private fun onSelectAllTargets() {
+        bleHidManager?.setTargetAll()
+        targetMode    = BleHidManager.TargetMode.ALL
+        targetAddress = null
+    }
+
+    private fun onSelectTargetDevice(address: String) {
+        bleHidManager?.setTargetDevice(address)
+        targetMode    = BleHidManager.TargetMode.SINGLE
+        targetAddress = address
+    }
 
     @Composable
     private fun MainContent() {
@@ -262,10 +255,6 @@ class MainActivity : ComponentActivity(),
                 }
             )
         }
-
-        // In MainActivity.kt
-        // CHANGE 1: Update the exit confirmation dialog in MainContent()
-        // Replace the existing showExitConfirmation AlertDialog block with this:
 
         if (showExitConfirmation) {
             AlertDialog(
@@ -300,7 +289,7 @@ class MainActivity : ComponentActivity(),
                         TextButton(
                             onClick = {
                                 showExitConfirmation = false
-                                finish() // UI closes, service stays alive
+                                finish()
                             }
                         ) {
                             Text("Keep Running")
@@ -323,6 +312,10 @@ class MainActivity : ComponentActivity(),
                     trackpadSettings       = trackpadSettings,
                     keyboardSettings       = keyboardSettings,
                     showSettingsSheet      = showTrackpadSettingsSheet,
+                    targetMode             = targetMode,
+                    targetAddress          = targetAddress,
+                    onSelectAllTargets     = { onSelectAllTargets() },
+                    onSelectTargetDevice   = { address -> onSelectTargetDevice(address) },
                     onToggleBleHid         = { toggleBleHid() },
                     onSendMouse            = { dx, dy, buttons, wheel ->
                         if (bleHidManager?.sendMouseReport(dx, dy, buttons, wheel) == false)
@@ -398,27 +391,22 @@ class MainActivity : ComponentActivity(),
         }
     }
 
-    // ═════════════════════════════════════════════════════════════════════════
-    // Bluetooth helpers
-    // ═════════════════════════════════════════════════════════════════════════
-
     private fun stopHidServiceAndExit() {
-        // Cancel notification immediately
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE)
             as android.app.NotificationManager
         notificationManager.cancelAll()
 
-        // Stop BLE directly via the bound service (no async race)
+        // Clear all known hosts so next launch starts completely fresh
+        bleHidManager?.clearAllKnownHosts()
+
         bleHidManager?.stop()
 
-        // Clear callbacks before unbinding
         hidService?.clearActivityCallbacks()
         if (serviceBound) {
             unbindService(serviceConnection)
             serviceBound = false
         }
 
-        // Now stop the service completely
         val stopIntent = Intent(this, HidInputService::class.java).apply {
             action = HidInputService.ACTION_STOP
         }
@@ -426,7 +414,6 @@ class MainActivity : ComponentActivity(),
 
         finish()
     }
-
 
     private fun toggleBleHid() {
         val manager = bleHidManager ?: return
@@ -447,7 +434,6 @@ class MainActivity : ComponentActivity(),
     private fun executeBluetoothOperations() {
         deviceManager.registerStateListener(this)
         refreshDeviceLists()
-        // BleHidManager.start() is handled by the service in onStartCommand
     }
 
     private fun toggleScanState() {
