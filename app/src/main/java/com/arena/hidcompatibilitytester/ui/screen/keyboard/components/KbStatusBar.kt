@@ -66,8 +66,8 @@ internal fun KbStatusBar(
         ) {
             if (showFullStatus) {
                 listOf(
-                    "CAPS" to st.caps,
                     "NUM" to st.numLock,
+                    "CAPS" to st.caps,
                     "SCR" to st.scrollLk,
                     "SHF" to st.shift,
                     "CTL" to st.ctrl,

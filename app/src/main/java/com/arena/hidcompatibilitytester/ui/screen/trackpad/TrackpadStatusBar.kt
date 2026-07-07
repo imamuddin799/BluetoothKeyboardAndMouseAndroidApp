@@ -45,8 +45,8 @@ fun TrackpadStatusBar(
             TrackpadLedBadge("TPD", isReady)
             TrackpadLedBadge("TAP", settings.tapToClick)
             TrackpadLedBadge("ACC", settings.accelerationEnabled)
-            TrackpadLedBadge("LCK", settings.dragLockMode)
             if (settings.showArrowKeys) TrackpadLedBadge("ARR", true)
+            TrackpadLedBadge("LCK", settings.dragLockMode)
 
             Spacer(Modifier.weight(1f))
 
