@@ -63,7 +63,6 @@ class MainActivity : ComponentActivity(),
     private var pairRequiredAddress        by mutableStateOf<String?>(null)
     private var showExitConfirmation       by mutableStateOf(false)
 
-    // Target routing
     private var targetMode    by mutableStateOf(BleHidManager.TargetMode.ALL)
     private var targetAddress by mutableStateOf<String?>(null)
 
@@ -145,12 +144,15 @@ class MainActivity : ComponentActivity(),
 
     override fun onDestroy() {
         super.onDestroy()
-        deviceManager.stopNearbyScanning()
-        deviceManager.unregisterStateListener()
-        hidService?.clearActivityCallbacks()
-        if (serviceBound) {
-            unbindService(serviceConnection)
-            serviceBound = false
+        // Only stop scanning and clean up if we are actually exiting, NOT on rotation
+        if (!isChangingConfigurations) {
+            deviceManager.stopNearbyScanning()
+            deviceManager.unregisterStateListener()
+            hidService?.clearActivityCallbacks()
+            if (serviceBound) {
+                unbindService(serviceConnection)
+                serviceBound = false
+            }
         }
     }
 
@@ -181,12 +183,14 @@ class MainActivity : ComponentActivity(),
         }
 
         service.activityStateCallback = { state ->
-            bleHidState = state
-            when (state) {
-                is BleHidState.ADVERTISING -> statusMessage = "📡 Advertising…"
-                is BleHidState.CONNECTED   -> statusMessage = "✓ Host connected"
-                is BleHidState.ERROR       -> statusMessage = "✗ ${state.message}"
-                else -> {}
+            runOnUiThread {
+                bleHidState = state
+                when (state) {
+                    is BleHidState.ADVERTISING -> statusMessage = "📡 Advertising…"
+                    is BleHidState.CONNECTED   -> statusMessage = "✓ Host connected"
+                    is BleHidState.ERROR       -> statusMessage = "✗ ${state.message}"
+                    else -> {}
+                }
             }
         }
 
@@ -204,10 +208,9 @@ class MainActivity : ComponentActivity(),
         }
 
         service.activityPairRequiredCallback = { address ->
-            pairRequiredAddress = address
+            runOnUiThread { pairRequiredAddress = address }
         }
 
-        // Sync target state from manager
         targetMode    = manager.getTargetMode()
         targetAddress = manager.getTargetAddress()
     }
@@ -396,9 +399,7 @@ class MainActivity : ComponentActivity(),
             as android.app.NotificationManager
         notificationManager.cancelAll()
 
-        // Clear all known hosts so next launch starts completely fresh
         bleHidManager?.clearAllKnownHosts()
-
         bleHidManager?.stop()
 
         hidService?.clearActivityCallbacks()
@@ -461,12 +462,5 @@ class MainActivity : ComponentActivity(),
 
     override fun onConnectionStateChanged(device: BluetoothDevice, state: Int) {
         runOnUiThread { refreshDeviceLists() }
-    }
-
-    private fun registerReceiverCompat(receiver: BroadcastReceiver, filter: IntentFilter) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
-            registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
-        else
-            registerReceiver(receiver, filter)
     }
 }
