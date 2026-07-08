@@ -26,6 +26,14 @@ fun LandscapeKeyboardScreen(
     var showOptionalRows by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
 
+    // ── Runtime layout-mode override (session-only, not persisted) ────────
+    // Starts as null → uses settings.landscapeLayoutMode.
+    // When toggled, holds an override for THIS keyboard instance only.
+    var layoutModeOverride by remember(settings.landscapeLayoutMode) {
+        mutableStateOf<LandscapeLayoutMode?>(null)
+    }
+    val effectiveLayoutMode = layoutModeOverride ?: settings.landscapeLayoutMode
+
     fun handleKeyPress(key: LandscapeKey) {
         st = landscapeHandleKeyPress(key, st, settings, scope, onSendKey) { st = it }
     }
@@ -52,7 +60,14 @@ fun LandscapeKeyboardScreen(
             onShowSettings = onShowSettings,
             onToggleKeyboard = { showKeyboard = !showKeyboard },
             onToggleNumpad = { showNumpad = !showNumpad },
-            onToggleOptionalRows = { showOptionalRows = !showOptionalRows }
+            onToggleOptionalRows = { showOptionalRows = !showOptionalRows },
+            currentLayoutMode = effectiveLayoutMode,
+            onToggleLayoutMode = {
+                layoutModeOverride = if (effectiveLayoutMode == LandscapeLayoutMode.SINGLE_COLUMN)
+                    LandscapeLayoutMode.TWO_COLUMN
+                else
+                    LandscapeLayoutMode.SINGLE_COLUMN
+            },
         )
 
         TabRow(selectedTabIndex = st.tab, containerColor = Color(0xFF050C14), contentColor = Color.White) {
@@ -73,6 +88,7 @@ fun LandscapeKeyboardScreen(
                 settings = settings,
                 showKeyboard = showKeyboard,
                 showOptionalRows = showOptionalRows,
+                layoutMode = effectiveLayoutMode,   // NEW — forwards status-bar override
                 onKeyPress = ::handleKeyPress,
                 onClearMods = { st = st.releaseMods(); onSendKey(0, emptyList()) },
                 onConsumerKey = onConsumerKey,

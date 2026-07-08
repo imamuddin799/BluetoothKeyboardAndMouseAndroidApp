@@ -19,6 +19,7 @@ fun LandscapeKeysTab(
     settings: LandscapeKeyboardSettings,
     showKeyboard: Boolean,
     showOptionalRows: Boolean,
+    layoutMode: LandscapeLayoutMode,   // NEW
     onKeyPress: (LandscapeKey) -> Unit,
     onClearMods: () -> Unit,
     onConsumerKey: (Int) -> Unit,
@@ -67,11 +68,14 @@ fun LandscapeKeysTab(
 
         AnimatedVisibility(visible = showKeyboard) {
             LandscapeSharedCompactKeyboard(
-                st = st, settings = settings,
+                st = st,
+                settings = settings,
                 showMediaRow = settings.showMediaRowInKeysTab(),
                 showNavRow = settings.showNavRowInKeysTab(),
                 showOptionalRows = showOptionalRows,
-                onKeyPress = onKeyPress, onConsumerKey = onConsumerKey
+                layoutMode = layoutMode,   // NEW
+                onKeyPress = onKeyPress,
+                onConsumerKey = onConsumerKey,
             )
         }
     }

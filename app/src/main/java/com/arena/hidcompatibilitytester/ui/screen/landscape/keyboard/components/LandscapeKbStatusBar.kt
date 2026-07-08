@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.arena.hidcompatibilitytester.ui.screen.landscape.LandscapeToolbarIcon
 import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeKbState
+import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeLayoutMode
 
 @Composable
 internal fun LandscapeKbStatusBar(
@@ -41,6 +42,8 @@ internal fun LandscapeKbStatusBar(
     onToggleKeyboard: () -> Unit,
     onToggleNumpad: () -> Unit,
     onToggleOptionalRows: () -> Unit,
+    onToggleLayoutMode: () -> Unit,
+    currentLayoutMode: LandscapeLayoutMode,
 ) {
     var toolbarExpanded by remember { mutableStateOf(false) }
 
@@ -55,6 +58,7 @@ internal fun LandscapeKbStatusBar(
             .padding(horizontal = 8.dp, vertical = 5.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        // ── Top status row: LED badges + Ready/Offline + expand chevron ────
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(3.dp),
@@ -97,6 +101,7 @@ internal fun LandscapeKbStatusBar(
             }
         }
 
+        // ── Expandable toolbar row ─────────────────────────────────────────
         if (hasExpandableRow) {
             AnimatedVisibility(
                 visible = toolbarExpanded,
@@ -117,11 +122,21 @@ internal fun LandscapeKbStatusBar(
                     Spacer(Modifier.weight(1f))
 
                     if (showKeyboardToggle) {
+                        // Optional rows toggle (only if keyboard is shown AND optional rows exist)
                         if (showKeyboard && hasOptionalRows) {
                             LandscapeStatusBarIconToggle(
                                 icon = "±",
                                 active = showOptionalRows,
                                 onClick = onToggleOptionalRows,
+                            )
+                        }
+
+                        // Layout mode toggle — only visible when keyboard is shown
+                        if (showKeyboard) {
+                            LandscapeStatusBarIconToggle(
+                                icon = if (currentLayoutMode == LandscapeLayoutMode.TWO_COLUMN) "▥" else "▤",
+                                active = currentLayoutMode == LandscapeLayoutMode.TWO_COLUMN,
+                                onClick = onToggleLayoutMode,
                             )
                         }
 
@@ -145,6 +160,7 @@ internal fun LandscapeKbStatusBar(
             }
         }
 
+        // ── Combo preview row ──────────────────────────────────────────────
         if (showComboPreview && (st.anyMod || st.lastKey.isNotEmpty())) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,

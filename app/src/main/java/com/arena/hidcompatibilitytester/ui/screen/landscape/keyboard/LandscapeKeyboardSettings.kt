@@ -95,6 +95,7 @@ data class LandscapeKeyboardSettings(
         LandscapeKeyboardOptionalRow.MEDIA_ROW,
         LandscapeKeyboardOptionalRow.NAV_ROW,
     ),
+    val landscapeLayoutMode: LandscapeLayoutMode = LandscapeLayoutMode.SINGLE_COLUMN,
     val defaultTab: Int = 0,
 ) {
     fun shouldMergeSystemMods(tabMerge: Boolean): Boolean =
@@ -183,4 +184,10 @@ enum class LandscapeMediaTabSection(val label: String, val icon: String) {
 enum class LandscapeKeyboardOptionalRow(val label: String, val icon: String) {
     MEDIA_ROW("Media Row", "🎵"),
     NAV_ROW("Navigation Row", "↕"),
+}
+
+// Add this enum at the bottom of the file with the others
+enum class LandscapeLayoutMode(val label: String) {
+    SINGLE_COLUMN("Single Column"),
+    TWO_COLUMN("Two Column"),
 }

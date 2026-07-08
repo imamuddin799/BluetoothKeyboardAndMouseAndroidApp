@@ -79,25 +79,6 @@ fun LandscapeTrackpadStatusBar(
                 }
             }
         }
-
-        Surface(
-            color = Color(0xFF0A1828),
-            shape = RoundedCornerShape(5.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                buildString {
-                    append("🖱 ${settings.pointerSpeed}x")
-                    if (settings.tapToClick) append(" · tap✓")
-                    if (settings.dragLockMode) append(" · lock✓") else append(" · hold")
-                },
-                fontSize = 10.sp,
-                color = Color(0xFF90CAF9),
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                maxLines = 1
-            )
-        }
     }
 }
 

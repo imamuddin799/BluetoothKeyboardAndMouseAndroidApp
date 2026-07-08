@@ -134,6 +134,35 @@ private fun AppearanceContent(s: LandscapeKeyboardSettings, onUpdate: (Landscape
         LToggle("High Contrast", s.highContrastMode) { onUpdate(s.copy(highContrastMode = it)) }
         LToggle("Compact Modifiers", s.compactModifiers) { onUpdate(s.copy(compactModifiers = it)) }
     }
+    LSettingCard("Landscape Layout") {
+        Text("Default Layout Mode", color = Color.White, fontSize = 14.sp)
+        Text(
+            "Single = full-width rows. Two = keyboard + right cluster (arrows, nav).",
+            color = Color.Gray, fontSize = 11.sp
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            LandscapeLayoutMode.entries.forEach { mode ->
+                val selected = s.landscapeLayoutMode == mode
+                OutlinedButton(
+                    onClick = { onUpdate(s.copy(landscapeLayoutMode = mode)) },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = if (selected) Color(0xFF4A90D9).copy(0.2f) else Color.Transparent
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(
+                        if (selected) 2.dp else 1.dp,
+                        if (selected) Color(0xFF4A90D9) else Color.White.copy(0.2f)
+                    ),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                ) {
+                    Text(mode.label, color = Color.White, fontSize = 12.sp, maxLines = 1)
+                }
+            }
+        }
+    }
 }
 
 @Composable

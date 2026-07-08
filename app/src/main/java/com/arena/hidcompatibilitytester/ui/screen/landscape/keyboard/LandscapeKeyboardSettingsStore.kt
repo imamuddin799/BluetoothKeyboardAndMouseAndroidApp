@@ -72,6 +72,7 @@ object LandscapeKeyboardSettingsStore {
             putString("keyboardOptionalRowOrder", s.keyboardOptionalRowOrder.joinToString(",") { it.name })
             putString("keysTabOptionalRowOrder", s.keysTabOptionalRowOrder.joinToString(",") { it.name })
             putString("trackpadOptionalRowOrder", s.trackpadOptionalRowOrder.joinToString(",") { it.name })
+            putString("landscapeLayoutMode", s.landscapeLayoutMode.name)
             putInt("defaultTab", s.defaultTab)
             apply()
         }
@@ -150,6 +151,7 @@ object LandscapeKeyboardSettingsStore {
             keyboardOptionalRowOrder = safeEnumList(p.getString("keyboardOptionalRowOrder", null), listOf(LandscapeKeyboardOptionalRow.MEDIA_ROW, LandscapeKeyboardOptionalRow.NAV_ROW)),
             keysTabOptionalRowOrder = safeEnumList(p.getString("keysTabOptionalRowOrder", null), listOf(LandscapeKeyboardOptionalRow.MEDIA_ROW, LandscapeKeyboardOptionalRow.NAV_ROW)),
             trackpadOptionalRowOrder = safeEnumList(p.getString("trackpadOptionalRowOrder", null), listOf(LandscapeKeyboardOptionalRow.MEDIA_ROW, LandscapeKeyboardOptionalRow.NAV_ROW)),
+            landscapeLayoutMode = safeEnum(p.getString("landscapeLayoutMode", "SINGLE_COLUMN"), LandscapeLayoutMode.SINGLE_COLUMN),
             defaultTab = p.getInt("defaultTab", 0),
         )
     }
