@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
@@ -26,6 +27,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.activity.OnBackPressedCallback
+import androidx.compose.ui.platform.LocalConfiguration
+import com.arena.hidcompatibilitytester.ui.screen.landscape.LandscapeMainScreen
 import com.arena.hidcompatibilitytester.bluetooth.BleHidManager
 import com.arena.hidcompatibilitytester.bluetooth.BleHidState
 import com.arena.hidcompatibilitytester.bluetooth.BluetoothDeviceManager
@@ -34,6 +37,10 @@ import com.arena.hidcompatibilitytester.ui.screen.AppMainScreen
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.KeyboardSettings
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.KeyboardSettingsSheet
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.KeyboardSettingsStore
+import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeKeyboardSettings
+import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeKeyboardSettingsStore
+import com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad.LandscapeTrackpadSettings
+import com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad.LandscapeTrackpadSettingsStore
 import com.arena.hidcompatibilitytester.ui.screen.trackpad.TrackpadSettings
 import com.arena.hidcompatibilitytester.ui.screen.trackpad.TrackpadSettingsSheet
 import com.arena.hidcompatibilitytester.ui.screen.trackpad.TrackpadSettingsStore
@@ -46,10 +53,15 @@ class MainActivity : ComponentActivity(),
     private var hidService: HidInputService? = null
     private var serviceBound = false
 
+    // ── Portrait settings ────────────────────────────────────────────────────
     private var trackpadSettings          by mutableStateOf(TrackpadSettings())
     private var keyboardSettings          by mutableStateOf(KeyboardSettings())
     private var showTrackpadSettingsSheet by mutableStateOf(false)
     private var showKeyboardSettingsSheet by mutableStateOf(false)
+
+    // ── Landscape settings ───────────────────────────────────────────────────
+    private var landscapeTrackpadSettings by mutableStateOf(LandscapeTrackpadSettings())
+    private var landscapeKeyboardSettings by mutableStateOf(LandscapeKeyboardSettings())
 
     private val pairedDevices     = androidx.compose.runtime.snapshots.SnapshotStateList<BluetoothDevice>()
     private val nearbyDevices     = androidx.compose.runtime.snapshots.SnapshotStateList<BluetoothDevice>()
@@ -109,8 +121,13 @@ class MainActivity : ComponentActivity(),
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // Load portrait settings
         trackpadSettings = TrackpadSettingsStore.load(this)
         keyboardSettings = KeyboardSettingsStore.load(this)
+
+        // Load landscape settings
+        landscapeTrackpadSettings = LandscapeTrackpadSettingsStore.load(this)
+        landscapeKeyboardSettings = LandscapeKeyboardSettingsStore.load(this)
 
         deviceManager = BluetoothDeviceManager(this) { newDevice ->
             val known = pairedDevices.any { it.address == newDevice.address } ||
@@ -144,7 +161,6 @@ class MainActivity : ComponentActivity(),
 
     override fun onDestroy() {
         super.onDestroy()
-        // Only stop scanning and clean up if we are actually exiting, NOT on rotation
         if (!isChangingConfigurations) {
             deviceManager.stopNearbyScanning()
             deviceManager.unregisterStateListener()
@@ -229,6 +245,10 @@ class MainActivity : ComponentActivity(),
 
     @Composable
     private fun MainContent() {
+        val configuration = LocalConfiguration.current
+        val isLandscape   = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+        // ── Dialogs ──────────────────────────────────────────────────────────
         if (showLocationServicesDialog) {
             AlertDialog(
                 onDismissRequest = { showLocationServicesDialog = false },
@@ -281,12 +301,8 @@ class MainActivity : ComponentActivity(),
                     }
                 },
                 dismissButton = {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        TextButton(
-                            onClick = { showExitConfirmation = false }
-                        ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { showExitConfirmation = false }) {
                             Text("Cancel")
                         }
                         TextButton(
@@ -302,62 +318,114 @@ class MainActivity : ComponentActivity(),
             )
         }
 
+        // ── Main Scaffold ────────────────────────────────────────────────────
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
             Box(modifier = Modifier.fillMaxSize()) {
-                AppMainScreen(
-                    modifier               = Modifier.padding(innerPadding),
-                    bleHidState            = bleHidState,
-                    bleSupported           = bleSupported,
-                    connectedHostList      = connectedHostList,
-                    pairedList             = pairedDevices,
-                    nearbyList             = nearbyDevices,
-                    isScanningState        = isScanningState,
-                    trackpadSettings       = trackpadSettings,
-                    keyboardSettings       = keyboardSettings,
-                    showSettingsSheet      = showTrackpadSettingsSheet,
-                    targetMode             = targetMode,
-                    targetAddress          = targetAddress,
-                    onSelectAllTargets     = { onSelectAllTargets() },
-                    onSelectTargetDevice   = { address -> onSelectTargetDevice(address) },
-                    onToggleBleHid         = { toggleBleHid() },
-                    onSendMouse            = { dx, dy, buttons, wheel ->
-                        if (bleHidManager?.sendMouseReport(dx, dy, buttons, wheel) == false)
-                            statusMessage = "✗ No subscribed host"
-                    },
-                    onSendKey              = { mod, keys ->
-                        bleHidManager?.sendKeyboardReport(mod, keys)
-                    },
-                    onReleaseKeys          = {
-                        bleHidManager?.releaseKeys()
-                    },
-                    onConsumerKey          = { usage ->
-                        bleHidManager?.sendConsumerKey(usage)
-                    },
-                    onTypeText             = { text ->
-                        bleHidManager?.typeText(text)
-                    },
-                    onToggleScan           = { toggleScanState() },
-                    onPairClick            = { deviceManager.pairDevice(it) },
-                    onUnpairClick          = {
-                        deviceManager.removePairedDevice(it)
-                        bleHidManager?.forgetDevice(it.address)
-                        refreshDeviceLists()
-                    },
-                    onDisconnectHost       = { address ->
-                        bleHidManager?.disconnectDevice(address)
-                    },
-                    onReconnectHost        = { device ->
-                        bleHidManager?.inviteReconnect(device)
-                        statusMessage = "Inviting ${device.address}…"
-                    },
-                    onShowTrackpadSettings = { showTrackpadSettingsSheet = true },
-                    onShowKeyboardSettings = { showKeyboardSettingsSheet = true },
-                    onSettingsChange       = { newSettings ->
-                        keyboardSettings = newSettings
-                        KeyboardSettingsStore.save(this@MainActivity, newSettings)
-                    },
-                )
 
+                if (isLandscape) {
+                    LandscapeMainScreen(
+                        bleHidState              = bleHidState,
+                        bleSupported             = bleSupported,
+                        connectedHostList        = connectedHostList,
+                        pairedList               = pairedDevices,
+                        nearbyList               = nearbyDevices,
+                        isScanningState          = isScanningState,
+                        trackpadSettings         = landscapeTrackpadSettings,
+                        keyboardSettings         = landscapeKeyboardSettings,
+                        targetMode               = targetMode,
+                        targetAddress            = targetAddress,
+                        onSelectAllTargets       = { onSelectAllTargets() },
+                        onSelectTargetDevice     = { address -> onSelectTargetDevice(address) },
+                        onToggleBleHid           = { toggleBleHid() },
+                        onSendMouse              = { dx, dy, buttons, wheel ->
+                            if (bleHidManager?.sendMouseReport(dx, dy, buttons, wheel) == false)
+                                statusMessage = "✗ No subscribed host"
+                        },
+                        onSendKey                = { mod, keys ->
+                            bleHidManager?.sendKeyboardReport(mod, keys)
+                        },
+                        onReleaseKeys            = { bleHidManager?.releaseKeys() },
+                        onConsumerKey            = { usage ->
+                            bleHidManager?.sendConsumerKey(usage)
+                        },
+                        onTypeText               = { text -> bleHidManager?.typeText(text) },
+                        onDisconnectHost         = { address ->
+                            bleHidManager?.disconnectDevice(address)
+                        },
+                        onReconnectHost          = { device ->
+                            bleHidManager?.inviteReconnect(device)
+                            statusMessage = "Inviting ${device.address}…"
+                        },
+                        onScanDevices            = { toggleScanState() },
+                        onPairClick              = { deviceManager.pairDevice(it) },
+                        onUnpairClick            = {
+                            deviceManager.removePairedDevice(it)
+                            bleHidManager?.forgetDevice(it.address)
+                            refreshDeviceLists()
+                        },
+                        onTrackpadSettingsChange = { newSettings ->
+                            landscapeTrackpadSettings = newSettings
+                            LandscapeTrackpadSettingsStore.save(this@MainActivity, newSettings)
+                        },
+                        onKeyboardSettingsChange = { newSettings ->
+                            landscapeKeyboardSettings = newSettings
+                            LandscapeKeyboardSettingsStore.save(this@MainActivity, newSettings)
+                        },
+                        modifier = Modifier.padding(innerPadding)
+                    )
+                } else {
+                    AppMainScreen(
+                        modifier               = Modifier.padding(innerPadding),
+                        bleHidState            = bleHidState,
+                        bleSupported           = bleSupported,
+                        connectedHostList      = connectedHostList,
+                        pairedList             = pairedDevices,
+                        nearbyList             = nearbyDevices,
+                        isScanningState        = isScanningState,
+                        trackpadSettings       = trackpadSettings,
+                        keyboardSettings       = keyboardSettings,
+                        showSettingsSheet      = showTrackpadSettingsSheet,
+                        targetMode             = targetMode,
+                        targetAddress          = targetAddress,
+                        onSelectAllTargets     = { onSelectAllTargets() },
+                        onSelectTargetDevice   = { address -> onSelectTargetDevice(address) },
+                        onToggleBleHid         = { toggleBleHid() },
+                        onSendMouse            = { dx, dy, buttons, wheel ->
+                            if (bleHidManager?.sendMouseReport(dx, dy, buttons, wheel) == false)
+                                statusMessage = "✗ No subscribed host"
+                        },
+                        onSendKey              = { mod, keys ->
+                            bleHidManager?.sendKeyboardReport(mod, keys)
+                        },
+                        onReleaseKeys          = { bleHidManager?.releaseKeys() },
+                        onConsumerKey          = { usage ->
+                            bleHidManager?.sendConsumerKey(usage)
+                        },
+                        onTypeText             = { text -> bleHidManager?.typeText(text) },
+                        onToggleScan           = { toggleScanState() },
+                        onPairClick            = { deviceManager.pairDevice(it) },
+                        onUnpairClick          = {
+                            deviceManager.removePairedDevice(it)
+                            bleHidManager?.forgetDevice(it.address)
+                            refreshDeviceLists()
+                        },
+                        onDisconnectHost       = { address ->
+                            bleHidManager?.disconnectDevice(address)
+                        },
+                        onReconnectHost        = { device ->
+                            bleHidManager?.inviteReconnect(device)
+                            statusMessage = "Inviting ${device.address}…"
+                        },
+                        onShowTrackpadSettings = { showTrackpadSettingsSheet = true },
+                        onShowKeyboardSettings = { showKeyboardSettingsSheet = true },
+                        onSettingsChange       = { newSettings ->
+                            keyboardSettings = newSettings
+                            KeyboardSettingsStore.save(this@MainActivity, newSettings)
+                        },
+                    )
+                }
+
+                // ── Snackbar ─────────────────────────────────────────────────
                 statusMessage?.let { msg ->
                     Snackbar(
                         modifier = Modifier
@@ -369,26 +437,29 @@ class MainActivity : ComponentActivity(),
                     ) { Text(msg) }
                 }
 
-                if (showTrackpadSettingsSheet) {
-                    TrackpadSettingsSheet(
-                        settings  = trackpadSettings,
-                        onDismiss = { showTrackpadSettingsSheet = false },
-                        onSave    = { newSettings ->
-                            trackpadSettings = newSettings
-                            TrackpadSettingsStore.save(this@MainActivity, newSettings)
-                        }
-                    )
-                }
+                // ── Settings sheets — portrait only ──────────────────────────
+                if (!isLandscape) {
+                    if (showTrackpadSettingsSheet) {
+                        TrackpadSettingsSheet(
+                            settings  = trackpadSettings,
+                            onDismiss = { showTrackpadSettingsSheet = false },
+                            onSave    = { newSettings ->
+                                trackpadSettings = newSettings
+                                TrackpadSettingsStore.save(this@MainActivity, newSettings)
+                            }
+                        )
+                    }
 
-                if (showKeyboardSettingsSheet) {
-                    KeyboardSettingsSheet(
-                        settings  = keyboardSettings,
-                        onDismiss = { showKeyboardSettingsSheet = false },
-                        onSave    = { newSettings ->
-                            keyboardSettings = newSettings
-                            KeyboardSettingsStore.save(this@MainActivity, newSettings)
-                        }
-                    )
+                    if (showKeyboardSettingsSheet) {
+                        KeyboardSettingsSheet(
+                            settings  = keyboardSettings,
+                            onDismiss = { showKeyboardSettingsSheet = false },
+                            onSave    = { newSettings ->
+                                keyboardSettings = newSettings
+                                KeyboardSettingsStore.save(this@MainActivity, newSettings)
+                            }
+                        )
+                    }
                 }
             }
         }

@@ -135,6 +135,9 @@ data class KeyboardSettings(
         KeyboardOptionalRow.NAV_ROW,
     ),
 
+    val landscapeStatusBarMouse: Boolean = true,
+    val landscapeStatusBarKeyboard: Boolean = true,
+
     // Default tab
     val defaultTab: Int = 0,
 ) {
