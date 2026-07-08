@@ -95,7 +95,7 @@ data class LandscapeKeyboardSettings(
         LandscapeKeyboardOptionalRow.MEDIA_ROW,
         LandscapeKeyboardOptionalRow.NAV_ROW,
     ),
-    val landscapeLayoutMode: LandscapeLayoutMode = LandscapeLayoutMode.SINGLE_COLUMN,
+    val landscapeLayoutMode: LandscapeLayoutMode = LandscapeLayoutMode.TWO_COLUMN,
     val defaultTab: Int = 0,
 ) {
     fun shouldMergeSystemMods(tabMerge: Boolean): Boolean =
@@ -138,9 +138,9 @@ enum class LandscapeHapticIntensity(val label: String) {
 }
 
 enum class LandscapeKeyHeight(val label: String, val mainDp: Int, val fnDp: Int, val navDp: Int) {
-    SMALL("Small", 34, 32, 38),
-    MEDIUM("Medium", 40, 38, 46),
-    LARGE("Large", 48, 44, 52),
+    SMALL ("Small",  38, 36, 42),   // was 34, 32, 38
+    MEDIUM("Medium", 44, 42, 50),   // was 40, 38, 46
+    LARGE ("Large",  52, 48, 56),   // was 48, 44, 52
 }
 
 enum class LandscapeKeyFontSize(val label: String, val baseSp: Int) {
@@ -190,4 +190,9 @@ enum class LandscapeKeyboardOptionalRow(val label: String, val icon: String) {
 enum class LandscapeLayoutMode(val label: String) {
     SINGLE_COLUMN("Single Column"),
     TWO_COLUMN("Two Column"),
+}
+
+enum class LandscapeRightColumnMode(val label: String) {
+    NAV_CLUSTER("Nav Cluster"),
+    NUMPAD("Numpad"),
 }

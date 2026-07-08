@@ -19,15 +19,18 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.OnBackPressedCallback
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
-import androidx.activity.OnBackPressedCallback
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.arena.hidcompatibilitytester.ui.screen.landscape.LandscapeMainScreen
 import com.arena.hidcompatibilitytester.bluetooth.BleHidManager
 import com.arena.hidcompatibilitytester.bluetooth.BleHidState
@@ -117,9 +120,17 @@ class MainActivity : ComponentActivity(),
         executeBluetoothOperations()
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        applyImmersiveMode(newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        val isLand = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        applyImmersiveMode(isLand)
 
         // Load portrait settings
         trackpadSettings = TrackpadSettingsStore.load(this)
@@ -533,5 +544,17 @@ class MainActivity : ComponentActivity(),
 
     override fun onConnectionStateChanged(device: BluetoothDevice, state: Int) {
         runOnUiThread { refreshDeviceLists() }
+    }
+    private fun applyImmersiveMode(landscape: Boolean) {
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        if (landscape) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        } else {
+            WindowCompat.setDecorFitsSystemWindows(window, true)
+            controller.show(WindowInsetsCompat.Type.systemBars())
+        }
     }
 }

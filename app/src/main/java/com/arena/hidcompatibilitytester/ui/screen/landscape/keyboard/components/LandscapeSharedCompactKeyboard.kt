@@ -4,6 +4,8 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -17,6 +19,15 @@ import androidx.compose.ui.unit.sp
 import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.components.LandscapeKBtn
 
 // ─── Two-column layout row definitions ───────────────────────────────────────
+
+// Numpad cell size (drives auto-width column)
+private val NUMPAD_CELL_WIDTH = 48.dp
+private val NUMPAD_GAP = 0.dp
+private const val NUMPAD_COLUMNS = 4  // NumLk ÷ × −
+private val NUMPAD_TOTAL_WIDTH =
+    NUMPAD_CELL_WIDTH * NUMPAD_COLUMNS +
+    NUMPAD_GAP * (NUMPAD_COLUMNS - 1) +
+    8.dp   // small breathing room
 
 private val L_ROW_FN_NO_DEL = listOf(
     LandscapeKey("Esc", code = 0x29, w = 1.4f, color = LandscapeKC.DANGER, noRepeat = true),
@@ -71,12 +82,14 @@ fun LandscapeSharedCompactKeyboard(
         LandscapeKeyboardOptionalRow.MEDIA_ROW,
         LandscapeKeyboardOptionalRow.NAV_ROW,
     ),
-    // NEW — effective layout mode (from parent / status-bar override)
     layoutMode: LandscapeLayoutMode = LandscapeLayoutMode.SINGLE_COLUMN,
+    rightColumnMode: LandscapeRightColumnMode = LandscapeRightColumnMode.NAV_CLUSTER,   // NEW
     onKeyPress: (LandscapeKey) -> Unit,
     onConsumerKey: ((Int) -> Unit)? = null,
     onClearMods: (() -> Unit)? = null,
     onDismiss: (() -> Unit)? = null,
+    onNumpadKey: ((Int, String) -> Unit)? = null,   // NEW
+    onNumLockToggle: (() -> Unit)? = null,          // NEW
 ) {
     fun handleKeyClick(k: LandscapeKey) {
         if (k.isConsumer && onConsumerKey != null) {
@@ -92,9 +105,10 @@ fun LandscapeSharedCompactKeyboard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .fillMaxHeight()                       // ← add this
             .background(Color(0xFF080F18))
             .padding(horizontal = 2.dp),
-        verticalArrangement = Arrangement.spacedBy(1.dp),
+        verticalArrangement = Arrangement.Bottom,  // ← change from spacedBy to Bottom
     ) {
         // ── Dismiss bar ────────────────────────────────────────────────────
         if (showDismissBar) {
@@ -159,33 +173,24 @@ fun LandscapeSharedCompactKeyboard(
             HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
         }
 
-        // ── Optional rows (Media / Nav) ────────────────────────────────────
-        AnimatedVisibility(visible = showOptionalRows) {
-            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                optionalRowOrder.forEach { rowType ->
-                    when (rowType) {
-                        LandscapeKeyboardOptionalRow.MEDIA_ROW -> if (showMediaRow) {
-                            val mediaKeys = buildLandscapeMediaRow(settings)
-                            if (mediaKeys.isNotEmpty()) {
-                                LandscapeStyledKeyRow(mediaKeys, fnH, settings, st, ::handleKeyClick)
-                                HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
-                            }
-                        }
-                        LandscapeKeyboardOptionalRow.NAV_ROW -> if (showNavRow) {
-                            LandscapeStyledKeyRow(L_SHARED_ROW_NAV, fnH, settings, st, ::handleKeyClick)
-                            HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
-                        }
-                    }
-                }
-            }
-        }
-
         // ── Body: pick layout ──────────────────────────────────────────────
         when (layoutMode) {
             LandscapeLayoutMode.SINGLE_COLUMN ->
-                SingleColumnBody(st, settings, rowH, fnH, ::handleKeyClick)
+                SingleColumnBody(
+                    st, settings, rowH, fnH, ::handleKeyClick,
+                    showMediaRow, showNavRow, showOptionalRows, optionalRowOrder,
+                )
             LandscapeLayoutMode.TWO_COLUMN ->
-                TwoColumnBody(st, settings, rowH, fnH, ::handleKeyClick)
+                TwoColumnBody(
+                    st, settings, rowH, fnH, ::handleKeyClick,
+                    rightColumnMode = rightColumnMode,
+                    onNumpadKey = onNumpadKey,
+                    onNumLockToggle = onNumLockToggle,
+                    showMediaRow = showMediaRow,
+                    showNavRow = showNavRow,
+                    showOptionalRows = showOptionalRows,
+                    optionalRowOrder = optionalRowOrder,
+                )
         }
     }
 }
@@ -199,9 +204,29 @@ private fun SingleColumnBody(
     rowH: Dp,
     fnH: Dp,
     onClick: (LandscapeKey) -> Unit,
+    showMediaRow: Boolean,
+    showNavRow: Boolean,
+    showOptionalRows: Boolean,
+    optionalRowOrder: List<LandscapeKeyboardOptionalRow>,
 ) {
+    // Optional rows — attached directly above FN
+    if (showOptionalRows) {
+        optionalRowOrder.forEach { rowType ->
+            when (rowType) {
+                LandscapeKeyboardOptionalRow.MEDIA_ROW -> if (showMediaRow) {
+                    val mediaKeys = buildLandscapeMediaRow(settings)
+                    if (mediaKeys.isNotEmpty()) {
+                        LandscapeStyledKeyRow(mediaKeys, fnH, settings, st, onClick)
+                    }
+                }
+                LandscapeKeyboardOptionalRow.NAV_ROW -> if (showNavRow) {
+                    LandscapeStyledKeyRow(L_SHARED_ROW_NAV, fnH, settings, st, onClick)
+                }
+            }
+        }
+    }
+
     LandscapeStyledKeyRow(LANDSCAPE_ROW_FN, fnH, settings, st, onClick)
-    HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
     LandscapeStyledKeyRow(LANDSCAPE_ROW_NUM, rowH, settings, st, onClick)
     LandscapeStyledKeyRow(LANDSCAPE_ROW_QWERTY, rowH, settings, st, onClick)
     LandscapeStyledKeyRow(LANDSCAPE_ROW_HOME, rowH, settings, st, onClick)
@@ -221,6 +246,38 @@ private fun TwoColumnBody(
     rowH: Dp,
     fnH: Dp,
     onClick: (LandscapeKey) -> Unit,
+    rightColumnMode: LandscapeRightColumnMode,
+    onNumpadKey: ((Int, String) -> Unit)?,
+    onNumLockToggle: (() -> Unit)?,
+    showMediaRow: Boolean,
+    showNavRow: Boolean,
+    showOptionalRows: Boolean,
+    optionalRowOrder: List<LandscapeKeyboardOptionalRow>,
+) {
+    when (rightColumnMode) {
+        LandscapeRightColumnMode.NAV_CLUSTER -> TwoColumnNavBody(
+            st, settings, rowH, fnH, onClick,
+            showMediaRow, showNavRow, showOptionalRows, optionalRowOrder,
+        )
+        LandscapeRightColumnMode.NUMPAD -> TwoColumnNumpadBody(
+            st, settings, rowH, fnH, onClick, onNumpadKey, onNumLockToggle,
+            showMediaRow, showNavRow, showOptionalRows, optionalRowOrder,
+        )
+    }
+}
+
+// ── Right column = existing nav cluster ─────────────────────────────────────
+@Composable
+private fun TwoColumnNavBody(
+    st: LandscapeKbState,
+    settings: LandscapeKeyboardSettings,
+    rowH: Dp,
+    fnH: Dp,
+    onClick: (LandscapeKey) -> Unit,
+    showMediaRow: Boolean,
+    showNavRow: Boolean,
+    showOptionalRows: Boolean,
+    optionalRowOrder: List<LandscapeKeyboardOptionalRow>,
 ) {
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val (mainW, rightW) = when {
@@ -231,30 +288,45 @@ private fun TwoColumnBody(
     }
     val gap = 3.dp
 
-    // Function row + PrtSc/ScrLk/Pause
-    TwoColRow(mainW, rightW, gap,
+    // Optional rows — only above main keyboard (column 1)
+    if (showOptionalRows) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(gap),
+        ) {
+            Column(Modifier.weight(mainW)) {
+                optionalRowOrder.forEach { rowType ->
+                    when (rowType) {
+                        LandscapeKeyboardOptionalRow.MEDIA_ROW -> if (showMediaRow) {
+                            val mediaKeys = buildLandscapeMediaRow(settings)
+                            if (mediaKeys.isNotEmpty()) {
+                                LandscapeStyledKeyRow(mediaKeys, fnH, settings, st, onClick)
+                            }
+                        }
+                        LandscapeKeyboardOptionalRow.NAV_ROW -> if (showNavRow) {
+                            LandscapeStyledKeyRow(L_SHARED_ROW_NAV, fnH, settings, st, onClick)
+                        }
+                    }
+                }
+            }
+            // Right column empty above FN
+            Spacer(Modifier.weight(rightW))
+        }
+    }
+
+    TwoColRowWeighted(mainW, rightW, gap,
         left  = { LandscapeStyledKeyRow(L_ROW_FN_NO_DEL, fnH, settings, st, onClick) },
         right = { LandscapeStyledKeyRow(L_RIGHT_FN,      fnH, settings, st, onClick) })
-
-    HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
-
-    // Number row + Ins/Home/PgUp
-    TwoColRow(mainW, rightW, gap,
+    TwoColRowWeighted(mainW, rightW, gap,
         left  = { LandscapeStyledKeyRow(LANDSCAPE_ROW_NUM, rowH, settings, st, onClick) },
         right = { LandscapeStyledKeyRow(L_RIGHT_NUM,       rowH, settings, st, onClick) })
-
-    // QWERTY row + Del/End/PgDn
-    TwoColRow(mainW, rightW, gap,
+    TwoColRowWeighted(mainW, rightW, gap,
         left  = { LandscapeStyledKeyRow(LANDSCAPE_ROW_QWERTY, rowH, settings, st, onClick) },
         right = { LandscapeStyledKeyRow(L_RIGHT_QWERTY,       rowH, settings, st, onClick) })
-
-    // Home row + empty right
-    TwoColRow(mainW, rightW, gap,
+    TwoColRowWeighted(mainW, rightW, gap,
         left  = { LandscapeStyledKeyRow(LANDSCAPE_ROW_HOME, rowH, settings, st, onClick) },
         right = { Spacer(Modifier.fillMaxWidth().height(rowH)) })
-
-    // Alpha row + centered Up arrow
-    TwoColRow(mainW, rightW, gap,
+    TwoColRowWeighted(mainW, rightW, gap,
         left = { LandscapeStyledKeyRow(LANDSCAPE_ROW_ALPHA, rowH, settings, st, onClick) },
         right = {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -265,9 +337,7 @@ private fun TwoColumnBody(
                 Spacer(Modifier.weight(1f))
             }
         })
-
-    // Modifier row + ← ↓ →
-    TwoColRow(mainW, rightW, gap,
+    TwoColRowWeighted(mainW, rightW, gap,
         left = {
             LandscapeStyledKeyRow(
                 if (settings.compactModifiers) LANDSCAPE_ROW_MODS_COMPACT else LANDSCAPE_ROW_MODS,
@@ -275,6 +345,98 @@ private fun TwoColumnBody(
             )
         },
         right = { LandscapeStyledKeyRow(L_RIGHT_MODS, rowH, settings, st, onClick) })
+}
+
+// ── Right column = auto-width numpad (bottom-aligned, top empty) ────────────
+@Composable
+private fun TwoColumnNumpadBody(
+    st: LandscapeKbState,
+    settings: LandscapeKeyboardSettings,
+    rowH: Dp,
+    fnH: Dp,
+    onClick: (LandscapeKey) -> Unit,
+    onNumpadKey: ((Int, String) -> Unit)?,
+    onNumLockToggle: (() -> Unit)?,
+    showMediaRow: Boolean,
+    showNavRow: Boolean,
+    showOptionalRows: Boolean,
+    optionalRowOrder: List<LandscapeKeyboardOptionalRow>,
+) {
+    val gap = 3.dp
+
+    Row(
+        modifier = Modifier.fillMaxWidth().fillMaxHeight(),
+        horizontalArrangement = Arrangement.spacedBy(gap),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        // Main keyboard column — bottom-aligned
+        Column(
+            modifier = Modifier.weight(1f).fillMaxHeight(),
+            verticalArrangement = Arrangement.Bottom,
+        ) {
+            // Optional rows attached above FN — only in this column
+            if (showOptionalRows) {
+                optionalRowOrder.forEach { rowType ->
+                    when (rowType) {
+                        LandscapeKeyboardOptionalRow.MEDIA_ROW -> if (showMediaRow) {
+                            val mediaKeys = buildLandscapeMediaRow(settings)
+                            if (mediaKeys.isNotEmpty()) {
+                                LandscapeStyledKeyRow(mediaKeys, fnH, settings, st, onClick)
+                            }
+                        }
+                        LandscapeKeyboardOptionalRow.NAV_ROW -> if (showNavRow) {
+                            LandscapeStyledKeyRow(L_SHARED_ROW_NAV, fnH, settings, st, onClick)
+                        }
+                    }
+                }
+            }
+
+            LandscapeStyledKeyRow(L_ROW_FN_NO_DEL, fnH, settings, st, onClick)
+            LandscapeStyledKeyRow(LANDSCAPE_ROW_NUM, rowH, settings, st, onClick)
+            LandscapeStyledKeyRow(LANDSCAPE_ROW_QWERTY, rowH, settings, st, onClick)
+            LandscapeStyledKeyRow(LANDSCAPE_ROW_HOME, rowH, settings, st, onClick)
+            LandscapeStyledKeyRow(LANDSCAPE_ROW_ALPHA, rowH, settings, st, onClick)
+            LandscapeStyledKeyRow(
+                if (settings.compactModifiers) LANDSCAPE_ROW_MODS_COMPACT else LANDSCAPE_ROW_MODS,
+                rowH, settings, st, onClick
+            )
+        }
+
+        // Numpad column — bottom-aligned, top empty
+        Column(
+            modifier = Modifier.width(NUMPAD_TOTAL_WIDTH).fillMaxHeight(),
+            verticalArrangement = Arrangement.Bottom,
+        ) {
+            InlineNumpad(
+                cellW = NUMPAD_CELL_WIDTH,
+                cellH = rowH,
+                gap = NUMPAD_GAP,
+                numLock = st.numLock,
+                shift = st.shift,
+                settings = settings,
+                highContrast = settings.highContrastMode,
+                onKey = { code, label -> onNumpadKey?.invoke(code, label) },
+                onNumLock = { onNumLockToggle?.invoke() },
+            )
+        }
+    }
+}
+
+@Composable
+private fun TwoColRowWeighted(
+    mainWeight: Float,
+    rightWeight: Float,
+    gap: Dp,
+    left: @Composable () -> Unit,
+    right: @Composable () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(gap),
+    ) {
+        Box(Modifier.weight(mainWeight))  { left() }
+        Box(Modifier.weight(rightWeight)) { right() }
+    }
 }
 
 @Composable
@@ -345,18 +507,162 @@ private val L_SHARED_ROW_NAV = listOf(
 
 private fun buildLandscapeMediaRow(settings: LandscapeKeyboardSettings): List<LandscapeKey> {
     val list = mutableListOf<LandscapeKey>()
-    if (settings.mediaRowShowTransport) {
-        list.add(LandscapeKey("⏮", consumerCode = 0xB6, isConsumer = true, color = LandscapeKC.MEDIA))
-        list.add(LandscapeKey("⏯", consumerCode = 0xCD, isConsumer = true, color = LandscapeKC.MEDIA))
-        list.add(LandscapeKey("⏭", consumerCode = 0xB5, isConsumer = true, color = LandscapeKC.MEDIA))
+
+    settings.mediaRowGroupOrder.forEach { group ->
+        when (group) {
+            LandscapeMediaRowGroup.TRANSPORT -> if (settings.mediaRowShowTransport) {
+                list.add(LandscapeKey("⏮", consumerCode = 0xB6, isConsumer = true,
+                    color = LandscapeKC.MEDIA, noRepeat = true,
+                    mediaGroup = LandscapeMediaRowGroup.TRANSPORT))
+                list.add(LandscapeKey("⏯", consumerCode = 0xCD, isConsumer = true,
+                    color = LandscapeKC.MEDIA, noRepeat = true,
+                    mediaGroup = LandscapeMediaRowGroup.TRANSPORT))
+                list.add(LandscapeKey("⏹", consumerCode = 0xB7, isConsumer = true,
+                    color = LandscapeKC.MEDIA, noRepeat = true,
+                    mediaGroup = LandscapeMediaRowGroup.TRANSPORT))
+                list.add(LandscapeKey("⏭", consumerCode = 0xB5, isConsumer = true,
+                    color = LandscapeKC.MEDIA, noRepeat = true,
+                    mediaGroup = LandscapeMediaRowGroup.TRANSPORT))
+            }
+            LandscapeMediaRowGroup.VOLUME -> if (settings.mediaRowShowVolume) {
+                list.add(LandscapeKey("🔇", consumerCode = 0xE2, isConsumer = true,
+                    color = LandscapeKC.MEDIA,
+                    mediaGroup = LandscapeMediaRowGroup.VOLUME))
+                list.add(LandscapeKey("🔉", consumerCode = 0xEA, isConsumer = true,
+                    color = LandscapeKC.MEDIA,
+                    mediaGroup = LandscapeMediaRowGroup.VOLUME))
+                list.add(LandscapeKey("🔊", consumerCode = 0xE9, isConsumer = true,
+                    color = LandscapeKC.MEDIA,
+                    mediaGroup = LandscapeMediaRowGroup.VOLUME))
+            }
+            LandscapeMediaRowGroup.BRIGHTNESS -> if (settings.mediaRowShowBrightness) {
+                list.add(LandscapeKey("🔅", consumerCode = 0x0070, isConsumer = true,
+                    color = LandscapeKC.MEDIA,
+                    mediaGroup = LandscapeMediaRowGroup.BRIGHTNESS))
+                list.add(LandscapeKey("🔆", consumerCode = 0x006F, isConsumer = true,
+                    color = LandscapeKC.MEDIA,
+                    mediaGroup = LandscapeMediaRowGroup.BRIGHTNESS))
+            }
+        }
     }
-    if (settings.mediaRowShowVolume) {
-        list.add(LandscapeKey("🔉", consumerCode = 0xEA, isConsumer = true, color = LandscapeKC.MEDIA))
-        list.add(LandscapeKey("🔊", consumerCode = 0xE9, isConsumer = true, color = LandscapeKC.MEDIA))
-    }
-    if (settings.mediaRowShowBrightness) {
-        list.add(LandscapeKey("🔅", consumerCode = 0x0070, isConsumer = true, color = LandscapeKC.MEDIA))
-        list.add(LandscapeKey("🔆", consumerCode = 0x006F, isConsumer = true, color = LandscapeKC.MEDIA))
-    }
+
     return list.map { it.copy(w = 1f) }
+}
+
+@Composable
+private fun InlineNumpad(
+    cellW: Dp,
+    cellH: Dp,
+    gap: Dp,
+    numLock: Boolean,
+    shift: Boolean,
+    settings: LandscapeKeyboardSettings,
+    highContrast: Boolean,
+    onKey: (Int, String) -> Unit,
+    onNumLock: () -> Unit,
+) {
+    fun lbl(on: String, off: String): String {
+        val eff = if (shift) !numLock else numLock
+        return if (eff) on else off
+    }
+    fun top(on: String, off: String): String {
+        if (on == off) return ""
+        val eff = if (shift) !numLock else numLock
+        return if (eff) off else on
+    }
+
+    val tallH = cellH * 2 + gap
+
+    Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+        // Row: NumLk ÷ × −
+        Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+            NumCell("NumLk", w = cellW, h = cellH, active = numLock,
+                color = LandscapeKC.MOD, settings = settings, onTap = onNumLock)
+            NumCell("÷", w = cellW, h = cellH, color = LandscapeKC.SPECIAL,
+                settings = settings) { onKey(0x54, "/") }
+            NumCell("×", w = cellW, h = cellH, color = LandscapeKC.SPECIAL,
+                settings = settings) { onKey(0x55, "*") }
+            NumCell("−", w = cellW, h = cellH, color = LandscapeKC.SPECIAL,
+                settings = settings) { onKey(0x56, "-") }
+        }
+
+        // Rows 7/8/9 + tall +
+        Row(
+            modifier = Modifier.height(tallH),
+            horizontalArrangement = Arrangement.spacedBy(gap),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    NumCell(lbl("7","Home"), top("7","Home"), w = cellW, h = cellH,
+                        settings = settings) { onKey(0x5F, lbl("7","Home")) }
+                    NumCell(lbl("8","↑"), top("8","↑"), w = cellW, h = cellH,
+                        settings = settings) { onKey(0x60, lbl("8","↑")) }
+                    NumCell(lbl("9","PgUp"), top("9","PgUp"), w = cellW, h = cellH,
+                        settings = settings) { onKey(0x61, lbl("9","PgUp")) }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    NumCell(lbl("4","←"), top("4","←"), w = cellW, h = cellH,
+                        settings = settings) { onKey(0x5C, lbl("4","←")) }
+                    NumCell(lbl("5","·"), top("5","·"), w = cellW, h = cellH,
+                        settings = settings) { onKey(0x5D, lbl("5","·")) }
+                    NumCell(lbl("6","→"), top("6","→"), w = cellW, h = cellH,
+                        settings = settings) { onKey(0x5E, lbl("6","→")) }
+                }
+            }
+            NumCell("+", w = cellW, h = tallH, color = LandscapeKC.ACCENT,
+                settings = settings) { onKey(0x57, "+") }
+        }
+
+        // Rows 1/2/3/0/. + tall Enter
+        Row(
+            modifier = Modifier.height(tallH),
+            horizontalArrangement = Arrangement.spacedBy(gap),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    NumCell(lbl("1","End"), top("1","End"), w = cellW, h = cellH,
+                        settings = settings) { onKey(0x59, lbl("1","End")) }
+                    NumCell(lbl("2","↓"), top("2","↓"), w = cellW, h = cellH,
+                        settings = settings) { onKey(0x5A, lbl("2","↓")) }
+                    NumCell(lbl("3","PgDn"), top("3","PgDn"), w = cellW, h = cellH,
+                        settings = settings) { onKey(0x5B, lbl("3","PgDn")) }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    NumCell(lbl("0","Ins"), top("0","Ins"), w = cellW * 2 + gap, h = cellH,
+                        settings = settings) { onKey(0x62, lbl("0","Ins")) }
+                    NumCell(lbl(".","Del"), top(".","Del"), w = cellW, h = cellH,
+                        settings = settings) { onKey(0x63, lbl(".","Del")) }
+                }
+            }
+            NumCell("↵", w = cellW, h = tallH, color = LandscapeKC.ACCENT,
+                settings = settings) { onKey(0x58, "↵") }
+        }
+    }
+}
+
+@Composable
+private fun NumCell(
+    mainLabel: String,
+    topLabel: String = "",
+    w: Dp,
+    h: Dp,
+    color: LandscapeKC = LandscapeKC.NORMAL,
+    active: Boolean = false,
+    settings: LandscapeKeyboardSettings,
+    onTap: () -> Unit,
+) {
+    Box(modifier = Modifier.width(w)) {
+        com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.components
+            .LandscapeNumpadCell(
+                mainLabel = mainLabel,
+                topLabel  = topLabel,
+                color     = color,
+                isActive  = active,
+                modifier  = Modifier.fillMaxWidth(),
+                h         = h,
+                settings  = settings,
+                doRepeat  = true,
+                onTap     = onTap,
+            )
+    }
 }
