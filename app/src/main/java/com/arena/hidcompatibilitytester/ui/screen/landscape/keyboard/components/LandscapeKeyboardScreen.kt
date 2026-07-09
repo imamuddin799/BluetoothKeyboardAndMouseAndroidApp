@@ -1,11 +1,33 @@
 package com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.components.LandscapeKbStatusBar
+
+private const val TYPE_SENTINEL = "\u200B"
 
 @Composable
 fun LandscapeKeyboardScreen(
@@ -32,6 +54,9 @@ fun LandscapeKeyboardScreen(
     // Runtime right-column mode (session-only)
     var rightColumnMode by remember { mutableStateOf(LandscapeRightColumnMode.NAV_CLUSTER) }
 
+    // System keyboard mode (session-only)
+    var systemKeyboardActive by remember { mutableStateOf(false) }
+
     fun handleKeyPress(key: LandscapeKey) {
         st = landscapeHandleKeyPress(key, st, settings, scope, onSendKey) { st = it }
     }
@@ -57,7 +82,16 @@ fun LandscapeKeyboardScreen(
             hasOptionalRows = hasOptional,
             onClearMods = { st = st.releaseMods(); onSendKey(0, emptyList()) },
             onShowSettings = onShowSettings,
-            onToggleKeyboard = { showKeyboard = !showKeyboard },
+            onToggleKeyboard = {
+                if (systemKeyboardActive) {
+                    // Currently in system mode → switch to in-app mode
+                    systemKeyboardActive = false
+                    showKeyboard = true
+                } else {
+                    // Normal toggle: just show/hide in-app keyboard
+                    showKeyboard = !showKeyboard
+                }
+            },
             onToggleOptionalRows = { showOptionalRows = !showOptionalRows },
             currentLayoutMode = effectiveLayoutMode,
             onToggleLayoutMode = {
@@ -73,9 +107,27 @@ fun LandscapeKeyboardScreen(
                 else
                     LandscapeRightColumnMode.NAV_CLUSTER
             },
+            systemKeyboardActive = systemKeyboardActive,
+            onToggleSystemKeyboard = {
+                systemKeyboardActive = !systemKeyboardActive
+                if (systemKeyboardActive) {
+                    // Auto-hide in-app keyboard when switching to system mode
+                    showKeyboard = false
+                } else {
+                    // Auto-show in-app keyboard when returning
+                    showKeyboard = true
+                }
+            },
         )
 
-        if (showKeyboard) {
+        if (systemKeyboardActive) {
+            LandscapeSystemKeyboardBar(
+                onSendKey = onSendKey,
+                onReleaseKeys = onReleaseKeys,
+                onTypeText = onTypeText,
+            )
+            Spacer(Modifier.weight(1f))
+        } else if (showKeyboard) {
             LandscapeSharedCompactKeyboard(
                 st = st,
                 settings = settings,
@@ -91,5 +143,148 @@ fun LandscapeKeyboardScreen(
                 onNumLockToggle = ::handleNumLock,
             )
         }
+    }
+}
+
+@Composable
+private fun LandscapeSystemKeyboardBar(
+    onSendKey: (Int, List<Int>) -> Unit,
+    onReleaseKeys: () -> Unit,
+    onTypeText: (String) -> Unit,
+) {
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusRequester = remember { FocusRequester() }
+
+    var fieldValue by remember {
+        mutableStateOf(
+            TextFieldValue(
+                text = TYPE_SENTINEL,
+                selection = TextRange(TYPE_SENTINEL.length)
+            )
+        )
+    }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF0A1520))
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        OutlinedTextField(
+            value = fieldValue,
+            onValueChange = { newValue ->
+                val newRaw = newValue.text
+                val oldContent = fieldValue.text.removePrefix(TYPE_SENTINEL)
+                val newContent = newRaw.removePrefix(TYPE_SENTINEL)
+
+                when {
+                    // Sentinel deleted (user hit backspace when field appeared empty)
+                    !newRaw.startsWith(TYPE_SENTINEL) -> {
+                        // Send one backspace to host
+                        onSendKey(0, listOf(0x2A))
+                        onReleaseKeys()
+                        // Restore sentinel + any remaining content
+                        val remaining = if (oldContent.isNotEmpty()) oldContent.dropLast(1) else ""
+                        val restored = TYPE_SENTINEL + remaining
+                        fieldValue = TextFieldValue(
+                            text = restored,
+                            selection = TextRange(restored.length)
+                        )
+                    }
+
+                    // Character(s) added
+                    newContent.length > oldContent.length -> {
+                        val added = newContent.substring(oldContent.length)
+                        if (added.isNotEmpty()) onTypeText(added)
+                        // Keep the new content visible; move cursor to end
+                        fieldValue = TextFieldValue(
+                            text = TYPE_SENTINEL + newContent,
+                            selection = TextRange((TYPE_SENTINEL + newContent).length)
+                        )
+                    }
+
+                    // Character(s) deleted (backspace with visible content)
+                    newContent.length < oldContent.length -> {
+                        val deletedCount = oldContent.length - newContent.length
+                        repeat(deletedCount) {
+                            onSendKey(0, listOf(0x2A))
+                            onReleaseKeys()
+                        }
+                        fieldValue = TextFieldValue(
+                            text = TYPE_SENTINEL + newContent,
+                            selection = TextRange((TYPE_SENTINEL + newContent).length)
+                        )
+                    }
+
+                    // Same length (cursor moved) — snap cursor to end
+                    else -> {
+                        fieldValue = TextFieldValue(
+                            text = TYPE_SENTINEL + newContent,
+                            selection = TextRange((TYPE_SENTINEL + newContent).length)
+                        )
+                    }
+                }
+            },
+            modifier = Modifier
+                .weight(1f)
+                .focusRequester(focusRequester),
+            placeholder = {
+                Text("Type here…", color = Color.Gray, fontSize = 13.sp)
+            },
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedBorderColor = Color(0xFF4A90D9),
+                unfocusedBorderColor = Color.White.copy(0.2f),
+                cursorColor = Color(0xFF4A90D9),
+                focusedContainerColor = Color(0xFF111C28),
+                unfocusedContainerColor = Color(0xFF111C28),
+            ),
+            visualTransformation = LandscapeSentinelVisualTransformation(),
+        )
+
+        OutlinedButton(
+            onClick = {
+                // Clear visible field only — doesn't send anything to host
+                fieldValue = TextFieldValue(
+                    text = TYPE_SENTINEL,
+                    selection = TextRange(TYPE_SENTINEL.length)
+                )
+            },
+            border = BorderStroke(1.dp, Color.White.copy(0.3f)),
+            shape = RoundedCornerShape(6.dp),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+        ) {
+            Text("Clear", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+private class LandscapeSentinelVisualTransformation : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val sentinelLen = TYPE_SENTINEL.length
+        val filtered = if (text.text.startsWith(TYPE_SENTINEL)) {
+            text.text.removePrefix(TYPE_SENTINEL)
+        } else {
+            text.text
+        }
+        return TransformedText(
+            AnnotatedString(filtered),
+            object : OffsetMapping {
+                override fun originalToTransformed(offset: Int): Int =
+                    (offset - sentinelLen).coerceAtLeast(0)
+
+                override fun transformedToOriginal(offset: Int): Int =
+                    offset + sentinelLen
+            }
+        )
     }
 }

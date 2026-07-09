@@ -42,6 +42,8 @@ internal fun LandscapeKbStatusBar(
     currentLayoutMode: LandscapeLayoutMode,
     onToggleRightColumn: () -> Unit,
     currentRightColumn: LandscapeRightColumnMode,
+    onToggleSystemKeyboard: () -> Unit,
+    systemKeyboardActive: Boolean,
 ) {
     Column(
         modifier = Modifier
@@ -121,36 +123,52 @@ internal fun LandscapeKbStatusBar(
             Spacer(Modifier.width(4.dp))
 
             // ── 4. Action toggles ──────────────────────────────────────────
-            if (showKeyboard && hasOptionalRows) {
-                LandscapeStatusBarIconToggle(
-                    icon = "±",
-                    active = showOptionalRows,
-                    onClick = onToggleOptionalRows,
-                )
-            }
-
-            if (showKeyboard) {
-                LandscapeStatusBarIconToggle(
-                    icon = if (currentLayoutMode == LandscapeLayoutMode.TWO_COLUMN) "▥" else "▤",
-                    active = currentLayoutMode == LandscapeLayoutMode.TWO_COLUMN,
-                    onClick = onToggleLayoutMode,
-                )
-            }
-
-            // Right-column mode toggle — only meaningful in TWO_COLUMN
-            if (showKeyboard && currentLayoutMode == LandscapeLayoutMode.TWO_COLUMN) {
-                LandscapeStatusBarIconToggle(
-                    icon = if (currentRightColumn == LandscapeRightColumnMode.NUMPAD) "🔢" else "↕",
-                    active = currentRightColumn == LandscapeRightColumnMode.NUMPAD,
-                    onClick = onToggleRightColumn,
-                )
-            }
-
+            // System keyboard toggle — ALWAYS visible
             LandscapeStatusBarIconToggle(
-                icon = "⌨",
-                active = showKeyboard,
-                onClick = onToggleKeyboard,
+                icon = "📱",
+                active = systemKeyboardActive,
+                onClick = onToggleSystemKeyboard,
             )
+
+            if (systemKeyboardActive) {
+                // System mode: show only in-app keyboard toggle
+                LandscapeStatusBarIconToggle(
+                    icon = "⌨",
+                    active = showKeyboard,
+                    onClick = onToggleKeyboard,
+                )
+            } else {
+                // Normal mode: show all keyboard-related toggles
+                if (showKeyboard && hasOptionalRows) {
+                    LandscapeStatusBarIconToggle(
+                        icon = "±",
+                        active = showOptionalRows,
+                        onClick = onToggleOptionalRows,
+                    )
+                }
+
+                if (showKeyboard) {
+                    LandscapeStatusBarIconToggle(
+                        icon = if (currentLayoutMode == LandscapeLayoutMode.TWO_COLUMN) "▥" else "▤",
+                        active = currentLayoutMode == LandscapeLayoutMode.TWO_COLUMN,
+                        onClick = onToggleLayoutMode,
+                    )
+                }
+
+                if (showKeyboard && currentLayoutMode == LandscapeLayoutMode.TWO_COLUMN) {
+                    LandscapeStatusBarIconToggle(
+                        icon = if (currentRightColumn == LandscapeRightColumnMode.NUMPAD) "🔢" else "↕",
+                        active = currentRightColumn == LandscapeRightColumnMode.NUMPAD,
+                        onClick = onToggleRightColumn,
+                    )
+                }
+
+                LandscapeStatusBarIconToggle(
+                    icon = "⌨",
+                    active = showKeyboard,
+                    onClick = onToggleKeyboard,
+                )
+            }
 
             LandscapeToolbarIcon(icon = "⚙", onClick = onShowSettings)
         }
