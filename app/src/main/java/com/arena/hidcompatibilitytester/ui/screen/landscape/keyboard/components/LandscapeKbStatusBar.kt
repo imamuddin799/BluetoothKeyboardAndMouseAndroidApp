@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -21,9 +20,7 @@ import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeKb
 import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeLayoutMode
 import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeRightColumnMode
 
-// Fixed height for the whole status-bar row (prevents jumping when combo shows)
-// At the top of the file
-private val STATUS_BAR_ROW_HEIGHT = 28.dp   // was 22.dp
+private val STATUS_BAR_ROW_HEIGHT = 28.dp
 
 @Composable
 internal fun LandscapeKbStatusBar(
@@ -42,14 +39,14 @@ internal fun LandscapeKbStatusBar(
     currentLayoutMode: LandscapeLayoutMode,
     onToggleRightColumn: () -> Unit,
     currentRightColumn: LandscapeRightColumnMode,
-    onToggleSystemKeyboard: () -> Unit,
     systemKeyboardActive: Boolean,
+    onToggleSystemKeyboard: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color(0xFF050C14))
-            .padding(horizontal = 8.dp, vertical = 5.dp)   // was vertical = 3.dp
+            .padding(horizontal = 8.dp, vertical = 3.dp),
     ) {
         Row(
             modifier = Modifier
@@ -77,7 +74,7 @@ internal fun LandscapeKbStatusBar(
 
             Spacer(Modifier.width(6.dp))
 
-            // ── 2. Combo preview (inline, matched height) ──────────────────
+            // ── 2. Combo preview (inline) ──────────────────────────────────
             if (showComboPreview && (st.anyMod || st.lastKey.isNotEmpty())) {
                 val combo = st.modPrefix() + st.lastKey
                 Surface(
@@ -87,14 +84,14 @@ internal fun LandscapeKbStatusBar(
                     Text(
                         text = when {
                             st.anyMod && st.lastKey.isEmpty() ->
-                                "▶ ${st.modPrefix().trimEnd('+')}+ …waiting"
+                                "▶ ${st.modPrefix().trimEnd('+')}+ …"
                             combo.isEmpty() -> ""
                             else -> "⌨ $combo"
                         },
-                        fontSize = 11.sp,                                              // was 8.sp
+                        fontSize = 11.sp,
                         color = Color(0xFF90CAF9),
                         fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), // was 5/2
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
                         maxLines = 1,
                     )
                 }
@@ -103,9 +100,9 @@ internal fun LandscapeKbStatusBar(
                     Box(
                         modifier = Modifier
                             .clickable(onClick = onClearMods)
-                            .padding(horizontal = 6.dp, vertical = 2.dp),   // was 4/1
+                            .padding(horizontal = 4.dp, vertical = 1.dp),
                     ) {
-                        Text("✕", fontSize = 12.sp, color = Color(0xFFEF9A9A), maxLines = 1)  // was 10.sp
+                        Text("✕", fontSize = 12.sp, color = Color(0xFFEF9A9A), maxLines = 1)
                     }
                 }
             }
@@ -122,82 +119,61 @@ internal fun LandscapeKbStatusBar(
 
             Spacer(Modifier.width(4.dp))
 
-            // ── 4. Action toggles ──────────────────────────────────────────
-            // System keyboard toggle — ALWAYS visible
-            LandscapeStatusBarIconToggle(
+            // ── 4. Action toggles (using LandscapeToolbarIcon) ─────────────
+            // System keyboard — always visible
+            LandscapeToolbarIcon(
                 icon = "📱",
-                active = systemKeyboardActive,
                 onClick = onToggleSystemKeyboard,
+                active = systemKeyboardActive,
             )
+            Spacer(Modifier.width(2.dp))
 
             if (systemKeyboardActive) {
                 // System mode: show only in-app keyboard toggle
-                LandscapeStatusBarIconToggle(
+                LandscapeToolbarIcon(
                     icon = "⌨",
-                    active = showKeyboard,
                     onClick = onToggleKeyboard,
+                    active = showKeyboard,
                 )
+                Spacer(Modifier.width(2.dp))
             } else {
                 // Normal mode: show all keyboard-related toggles
                 if (showKeyboard && hasOptionalRows) {
-                    LandscapeStatusBarIconToggle(
+                    LandscapeToolbarIcon(
                         icon = "±",
-                        active = showOptionalRows,
                         onClick = onToggleOptionalRows,
+                        active = showOptionalRows,
                     )
+                    Spacer(Modifier.width(2.dp))
                 }
 
                 if (showKeyboard) {
-                    LandscapeStatusBarIconToggle(
+                    LandscapeToolbarIcon(
                         icon = if (currentLayoutMode == LandscapeLayoutMode.TWO_COLUMN) "▥" else "▤",
-                        active = currentLayoutMode == LandscapeLayoutMode.TWO_COLUMN,
                         onClick = onToggleLayoutMode,
+                        active = currentLayoutMode == LandscapeLayoutMode.TWO_COLUMN,
                     )
+                    Spacer(Modifier.width(2.dp))
                 }
 
                 if (showKeyboard && currentLayoutMode == LandscapeLayoutMode.TWO_COLUMN) {
-                    LandscapeStatusBarIconToggle(
+                    LandscapeToolbarIcon(
                         icon = if (currentRightColumn == LandscapeRightColumnMode.NUMPAD) "🔢" else "↕",
-                        active = currentRightColumn == LandscapeRightColumnMode.NUMPAD,
                         onClick = onToggleRightColumn,
+                        active = currentRightColumn == LandscapeRightColumnMode.NUMPAD,
                     )
+                    Spacer(Modifier.width(2.dp))
                 }
 
-                LandscapeStatusBarIconToggle(
+                LandscapeToolbarIcon(
                     icon = "⌨",
-                    active = showKeyboard,
                     onClick = onToggleKeyboard,
+                    active = showKeyboard,
                 )
+                Spacer(Modifier.width(2.dp))
             }
 
             LandscapeToolbarIcon(icon = "⚙", onClick = onShowSettings)
-        }
-    }
-}
-
-@Composable
-private fun LandscapeStatusBarIconToggle(
-    icon: String,
-    active: Boolean,
-    onClick: () -> Unit,
-) {
-    val bg by animateColorAsState(
-        targetValue = if (active) Color(0xFF1B5E20).copy(alpha = 0.7f) else Color.White.copy(alpha = 0.06f),
-        animationSpec = tween(150),
-        label = "lIconToggleBg",
-    )
-
-    val fg = if (active) Color(0xFF81C784) else Color.White.copy(0.45f)
-
-    Surface(color = bg, shape = RoundedCornerShape(3.dp)) {
-        Box(modifier = Modifier.clickable(onClick = onClick)) {
-            Text(
-                text = icon,
-                fontSize = 13.sp,                                              // was 11.sp
-                color = fg,
-                maxLines = 1,
-                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp), // was 5/2
-            )
         }
     }
 }

@@ -1,6 +1,5 @@
 package com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -22,10 +21,15 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeKbState
 import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeKeyboardSettings
+import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeLayoutMode
+import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeRightColumnMode
 import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeSharedCompactKeyboard
 import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.landscapeHandleKeyPress
+import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.landscapeHandleNumpadKey
+import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.landscapeHandleNumLockToggle
 
 private const val IME_SENTINEL = "\u200B"
 
@@ -49,12 +53,17 @@ fun LandscapeTrackpadScreen(
     var inAppKbVisible by remember { mutableStateOf(false) }
     var showOptionalRows by remember { mutableStateOf(true) }
 
+    // Trackpad-independent runtime overrides (session-scoped)
+    var layoutModeOverride by remember(settings.trackpadKbDefaultLayoutMode) {
+        mutableStateOf(settings.trackpadKbDefaultLayoutMode)
+    }
+    var rightColumnMode by remember(settings.trackpadKbDefaultRightColumn) {
+        mutableStateOf(settings.trackpadKbDefaultRightColumn)
+    }
+
     var hiddenText by remember {
         mutableStateOf(
-            TextFieldValue(
-                text = IME_SENTINEL,
-                selection = TextRange(IME_SENTINEL.length)
-            )
+            TextFieldValue(text = IME_SENTINEL, selection = TextRange(IME_SENTINEL.length))
         )
     }
     val focusRequester = remember { FocusRequester() }
@@ -70,10 +79,7 @@ fun LandscapeTrackpadScreen(
     )
 
     fun resetHiddenText() {
-        hiddenText = TextFieldValue(
-            text = IME_SENTINEL,
-            selection = TextRange(IME_SENTINEL.length)
-        )
+        hiddenText = TextFieldValue(text = IME_SENTINEL, selection = TextRange(IME_SENTINEL.length))
     }
 
     fun sendBackspaceTap() {
@@ -109,6 +115,28 @@ fun LandscapeTrackpadScreen(
         }
     }
 
+    fun handleKbKeyPress(key: com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeKey) {
+        kbSt = landscapeHandleKeyPress(
+            key = key,
+            st = currentKbSt,
+            settings = currentKbSettings,
+            scope = kbScope,
+            onSendKey = onSendKey,
+            onDelayedStateUpdate = { delayedSt -> kbSt = delayedSt }
+        )
+    }
+
+    fun handleNumpadKey(code: Int, label: String) {
+        kbSt = landscapeHandleNumpadKey(code, label, kbSt, currentKbSettings, kbScope, onSendKey) { kbSt = it }
+    }
+
+    fun handleNumLock() {
+        kbSt = landscapeHandleNumLockToggle(kbSt, kbScope, onSendKey)
+    }
+
+    val hasOptionalRows = keyboardSettings.showMediaRowInTrackpad() ||
+                          keyboardSettings.showNavRowInTrackpad()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -124,9 +152,29 @@ fun LandscapeTrackpadScreen(
             systemKbVisible = systemKbVisible,
             inAppKbVisible = inAppKbVisible,
             showOptionalRows = showOptionalRows,
-            hasOptionalRows = keyboardSettings.showMediaRowInTrackpad() || keyboardSettings.showNavRowInTrackpad(),
+            hasOptionalRows = hasOptionalRows,
+            kbState = kbSt,
+            currentLayoutMode = layoutModeOverride,
+            currentRightColumn = rightColumnMode,
+            onToggleLayoutMode = {
+                layoutModeOverride = if (layoutModeOverride == LandscapeLayoutMode.SINGLE_COLUMN)
+                    LandscapeLayoutMode.TWO_COLUMN
+                else
+                    LandscapeLayoutMode.SINGLE_COLUMN
+            },
+            onToggleRightColumn = {
+                rightColumnMode = if (rightColumnMode == LandscapeRightColumnMode.NAV_CLUSTER)
+                    LandscapeRightColumnMode.NUMPAD
+                else
+                    LandscapeRightColumnMode.NAV_CLUSTER
+            },
+            onClearMods = {
+                kbSt = kbSt.releaseMods().copy(lastKey = "")
+                onSendKey(0, emptyList())
+            },
         )
 
+        // Hidden IME field for system keyboard
         BasicTextField(
             value = hiddenText,
             onValueChange = { newValue ->
@@ -136,9 +184,7 @@ fun LandscapeTrackpadScreen(
                         val added = newText.removePrefix(IME_SENTINEL)
                         if (added.isNotEmpty()) onTypeText(added)
                     }
-                    newText.length < IME_SENTINEL.length -> {
-                        sendBackspaceTap()
-                    }
+                    newText.length < IME_SENTINEL.length -> sendBackspaceTap()
                 }
                 resetHiddenText()
             },
@@ -152,57 +198,58 @@ fun LandscapeTrackpadScreen(
         if (!isReady) {
             LandscapeTrackpadNotReadyCard()
         } else {
-            LandscapeTrackpadSurface(
-                modifier = Modifier.weight(1f),
-                settings = settings,
-                onSendMouse = onSendMouse,
-                physHoldActive = physHoldActive
-            )
-
-            LandscapeTrackpadClickButtons(
-                onSendMouse = onSendMouse,
-                physHoldActive = physHoldActive
-            )
-
-            AnimatedVisibility(
-                visible = inAppKbVisible,
-                enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
-                exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut(),
-            ) {
-                Column {
-                    LandscapeSharedCompactKeyboard(
-                        st = kbSt,
-                        settings = keyboardSettings,
-                        showDismissBar = true,
-                        showMediaRow = keyboardSettings.showMediaRowInTrackpad(),
-                        showNavRow = keyboardSettings.showNavRowInTrackpad(),
-                        showOptionalRows = showOptionalRows,
-                        optionalRowOrder = optionalRowOrder,
-                        showComboPreview = false,
-                        onKeyPress = { key ->
-                            kbSt = landscapeHandleKeyPress(
-                                key = key,
-                                st = currentKbSt,
-                                settings = currentKbSettings,
-                                scope = kbScope,
-                                onSendKey = onSendKey,
-                                onDelayedStateUpdate = { delayedSt -> kbSt = delayedSt }
-                            )
-                        },
-                        onConsumerKey = onConsumerKey,
-                        onClearMods = {
-                            kbSt = kbSt.releaseMods().copy(lastKey = "")
-                            onSendKey(0, emptyList())
-                        },
-                        onDismiss = { inAppKbVisible = false },
+            // Trackpad + keyboard overlay
+            Box(modifier = Modifier.fillMaxSize()) {
+                // Trackpad — always full size, never shifts
+                Column(modifier = Modifier.fillMaxSize()) {
+                    LandscapeTrackpadSurface(
+                        modifier = Modifier.weight(1f),
+                        settings = settings,
+                        onSendMouse = onSendMouse,
+                        physHoldActive = physHoldActive
                     )
-
-                    Spacer(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(8.dp)
-                            .background(Color(0xFF080F18))
+                    LandscapeTrackpadClickButtons(
+                        onSendMouse = onSendMouse,
+                        physHoldActive = physHoldActive
                     )
+                }
+
+                // In-app keyboard overlay — natural height, sits at bottom
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = inAppKbVisible,
+                    enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
+                    exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut(),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxSize()
+                        .zIndex(10f),
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.BottomCenter,
+                    ) {
+                        LandscapeSharedCompactKeyboard(
+                            st = kbSt,
+                            settings = keyboardSettings,
+                            showDismissBar = true,
+                            showMediaRow = keyboardSettings.showMediaRowInTrackpad(),
+                            showNavRow = keyboardSettings.showNavRowInTrackpad(),
+                            showOptionalRows = showOptionalRows,
+                            optionalRowOrder = optionalRowOrder,
+                            showComboPreview = false,
+                            layoutMode = layoutModeOverride,
+                            rightColumnMode = rightColumnMode,
+                            onKeyPress = ::handleKbKeyPress,
+                            onConsumerKey = onConsumerKey,
+                            onClearMods = {
+                                kbSt = kbSt.releaseMods().copy(lastKey = "")
+                                onSendKey(0, emptyList())
+                            },
+                            onNumpadKey = ::handleNumpadKey,
+                            onNumLockToggle = ::handleNumLock,
+                            onDismiss = { inAppKbVisible = false },
+                        )
+                    }
                 }
             }
         }

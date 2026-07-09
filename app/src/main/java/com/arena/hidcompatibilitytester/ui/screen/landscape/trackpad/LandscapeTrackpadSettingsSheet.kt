@@ -176,11 +176,57 @@ private fun LandscapeKeyboardSection(
     onChange: (LandscapeTrackpadSettings) -> Unit,
 ) {
     LandscapeSettingsCard("Keyboard Overlays", spacing) {
-        LandscapeSettingsToggle("System Keyboard  🌐", "Show toggle button for Android system keyboard — typed text is sent to host", settings.showSystemKeyboard) {
+        LandscapeSettingsToggle("System Keyboard  📱", "Show toggle button for Android system keyboard — typed text is sent to host", settings.showSystemKeyboard) {
             onChange(settings.copy(showSystemKeyboard = it))
         }
         LandscapeSettingsToggle("In-App Keyboard  ⌨", "Show toggle button for built-in HID keyboard overlay", settings.showInAppKeyboard) {
             onChange(settings.copy(showInAppKeyboard = it))
+        }
+    }
+
+    LandscapeSettingsCard("In-App Keyboard Defaults", spacing) {
+        Text(
+            "These control the initial state of toggles when the trackpad's in-app keyboard opens. Session-only changes made from the status bar don't persist.",
+            fontSize = 11.sp, color = Color(0xFF607D8B), lineHeight = 14.sp,
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Default Layout Mode", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = Color.White)
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(spacing.chipSpacing)
+            ) {
+                com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeLayoutMode.entries.forEach { mode ->
+                    val sel = settings.trackpadKbDefaultLayoutMode == mode
+                    LandscapeSettingsChoiceButton(mode.label, sel, Modifier.widthIn(min = spacing.chipMinWidth)) {
+                        onChange(settings.copy(trackpadKbDefaultLayoutMode = mode))
+                    }
+                }
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Default Right Column", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = Color.White)
+            Text("Applies only when Two Column layout is active", fontSize = 11.sp, color = Color(0xFF607D8B))
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(spacing.chipSpacing)
+            ) {
+                com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeRightColumnMode.entries.forEach { mode ->
+                    val sel = settings.trackpadKbDefaultRightColumn == mode
+                    LandscapeSettingsChoiceButton(mode.label, sel, Modifier.widthIn(min = spacing.chipMinWidth)) {
+                        onChange(settings.copy(trackpadKbDefaultRightColumn = mode))
+                    }
+                }
+            }
+        }
+
+        LandscapeSettingsToggle(
+            "Show Combo Preview",
+            "Show mod+key combo next to LED indicators",
+            settings.trackpadKbShowComboPreview
+        ) {
+            onChange(settings.copy(trackpadKbShowComboPreview = it))
         }
     }
 }

@@ -4,8 +4,6 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -19,32 +17,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.components.LandscapeKBtn
 
-// Total rows in a full layout: media/nav (up to 2) + fn + num + qwerty + home + alpha + mods
-// We compute the shrink factor based on the actual visible row count.
-private fun computeShrinkFactor(
-    availableHeightDp: Float,
-    rowH: Float,
-    fnH: Float,
-    normalRows: Int,
-    fnRows: Int,
-    verticalGapDp: Float,
-): Float {
-    val totalGaps = (normalRows + fnRows - 1).coerceAtLeast(0) * verticalGapDp
-    val required = normalRows * rowH + fnRows * fnH + totalGaps
-    return if (required <= availableHeightDp) 1f
-    else (availableHeightDp / required).coerceIn(0.5f, 1f)
-}
+// ─── Numpad constants ────────────────────────────────────────────────────────
 
-// ─── Two-column layout row definitions ───────────────────────────────────────
-
-// Numpad cell size (drives auto-width column)
 private val NUMPAD_CELL_WIDTH = 48.dp
 private val NUMPAD_GAP = 0.dp
-private const val NUMPAD_COLUMNS = 4  // NumLk ÷ × −
+private const val NUMPAD_COLUMNS = 4
 private val NUMPAD_TOTAL_WIDTH =
     NUMPAD_CELL_WIDTH * NUMPAD_COLUMNS +
     NUMPAD_GAP * (NUMPAD_COLUMNS - 1) +
-    8.dp   // small breathing room
+    8.dp
+
+// ─── Two-column layout row definitions ───────────────────────────────────────
 
 private val L_ROW_FN_NO_DEL = listOf(
     LandscapeKey("Esc", code = 0x29, w = 1.4f, color = LandscapeKC.DANGER, noRepeat = true),
@@ -100,13 +83,13 @@ fun LandscapeSharedCompactKeyboard(
         LandscapeKeyboardOptionalRow.NAV_ROW,
     ),
     layoutMode: LandscapeLayoutMode = LandscapeLayoutMode.SINGLE_COLUMN,
-    rightColumnMode: LandscapeRightColumnMode = LandscapeRightColumnMode.NAV_CLUSTER,   // NEW
+    rightColumnMode: LandscapeRightColumnMode = LandscapeRightColumnMode.NAV_CLUSTER,
     onKeyPress: (LandscapeKey) -> Unit,
     onConsumerKey: ((Int) -> Unit)? = null,
     onClearMods: (() -> Unit)? = null,
     onDismiss: (() -> Unit)? = null,
-    onNumpadKey: ((Int, String) -> Unit)? = null,   // NEW
-    onNumLockToggle: (() -> Unit)? = null,          // NEW
+    onNumpadKey: ((Int, String) -> Unit)? = null,
+    onNumLockToggle: (() -> Unit)? = null,
 ) {
     fun handleKeyClick(k: LandscapeKey) {
         if (k.isConsumer && onConsumerKey != null) {
@@ -116,161 +99,170 @@ fun LandscapeSharedCompactKeyboard(
         }
     }
 
-    val rowH = settings.keyHeight.mainDp.dp
-    val fnH = settings.keyHeight.fnDp.dp
+    // Compute natural body height for outer decision
+    val mediaKeysBuilt = buildLandscapeMediaRow(settings)
+    val optionalCount = if (showOptionalRows) {
+        var c = 0
+        optionalRowOrder.forEach {
+            when (it) {
+                LandscapeKeyboardOptionalRow.MEDIA_ROW ->
+                    if (showMediaRow && mediaKeysBuilt.isNotEmpty()) c++
+                LandscapeKeyboardOptionalRow.NAV_ROW ->
+                    if (showNavRow) c++
+            }
+        }
+        c
+    } else 0
 
-    Column(
+    val normalRows = 5
+    val fnRows = 1 + optionalCount
+    val rowHf = settings.keyHeight.mainDp.toFloat()
+    val fnHf  = settings.keyHeight.fnDp.toFloat()
+    val gapDp = 2f
+    val bodyNatural = normalRows * rowHf + fnRows * fnHf +
+                      (normalRows + fnRows - 1).coerceAtLeast(0) * gapDp
+
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
-            .fillMaxHeight()
-            .background(Color(0xFF080F18))
-            .padding(horizontal = 3.dp),   // slightly wider outer breathing
-        verticalArrangement = Arrangement.Bottom,
+            .fillMaxHeight(),
+        contentAlignment = Alignment.BottomStart,
     ) {
-        // ── Dismiss bar ────────────────────────────────────────────────────
-        if (showDismissBar) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF050C14))
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Keyboard", fontSize = 10.sp,
-                    color = Color(0xFF607D8B), fontWeight = FontWeight.SemiBold)
-                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    if (st.caps) LandscapeSharedMiniLed("CAP")
-                    if (st.shift) LandscapeSharedMiniLed("SHF")
-                    if (st.ctrl) LandscapeSharedMiniLed("CTL")
-                    if (st.alt) LandscapeSharedMiniLed("ALT")
-                    if (st.gui) LandscapeSharedMiniLed("WIN")
-                }
-                IconButton(onClick = { onDismiss?.invoke() }, modifier = Modifier.size(24.dp)) {
-                    Text("✕", fontSize = 12.sp, color = Color(0xFFEF9A9A))
-                }
-            }
-            HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
-        }
+        val availableDp = if (maxHeight == Dp.Infinity) Float.POSITIVE_INFINITY
+                          else maxHeight.value
 
-        // ── Combo preview ──────────────────────────────────────────────────
-        if (showComboPreview && (st.anyMod || st.lastKey.isNotEmpty())) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF050C14))
-                    .padding(horizontal = 8.dp, vertical = 3.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                val combo = st.modPrefix() + st.lastKey
-                Surface(color = Color(0xFF0A1828), shape = RoundedCornerShape(5.dp),
-                        modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = when {
-                            st.anyMod && st.lastKey.isEmpty() ->
-                                "▶ ${st.modPrefix().trimEnd('+')}+ …waiting"
-                            combo.isEmpty() -> "Ready…"
-                            else -> "⌨ $combo"
-                        },
-                        fontSize = 11.sp,
-                        color = if (combo.isEmpty()) Color(0xFF546E7A) else Color(0xFF90CAF9),
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        maxLines = 1
-                    )
-                }
-                if (st.anyMod && onClearMods != null) {
-                    TextButton(onClick = onClearMods,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)) {
-                        Text("✕ Clear", fontSize = 10.sp, color = Color(0xFFEF9A9A), maxLines = 1)
-                    }
-                }
-            }
-            HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
-        }
+        // Rough overhead estimate — only used to decide whether to fill height
+        val dismissBarH = if (showDismissBar) 29f else 0f
+        val comboBarH = if (showComboPreview && (st.anyMod || st.lastKey.isNotEmpty())) 26f else 0f
+        val overhead = dismissBarH + comboBarH
 
-        // ── Body: pick layout ──────────────────────────────────────────────
-        BoxWithConstraints(
+        val totalNatural = bodyNatural + overhead
+        val fillHeight = availableDp.isFinite() && totalNatural > availableDp
+
+        Column(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
+                .then(if (fillHeight) Modifier.fillMaxHeight() else Modifier)
                 .background(Color(0xFF080F18))
-                .padding(horizontal = 4.dp),
-            contentAlignment = Alignment.BottomStart,
+                .padding(horizontal = 3.dp),
         ) {
-            val availableDp = maxHeight.value
-            val gapDp = 2f
-
-            // Count visible optional rows
-            val mediaKeysBuilt = buildLandscapeMediaRow(settings)
-            val optionalCount = if (showOptionalRows) {
-                var c = 0
-                optionalRowOrder.forEach {
-                    when (it) {
-                        LandscapeKeyboardOptionalRow.MEDIA_ROW -> if (showMediaRow && mediaKeysBuilt.isNotEmpty()) c++
-                        LandscapeKeyboardOptionalRow.NAV_ROW   -> if (showNavRow) c++
+            // ── Dismiss bar (natural height) ───────────────────────────────
+            if (showDismissBar) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF050C14))
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Keyboard", fontSize = 10.sp,
+                        color = Color(0xFF607D8B), fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        if (st.caps) LandscapeSharedMiniLed("CAP")
+                        if (st.shift) LandscapeSharedMiniLed("SHF")
+                        if (st.ctrl) LandscapeSharedMiniLed("CTL")
+                        if (st.alt) LandscapeSharedMiniLed("ALT")
+                        if (st.gui) LandscapeSharedMiniLed("WIN")
+                    }
+                    IconButton(onClick = { onDismiss?.invoke() }, modifier = Modifier.size(24.dp)) {
+                        Text("✕", fontSize = 12.sp, color = Color(0xFFEF9A9A))
                     }
                 }
-                c
-            } else 0
+                HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
+            }
 
-            // Rows: 5 normal + (1 fn + optionalCount fn-height rows)
-            // Reserve space for dismiss bar (~26dp) and combo bar (~24dp) if visible
-            var reserved = 0f
-            if (showDismissBar) reserved += 26f
-            if (showComboPreview && (st.anyMod || st.lastKey.isNotEmpty())) reserved += 24f
+            // ── Combo preview (natural height) ─────────────────────────────
+            if (showComboPreview && (st.anyMod || st.lastKey.isNotEmpty())) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF050C14))
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    val combo = st.modPrefix() + st.lastKey
+                    Surface(color = Color(0xFF0A1828), shape = RoundedCornerShape(5.dp),
+                            modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = when {
+                                st.anyMod && st.lastKey.isEmpty() ->
+                                    "▶ ${st.modPrefix().trimEnd('+')}+ …waiting"
+                                combo.isEmpty() -> "Ready…"
+                                else -> "⌨ $combo"
+                            },
+                            fontSize = 11.sp,
+                            color = if (combo.isEmpty()) Color(0xFF546E7A) else Color(0xFF90CAF9),
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            maxLines = 1
+                        )
+                    }
+                    if (st.anyMod && onClearMods != null) {
+                        TextButton(onClick = onClearMods,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)) {
+                            Text("✕ Clear", fontSize = 10.sp, color = Color(0xFFEF9A9A), maxLines = 1)
+                        }
+                    }
+                }
+                HorizontalDivider(color = Color.White.copy(0.04f), thickness = 1.dp)
+            }
 
-            val usableDp = (availableDp - reserved).coerceAtLeast(50f)
-
-            val normalRows = 5
-            val fnRows = 1 + optionalCount
-
-            val rowHf = settings.keyHeight.mainDp.toFloat()
-            val fnHf  = settings.keyHeight.fnDp.toFloat()
-
-            val shrink = computeShrinkFactor(usableDp, rowHf, fnHf, normalRows, fnRows, gapDp)
-
-            val effRowH = (rowHf * shrink).dp
-            val effFnH  = (fnHf  * shrink).dp
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.Bottom,
+            // ── Body — takes exact remaining space via weight when filling ─
+            Box(
+                modifier = if (fillHeight) Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                else Modifier.fillMaxWidth()
             ) {
-                // Dismiss bar
-                if (showDismissBar) {
-                    // … your existing dismiss-bar Row …
-                }
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (fillHeight) Modifier.fillMaxHeight() else Modifier),
+                    contentAlignment = if (fillHeight) Alignment.BottomStart else Alignment.TopStart,
+                ) {
+                    val actualBodyDp = if (maxHeight == Dp.Infinity) Float.POSITIVE_INFINITY
+                                    else maxHeight.value
 
-                // Combo preview bar
-                if (showComboPreview && (st.anyMod || st.lastKey.isNotEmpty())) {
-                    // … your existing combo preview Row …
-                }
+                    val effRowH: Dp
+                    val effFnH: Dp
+                    if (actualBodyDp.isFinite() && actualBodyDp < bodyNatural) {
+                        val shrink = (actualBodyDp / bodyNatural).coerceIn(0.5f, 1f)
+                        effRowH = (rowHf * shrink).dp
+                        effFnH  = (fnHf  * shrink).dp
+                    } else {
+                        effRowH = rowHf.dp
+                        effFnH  = fnHf.dp
+                    }
 
-                when (layoutMode) {
-                    LandscapeLayoutMode.SINGLE_COLUMN ->
-                        SingleColumnBody(
-                            st, settings, effRowH, effFnH, ::handleKeyClick,
-                            showMediaRow, showNavRow, showOptionalRows, optionalRowOrder,
-                        )
-                    LandscapeLayoutMode.TWO_COLUMN ->
-                        TwoColumnBody(
-                            st, settings, effRowH, effFnH, ::handleKeyClick,
-                            rightColumnMode = rightColumnMode,
-                            onNumpadKey = onNumpadKey,
-                            onNumLockToggle = onNumLockToggle,
-                            showMediaRow = showMediaRow,
-                            showNavRow = showNavRow,
-                            showOptionalRows = showOptionalRows,
-                            optionalRowOrder = optionalRowOrder,
-                        )
+                    Column(Modifier.fillMaxWidth()) {
+                        when (layoutMode) {
+                            LandscapeLayoutMode.SINGLE_COLUMN ->
+                                SingleColumnBody(
+                                    st, settings, effRowH, effFnH, ::handleKeyClick,
+                                    showMediaRow, showNavRow, showOptionalRows, optionalRowOrder,
+                                )
+                            LandscapeLayoutMode.TWO_COLUMN ->
+                                TwoColumnBody(
+                                    st, settings, effRowH, effFnH, ::handleKeyClick,
+                                    rightColumnMode = rightColumnMode,
+                                    onNumpadKey = onNumpadKey,
+                                    onNumLockToggle = onNumLockToggle,
+                                    showMediaRow = showMediaRow,
+                                    showNavRow = showNavRow,
+                                    showOptionalRows = showOptionalRows,
+                                    optionalRowOrder = optionalRowOrder,
+                                )
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-// ─── Layout A: Single column (original) ──────────────────────────────────────
+// ─── Layout A: Single column ─────────────────────────────────────────────────
 
 @Composable
 private fun SingleColumnBody(
@@ -284,7 +276,6 @@ private fun SingleColumnBody(
     showOptionalRows: Boolean,
     optionalRowOrder: List<LandscapeKeyboardOptionalRow>,
 ) {
-    // Optional rows — attached directly above FN
     if (showOptionalRows) {
         optionalRowOrder.forEach { rowType ->
             when (rowType) {
@@ -312,7 +303,7 @@ private fun SingleColumnBody(
     )
 }
 
-// ─── Layout B: Two column (responsive) ───────────────────────────────────────
+// ─── Layout B: Two column ────────────────────────────────────────────────────
 
 @Composable
 private fun TwoColumnBody(
@@ -341,7 +332,7 @@ private fun TwoColumnBody(
     }
 }
 
-// ── Right column = existing nav cluster ─────────────────────────────────────
+// ── Right column = nav cluster ──────────────────────────────────────────────
 @Composable
 private fun TwoColumnNavBody(
     st: LandscapeKbState,
@@ -363,7 +354,6 @@ private fun TwoColumnNavBody(
     }
     val gap = 3.dp
 
-    // Optional rows — only above main keyboard (column 1)
     if (showOptionalRows) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -384,7 +374,6 @@ private fun TwoColumnNavBody(
                     }
                 }
             }
-            // Right column empty above FN
             Spacer(Modifier.weight(rightW))
         }
     }
@@ -422,7 +411,7 @@ private fun TwoColumnNavBody(
         right = { LandscapeStyledKeyRow(L_RIGHT_MODS, rowH, settings, st, onClick) })
 }
 
-// ── Right column = auto-width numpad (bottom-aligned, top empty) ────────────
+// ── Right column = numpad ───────────────────────────────────────────────────
 @Composable
 private fun TwoColumnNumpadBody(
     st: LandscapeKbState,
@@ -440,16 +429,11 @@ private fun TwoColumnNumpadBody(
     val gap = 3.dp
 
     Row(
-        modifier = Modifier.fillMaxWidth().fillMaxHeight(),
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(gap),
         verticalAlignment = Alignment.Bottom,
     ) {
-        // Main keyboard column — bottom-aligned
-        Column(
-            modifier = Modifier.weight(1f).fillMaxHeight(),
-            verticalArrangement = Arrangement.Bottom,
-        ) {
-            // Optional rows attached above FN — only in this column
+        Column(modifier = Modifier.weight(1f)) {
             if (showOptionalRows) {
                 optionalRowOrder.forEach { rowType ->
                     when (rowType) {
@@ -477,13 +461,7 @@ private fun TwoColumnNumpadBody(
             )
         }
 
-        // Numpad column — bottom-aligned, top empty
-        // Numpad column — bottom-aligned to match main keyboard bottom
-        Column(
-            modifier = Modifier.width(NUMPAD_TOTAL_WIDTH).fillMaxHeight(),
-        ) {
-            Spacer(Modifier.weight(1f))   // pushes numpad to the bottom
-
+        Column(modifier = Modifier.width(NUMPAD_TOTAL_WIDTH)) {
             InlineNumpad(
                 cellW = NUMPAD_CELL_WIDTH,
                 cellH = rowH,
@@ -501,23 +479,6 @@ private fun TwoColumnNumpadBody(
 
 @Composable
 private fun TwoColRowWeighted(
-    mainWeight: Float,
-    rightWeight: Float,
-    gap: Dp,
-    left: @Composable () -> Unit,
-    right: @Composable () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(gap),
-    ) {
-        Box(Modifier.weight(mainWeight))  { left() }
-        Box(Modifier.weight(rightWeight)) { right() }
-    }
-}
-
-@Composable
-private fun TwoColRow(
     mainWeight: Float,
     rightWeight: Float,
     gap: Dp,
@@ -651,7 +612,6 @@ private fun InlineNumpad(
     val tallH = cellH * 2 + gap
 
     Column(verticalArrangement = Arrangement.spacedBy(gap)) {
-        // Row: NumLk ÷ × −
         Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
             NumCell("NumLk", w = cellW, h = cellH, active = numLock,
                 color = LandscapeKC.MOD, settings = settings, onTap = onNumLock)
@@ -663,7 +623,6 @@ private fun InlineNumpad(
                 settings = settings) { onKey(0x56, "-") }
         }
 
-        // Rows 7/8/9 + tall +
         Row(
             modifier = Modifier.height(tallH),
             horizontalArrangement = Arrangement.spacedBy(gap),
@@ -690,7 +649,6 @@ private fun InlineNumpad(
                 settings = settings) { onKey(0x57, "+") }
         }
 
-        // Rows 1/2/3/0/. + tall Enter
         Row(
             modifier = Modifier.height(tallH),
             horizontalArrangement = Arrangement.spacedBy(gap),

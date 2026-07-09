@@ -2,6 +2,8 @@ package com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeLayoutMode
+import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeRightColumnMode
 
 object LandscapeTrackpadSettingsStore {
     private const val PREFS = "landscape_trackpad_settings"
@@ -25,6 +27,9 @@ object LandscapeTrackpadSettingsStore {
             .putBoolean("show_scroll", s.showScrollStrip)
             .putBoolean("show_system_kb", s.showSystemKeyboard)
             .putBoolean("show_inapp_kb", s.showInAppKeyboard)
+            .putString("tp_kb_layout_mode", s.trackpadKbDefaultLayoutMode.name)
+            .putString("tp_kb_right_column", s.trackpadKbDefaultRightColumn.name)
+            .putBoolean("tp_kb_show_combo", s.trackpadKbShowComboPreview)
             .commit()
     }
 
@@ -55,6 +60,9 @@ object LandscapeTrackpadSettingsStore {
             showScrollStrip = p.getBoolean("show_scroll", true),
             showSystemKeyboard = p.getBoolean("show_system_kb", true),
             showInAppKeyboard = p.getBoolean("show_inapp_kb", true),
+            trackpadKbDefaultLayoutMode = safeEnum(p.getString("tp_kb_layout_mode", null), LandscapeLayoutMode.TWO_COLUMN),
+            trackpadKbDefaultRightColumn = safeEnum(p.getString("tp_kb_right_column", null), LandscapeRightColumnMode.NAV_CLUSTER),
+            trackpadKbShowComboPreview = p.getBoolean("tp_kb_show_combo", true),
         )
     }
 

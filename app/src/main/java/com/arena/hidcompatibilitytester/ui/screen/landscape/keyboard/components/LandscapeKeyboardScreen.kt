@@ -45,16 +45,13 @@ fun LandscapeKeyboardScreen(
     var showOptionalRows by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
 
-    // Runtime layout override (session-only)
     var layoutModeOverride by remember(settings.landscapeLayoutMode) {
         mutableStateOf<LandscapeLayoutMode?>(null)
     }
     val effectiveLayoutMode = layoutModeOverride ?: settings.landscapeLayoutMode
 
-    // Runtime right-column mode (session-only)
     var rightColumnMode by remember { mutableStateOf(LandscapeRightColumnMode.NAV_CLUSTER) }
 
-    // System keyboard mode (session-only)
     var systemKeyboardActive by remember { mutableStateOf(false) }
 
     fun handleKeyPress(key: LandscapeKey) {
@@ -84,11 +81,9 @@ fun LandscapeKeyboardScreen(
             onShowSettings = onShowSettings,
             onToggleKeyboard = {
                 if (systemKeyboardActive) {
-                    // Currently in system mode → switch to in-app mode
                     systemKeyboardActive = false
                     showKeyboard = true
                 } else {
-                    // Normal toggle: just show/hide in-app keyboard
                     showKeyboard = !showKeyboard
                 }
             },
@@ -111,10 +106,8 @@ fun LandscapeKeyboardScreen(
             onToggleSystemKeyboard = {
                 systemKeyboardActive = !systemKeyboardActive
                 if (systemKeyboardActive) {
-                    // Auto-hide in-app keyboard when switching to system mode
                     showKeyboard = false
                 } else {
-                    // Auto-show in-app keyboard when returning
                     showKeyboard = true
                 }
             },
@@ -126,22 +119,27 @@ fun LandscapeKeyboardScreen(
                 onReleaseKeys = onReleaseKeys,
                 onTypeText = onTypeText,
             )
+        }
+
+        if (showKeyboard) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                LandscapeSharedCompactKeyboard(
+                    st = st,
+                    settings = settings,
+                    showMediaRow = settings.showMediaRowInKeysTab(),
+                    showNavRow = settings.showNavRowInKeysTab(),
+                    showOptionalRows = showOptionalRows,
+                    layoutMode = effectiveLayoutMode,
+                    rightColumnMode = rightColumnMode,
+                    onKeyPress = ::handleKeyPress,
+                    onConsumerKey = onConsumerKey,
+                    onClearMods = { st = st.releaseMods(); onSendKey(0, emptyList()) },
+                    onNumpadKey = ::handleNumpadKey,
+                    onNumLockToggle = ::handleNumLock,
+                )
+            }
+        } else if (systemKeyboardActive) {
             Spacer(Modifier.weight(1f))
-        } else if (showKeyboard) {
-            LandscapeSharedCompactKeyboard(
-                st = st,
-                settings = settings,
-                showMediaRow = settings.showMediaRowInKeysTab(),
-                showNavRow = settings.showNavRowInKeysTab(),
-                showOptionalRows = showOptionalRows,
-                layoutMode = effectiveLayoutMode,
-                rightColumnMode = rightColumnMode,
-                onKeyPress = ::handleKeyPress,
-                onConsumerKey = onConsumerKey,
-                onClearMods = { st = st.releaseMods(); onSendKey(0, emptyList()) },
-                onNumpadKey = ::handleNumpadKey,
-                onNumLockToggle = ::handleNumLock,
-            )
         }
     }
 }
@@ -185,12 +183,9 @@ private fun LandscapeSystemKeyboardBar(
                 val newContent = newRaw.removePrefix(TYPE_SENTINEL)
 
                 when {
-                    // Sentinel deleted (user hit backspace when field appeared empty)
                     !newRaw.startsWith(TYPE_SENTINEL) -> {
-                        // Send one backspace to host
                         onSendKey(0, listOf(0x2A))
                         onReleaseKeys()
-                        // Restore sentinel + any remaining content
                         val remaining = if (oldContent.isNotEmpty()) oldContent.dropLast(1) else ""
                         val restored = TYPE_SENTINEL + remaining
                         fieldValue = TextFieldValue(
@@ -199,18 +194,15 @@ private fun LandscapeSystemKeyboardBar(
                         )
                     }
 
-                    // Character(s) added
                     newContent.length > oldContent.length -> {
                         val added = newContent.substring(oldContent.length)
                         if (added.isNotEmpty()) onTypeText(added)
-                        // Keep the new content visible; move cursor to end
                         fieldValue = TextFieldValue(
                             text = TYPE_SENTINEL + newContent,
                             selection = TextRange((TYPE_SENTINEL + newContent).length)
                         )
                     }
 
-                    // Character(s) deleted (backspace with visible content)
                     newContent.length < oldContent.length -> {
                         val deletedCount = oldContent.length - newContent.length
                         repeat(deletedCount) {
@@ -223,7 +215,6 @@ private fun LandscapeSystemKeyboardBar(
                         )
                     }
 
-                    // Same length (cursor moved) — snap cursor to end
                     else -> {
                         fieldValue = TextFieldValue(
                             text = TYPE_SENTINEL + newContent,
@@ -253,7 +244,6 @@ private fun LandscapeSystemKeyboardBar(
 
         OutlinedButton(
             onClick = {
-                // Clear visible field only — doesn't send anything to host
                 fieldValue = TextFieldValue(
                     text = TYPE_SENTINEL,
                     selection = TextRange(TYPE_SENTINEL.length)
