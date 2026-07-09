@@ -43,7 +43,7 @@ internal fun LandscapeNumpadCell(
     Box(
         modifier = modifier
             .height(h)
-            .padding(1.dp)
+            .padding(2.dp)
             .clip(RoundedCornerShape(5.dp))
             .background(Brush.verticalGradient(listOf(bg.copy(0.85f), bg)))
             .border(

@@ -138,9 +138,9 @@ enum class LandscapeHapticIntensity(val label: String) {
 }
 
 enum class LandscapeKeyHeight(val label: String, val mainDp: Int, val fnDp: Int, val navDp: Int) {
-    SMALL ("Small",  38, 36, 42),   // was 34, 32, 38
-    MEDIUM("Medium", 44, 42, 50),   // was 40, 38, 46
-    LARGE ("Large",  52, 48, 56),   // was 48, 44, 52
+    SMALL ("Small",  36, 34, 40),   // was 38/36/42
+    MEDIUM("Medium", 42, 40, 48),   // was 44/42/50
+    LARGE ("Large",  50, 46, 54),   // was 52/48/56
 }
 
 enum class LandscapeKeyFontSize(val label: String, val baseSp: Int) {

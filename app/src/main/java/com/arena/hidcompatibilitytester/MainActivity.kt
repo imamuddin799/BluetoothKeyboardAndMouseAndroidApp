@@ -549,12 +549,20 @@ class MainActivity : ComponentActivity(),
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         if (landscape) {
             WindowCompat.setDecorFitsSystemWindows(window, false)
-            controller.hide(WindowInsetsCompat.Type.systemBars())
             controller.systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
         } else {
             WindowCompat.setDecorFitsSystemWindows(window, true)
             controller.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+            applyImmersiveMode(landscape)
         }
     }
 }
