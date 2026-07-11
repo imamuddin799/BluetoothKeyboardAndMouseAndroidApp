@@ -1,6 +1,7 @@
 package com.arena.hidcompatibilitytester.ui.components
 
 import android.annotation.SuppressLint
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -25,6 +26,7 @@ fun AppStatusBar(
     targetAddress: String?,
     onSelectAllTargets: () -> Unit,
     onSelectTargetDevice: (String) -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val subscribedHosts = connectedHostList.filter { it.isSubscribed }
     val showTargetDropdown = subscribedHosts.size > 1
@@ -59,7 +61,7 @@ fun AppStatusBar(
                 )
             }
 
-            // Right side — status + optional target dropdown
+            // Right side — status + optional target dropdown + settings
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -93,6 +95,19 @@ fun AppStatusBar(
                         onSelectAll = onSelectAllTargets,
                         onSelectDevice = onSelectTargetDevice,
                     )
+                }
+
+                // Settings icon — rightmost
+                Surface(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clickable { onOpenSettings() },
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color.White.copy(alpha = 0.08f),
+                ) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                        Text("⚙", fontSize = 16.sp)
+                    }
                 }
             }
         }
@@ -150,7 +165,6 @@ private fun TargetDropdown(
             expanded = expanded,
             onDismissRequest = { expanded = false }
         ) {
-            // All Hosts option
             DropdownMenuItem(
                 text = {
                     Row(
@@ -177,7 +191,6 @@ private fun TargetDropdown(
 
             HorizontalDivider()
 
-            // Individual hosts
             subscribedHosts.forEach { host ->
                 val isSelected = targetMode == BleHidManager.TargetMode.SINGLE &&
                         targetAddress == host.address

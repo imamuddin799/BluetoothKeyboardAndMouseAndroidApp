@@ -28,12 +28,10 @@ fun AppMainScreen(
     trackpadSettings: TrackpadSettings,
     keyboardSettings: KeyboardSettings,
     showSettingsSheet: Boolean,
-    // Target selection
     targetMode: BleHidManager.TargetMode,
     targetAddress: String?,
     onSelectAllTargets: () -> Unit,
     onSelectTargetDevice: (String) -> Unit,
-    // Actions
     onToggleBleHid: () -> Unit,
     onSendMouse: (Int, Int, Int, Int) -> Unit,
     onSendKey: (Int, List<Int>) -> Unit,
@@ -48,6 +46,7 @@ fun AppMainScreen(
     onShowTrackpadSettings: () -> Unit,
     onShowKeyboardSettings: () -> Unit,
     onSettingsChange: ((KeyboardSettings) -> Unit)? = null,
+    onOpenSettings: () -> Unit,
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Status", "Mouse", "Keyboard", "Devices")
@@ -62,6 +61,7 @@ fun AppMainScreen(
             targetAddress = targetAddress,
             onSelectAllTargets = onSelectAllTargets,
             onSelectTargetDevice = onSelectTargetDevice,
+            onOpenSettings = onOpenSettings,
         )
 
         TabRow(selectedTabIndex = selectedTab) {

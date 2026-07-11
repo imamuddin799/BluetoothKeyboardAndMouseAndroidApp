@@ -73,6 +73,7 @@ fun LandscapeMainScreen(
     onTrackpadSettingsChange: (LandscapeTrackpadSettings) -> Unit,
     onKeyboardSettingsChange: (LandscapeKeyboardSettings) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenSettings: () -> Unit,
 ) {
     val isReady = connectedHostList.any { it.isSubscribed }
 
@@ -192,7 +193,7 @@ fun LandscapeMainScreen(
                     gridMenuOffset(
                         fabOffsetX, fabOffsetY, containerSize,
                         menuWidthPx = with(density) { 220.dp.toPx() },
-                        menuHeightPx = with(density) { 260.dp.toPx() },
+                        menuHeightPx = with(density) { 320.dp.toPx() },
                         fabSizePx = fabSizePx,
                         marginPx = marginPx,
                     )
@@ -204,6 +205,10 @@ fun LandscapeMainScreen(
                 onSelectTab = { tab ->
                     selectedTab = tab
                     menuExpanded = false
+                },
+                onOpenSettings = {
+                    menuExpanded = false
+                    onOpenSettings()
                 },
                 onClose = { menuExpanded = false },
             )
@@ -302,6 +307,7 @@ private fun LandscapeGridMenu(
     selectedTab: LandscapeTab,
     statusColor: Color,
     onSelectTab: (LandscapeTab) -> Unit,
+    onOpenSettings: () -> Unit,
     onClose: () -> Unit,
 ) {
     Surface(
@@ -368,6 +374,31 @@ private fun LandscapeGridMenu(
                 ) {
                     LandscapeGridMenuItem(LandscapeTab.KEYBOARD, selectedTab == LandscapeTab.KEYBOARD, Modifier.weight(1f)) { onSelectTab(LandscapeTab.KEYBOARD) }
                     LandscapeGridMenuItem(LandscapeTab.DEVICES, selectedTab == LandscapeTab.DEVICES, Modifier.weight(1f)) { onSelectTab(LandscapeTab.DEVICES) }
+                }
+            }
+
+            HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
+
+            // Settings item
+            Surface(
+                color = Color(0xFF4A90D9).copy(alpha = 0.12f),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenSettings() },
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("⚙", fontSize = 16.sp)
+                    Text(
+                        "Settings",
+                        color = Color(0xFF90CAF9),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
 

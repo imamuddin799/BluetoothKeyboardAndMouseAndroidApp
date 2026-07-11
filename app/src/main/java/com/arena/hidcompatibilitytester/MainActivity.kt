@@ -1,13 +1,10 @@
 package com.arena.hidcompatibilitytester
 
 import android.Manifest
-import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
-import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.content.res.Configuration
@@ -36,6 +33,9 @@ import com.arena.hidcompatibilitytester.bluetooth.BleHidManager
 import com.arena.hidcompatibilitytester.bluetooth.BleHidState
 import com.arena.hidcompatibilitytester.bluetooth.BluetoothDeviceManager
 import com.arena.hidcompatibilitytester.service.HidInputService
+import com.arena.hidcompatibilitytester.settings.AppSettings
+import com.arena.hidcompatibilitytester.settings.AppSettingsStore
+import com.arena.hidcompatibilitytester.settings.ui.SettingsRootScreen
 import com.arena.hidcompatibilitytester.ui.screen.AppMainScreen
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.KeyboardSettings
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.KeyboardSettingsSheet
@@ -48,6 +48,7 @@ import com.arena.hidcompatibilitytester.ui.screen.trackpad.TrackpadSettings
 import com.arena.hidcompatibilitytester.ui.screen.trackpad.TrackpadSettingsSheet
 import com.arena.hidcompatibilitytester.ui.screen.trackpad.TrackpadSettingsStore
 import com.arena.hidcompatibilitytester.ui.theme.HIDCompatibilityTesterTheme
+import kotlinx.coroutines.runBlocking
 
 class MainActivity : ComponentActivity(),
     BluetoothDeviceManager.BluetoothStateListener {
@@ -56,15 +57,19 @@ class MainActivity : ComponentActivity(),
     private var hidService: HidInputService? = null
     private var serviceBound = false
 
-    // ── Portrait settings ────────────────────────────────────────────────────
+    // ── Portrait settings (old system — kept for existing screens) ────────
     private var trackpadSettings          by mutableStateOf(TrackpadSettings())
     private var keyboardSettings          by mutableStateOf(KeyboardSettings())
     private var showTrackpadSettingsSheet by mutableStateOf(false)
     private var showKeyboardSettingsSheet by mutableStateOf(false)
 
-    // ── Landscape settings ───────────────────────────────────────────────────
+    // ── Landscape settings (old system — kept for existing screens) ───────
     private var landscapeTrackpadSettings by mutableStateOf(LandscapeTrackpadSettings())
     private var landscapeKeyboardSettings by mutableStateOf(LandscapeKeyboardSettings())
+
+    // ── New centralized settings ─────────────────────────────────────────
+    private var appSettings       by mutableStateOf(AppSettings())
+    private var showSettingsScreen by mutableStateOf(false)
 
     private val pairedDevices     = androidx.compose.runtime.snapshots.SnapshotStateList<BluetoothDevice>()
     private val nearbyDevices     = androidx.compose.runtime.snapshots.SnapshotStateList<BluetoothDevice>()
@@ -132,13 +137,14 @@ class MainActivity : ComponentActivity(),
         val isLand = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         applyImmersiveMode(isLand)
 
-        // Load portrait settings
+        // Load old settings (for existing screens)
         trackpadSettings = TrackpadSettingsStore.load(this)
         keyboardSettings = KeyboardSettingsStore.load(this)
-
-        // Load landscape settings
         landscapeTrackpadSettings = LandscapeTrackpadSettingsStore.load(this)
         landscapeKeyboardSettings = LandscapeKeyboardSettingsStore.load(this)
+
+        // Load new centralized settings (with migration)
+        appSettings = runBlocking { AppSettingsStore.load(this@MainActivity) }
 
         deviceManager = BluetoothDeviceManager(this) { newDevice ->
             val known = pairedDevices.any { it.address == newDevice.address } ||
@@ -159,7 +165,11 @@ class MainActivity : ComponentActivity(),
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                showExitConfirmation = true
+                if (showSettingsScreen) {
+                    showSettingsScreen = false
+                } else {
+                    showExitConfirmation = true
+                }
             }
         })
 
@@ -254,10 +264,30 @@ class MainActivity : ComponentActivity(),
         targetAddress = address
     }
 
+    private fun onSaveNewSettings(newSettings: AppSettings) {
+        appSettings = newSettings
+        runBlocking { AppSettingsStore.save(this@MainActivity, newSettings) }
+    }
+
     @Composable
     private fun MainContent() {
         val configuration = LocalConfiguration.current
         val isLandscape   = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+        // ── Show new settings screen ─────────────────────────────────────
+        if (showSettingsScreen) {
+            SettingsRootScreen(
+                isLandscape = isLandscape,
+                settings = appSettings,
+                onSave = { newSettings ->
+                    onSaveNewSettings(newSettings)
+                },
+                onDismiss = {
+                    showSettingsScreen = false
+                },
+            )
+            return
+        }
 
         // ── Dialogs ──────────────────────────────────────────────────────────
         if (showLocationServicesDialog) {
@@ -382,6 +412,7 @@ class MainActivity : ComponentActivity(),
                             landscapeKeyboardSettings = newSettings
                             LandscapeKeyboardSettingsStore.save(this@MainActivity, newSettings)
                         },
+                        onOpenSettings = { showSettingsScreen = true },
                         modifier = Modifier.padding(innerPadding)
                     )
                 } else {
@@ -433,6 +464,7 @@ class MainActivity : ComponentActivity(),
                             keyboardSettings = newSettings
                             KeyboardSettingsStore.save(this@MainActivity, newSettings)
                         },
+                        onOpenSettings = { showSettingsScreen = true },
                     )
                 }
 
@@ -448,7 +480,7 @@ class MainActivity : ComponentActivity(),
                     ) { Text(msg) }
                 }
 
-                // ── Settings sheets — portrait only ──────────────────────────
+                // ── Settings sheets — portrait only (old system, kept) ───────
                 if (!isLandscape) {
                     if (showTrackpadSettingsSheet) {
                         TrackpadSettingsSheet(
@@ -545,6 +577,7 @@ class MainActivity : ComponentActivity(),
     override fun onConnectionStateChanged(device: BluetoothDevice, state: Int) {
         runOnUiThread { refreshDeviceLists() }
     }
+
     private fun applyImmersiveMode(landscape: Boolean) {
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         if (landscape) {
