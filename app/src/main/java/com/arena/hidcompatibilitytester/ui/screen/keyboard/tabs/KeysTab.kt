@@ -41,7 +41,7 @@ internal fun KeysTab(
 
     val optionalRowOrder = settings.getOptionalRowOrder(settings.keysTabOptionalRowOrder)
 
-    val visibleSections = settings.keysTabSectionOrder.filter { section: KeysTabSection ->
+    val visibleSections = settings.keysTabSectionOrder.filter { section ->
         when (section) {
             KeysTabSection.NAV_ARROWS -> settings.keysTabShowNavigation || settings.keysTabShowArrowKeys
             KeysTabSection.SYSTEM_KEYS -> settings.keysTabShowSystemKeys && !merge

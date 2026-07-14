@@ -14,7 +14,6 @@ import com.arena.hidcompatibilitytester.ui.screen.keyboard.KeyboardScreen
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.KeyboardSettings
 import com.arena.hidcompatibilitytester.ui.screen.trackpad.TrackpadScreen
 import com.arena.hidcompatibilitytester.ui.screen.trackpad.TrackpadSettings
-import androidx.compose.foundation.layout.statusBarsPadding
 
 @SuppressLint("MissingPermission")
 @Composable
@@ -28,6 +27,7 @@ fun AppMainScreen(
     isScanningState: Boolean,
     trackpadSettings: TrackpadSettings,
     keyboardSettings: KeyboardSettings,
+    showSettingsSheet: Boolean,
     targetMode: BleHidManager.TargetMode,
     targetAddress: String?,
     onSelectAllTargets: () -> Unit,
@@ -43,6 +43,8 @@ fun AppMainScreen(
     onUnpairClick: (BluetoothDevice) -> Unit,
     onDisconnectHost: (String) -> Unit,
     onReconnectHost: (BluetoothDevice) -> Unit,
+    onShowTrackpadSettings: () -> Unit,
+    onShowKeyboardSettings: () -> Unit,
     onSettingsChange: ((KeyboardSettings) -> Unit)? = null,
     onOpenSettings: () -> Unit,
 ) {
@@ -53,7 +55,7 @@ fun AppMainScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .statusBarsPadding()
+            .statusBarsPadding()  // ← ADD THIS
     ) {
         AppStatusBar(
             state = bleHidState,
@@ -90,7 +92,7 @@ fun AppMainScreen(
                 settings = trackpadSettings,
                 keyboardSettings = keyboardSettings,
                 onSendMouse = onSendMouse,
-                onShowSettings = onOpenSettings,
+                onShowSettings = onShowTrackpadSettings,
                 onSendKey = onSendKey,
                 onReleaseKeys = onReleaseKeys,
                 onConsumerKey = onConsumerKey,
@@ -103,7 +105,7 @@ fun AppMainScreen(
                 onReleaseKeys = onReleaseKeys,
                 onConsumerKey = onConsumerKey,
                 onTypeText = onTypeText,
-                onShowSettings = onOpenSettings,
+                onShowSettings = onShowKeyboardSettings,
                 onSettingsChange = onSettingsChange,
             )
             3 -> DevicesScreen(

@@ -29,7 +29,7 @@ internal fun MediaTab(
     val merge = settings.shouldMergeSystemMods(settings.mediaTabMergeSystemAndMods)
     val inPlaceReorder = settings.shouldAllowInPlaceReorder(settings.mediaTabInPlaceReorder)
 
-    val visibleSections = settings.mediaTabSectionOrder.filter { section: MediaTabSection ->
+    val visibleSections = settings.mediaTabSectionOrder.filter { section ->
         when (section) {
             MediaTabSection.TRANSPORT -> true
             MediaTabSection.VOLUME_BRIGHTNESS -> true
