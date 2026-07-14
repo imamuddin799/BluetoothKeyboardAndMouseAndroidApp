@@ -41,7 +41,6 @@ fun KeyboardScreen(
     var typeText by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
-    // Temporary UI visibility toggles
     var showKeyboard by remember { mutableStateOf(true) }
     var showNumpad by remember { mutableStateOf(true) }
     var showOptionalRows by remember { mutableStateOf(true) }

@@ -254,7 +254,29 @@ data class PortraitKeyboardSettings(
         SettingsOptionalRow.MEDIA_ROW,
         SettingsOptionalRow.NAV_ROW,
     ),
-) : KeyboardCommonSettings
+) : KeyboardCommonSettings {
+
+    fun shouldMergeSystemMods(tabMerge: Boolean): Boolean =
+        mergeSystemAndModsGlobal || tabMerge
+
+    fun shouldAllowInPlaceReorder(tabReorder: Boolean): Boolean =
+        inPlaceReorderGlobal || tabReorder
+
+    fun getOptionalRowOrder(tabOrder: List<SettingsOptionalRow>): List<SettingsOptionalRow> =
+        if (globalOptionalRowOrder) keyboardOptionalRowOrder else tabOrder
+
+    fun showMediaRowInKeysTab(): Boolean =
+        if (globalOptionalRowVisibility) globalShowMediaRow else keysTabShowMediaRow
+
+    fun showNavRowInKeysTab(): Boolean =
+        if (globalOptionalRowVisibility) globalShowNavRow else keysTabShowNavRow
+
+    fun showMediaRowInTrackpad(): Boolean =
+        if (globalOptionalRowVisibility) globalShowMediaRow else trackpadShowMediaRow
+
+    fun showNavRowInTrackpad(): Boolean =
+        if (globalOptionalRowVisibility) globalShowNavRow else trackpadShowNavRow
+}
 
 // ═════════════════════════════════════════════════════════════════════════════
 // LANDSCAPE KEYBOARD
@@ -375,7 +397,36 @@ data class LandscapeKeyboardSettings(
         SettingsOptionalRow.MEDIA_ROW,
         SettingsOptionalRow.NAV_ROW,
     ),
-) : KeyboardCommonSettings
+) : KeyboardCommonSettings {
+
+    fun shouldMergeSystemMods(tabMerge: Boolean): Boolean {
+        return mergeSystemAndModsGlobal || tabMerge
+    }
+
+    fun shouldAllowInPlaceReorder(tabReorder: Boolean): Boolean {
+        return inPlaceReorderGlobal || tabReorder
+    }
+
+    fun getOptionalRowOrder(tabOrder: List<SettingsOptionalRow>): List<SettingsOptionalRow> {
+        return if (globalOptionalRowOrder) keyboardOptionalRowOrder else tabOrder
+    }
+
+    fun showMediaRowInKeysTab(): Boolean {
+        return if (globalOptionalRowVisibility) globalShowMediaRow else keysTabShowMediaRow
+    }
+
+    fun showNavRowInKeysTab(): Boolean {
+        return if (globalOptionalRowVisibility) globalShowNavRow else keysTabShowNavRow
+    }
+
+    fun showMediaRowInTrackpad(): Boolean {
+        return if (globalOptionalRowVisibility) globalShowMediaRow else trackpadShowMediaRow
+    }
+
+    fun showNavRowInTrackpad(): Boolean {
+        return if (globalOptionalRowVisibility) globalShowNavRow else trackpadShowNavRow
+    }
+}
 
 // ═════════════════════════════════════════════════════════════════════════════
 // PORTRAIT TRACKPAD

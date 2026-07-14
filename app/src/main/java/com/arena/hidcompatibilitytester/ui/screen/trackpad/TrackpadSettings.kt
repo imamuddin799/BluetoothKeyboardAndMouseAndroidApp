@@ -1,83 +1,10 @@
 package com.arena.hidcompatibilitytester.ui.screen.trackpad
 
-import android.content.Context
-import android.content.SharedPreferences
+import com.arena.hidcompatibilitytester.settings.*
 
-data class TrackpadSettings(
-    val pointerSpeed        : Float         = 1.0f,
-    val scrollSpeed         : Float         = 0.5f,
-    val invertScroll        : Boolean       = false,
-    val tapToClick          : Boolean       = true,
-    val twoFingerRightClick : Boolean       = true,
-    val accelerationEnabled : Boolean       = true,
-    val dragLockMode        : Boolean       = false,
-    val clickPressure       : ClickPressure = ClickPressure.MEDIUM,
-    val scrollPosition      : SidePosition  = SidePosition.RIGHT,
-    val arrowPosition       : SidePosition  = SidePosition.LEFT,
-    val showArrowKeys       : Boolean       = true,
-    val showScrollStrip     : Boolean       = true,
-    val showSystemKeyboard  : Boolean       = true,
-    val showInAppKeyboard   : Boolean       = true,
-)
+// Type aliases so existing portrait trackpad UI compiles unchanged
+typealias TrackpadSettings = PortraitTrackpadSettings
+typealias ClickPressure = SettingsClickPressure
+typealias SidePosition = SettingsSidePosition
 
-enum class ClickPressure { LIGHT, MEDIUM, FIRM }
-enum class SidePosition { LEFT, RIGHT }
-
-object TrackpadSettingsStore {
-    private const val PREFS = "trackpad_settings"
-
-    private fun prefs(ctx: Context): SharedPreferences =
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
-    fun save(ctx: Context, s: TrackpadSettings) {
-        prefs(ctx).edit()
-            .putFloat("pointer_speed", s.pointerSpeed)
-            .putFloat("scroll_speed", s.scrollSpeed)
-            .putBoolean("invert_scroll", s.invertScroll)
-            .putBoolean("tap_to_click", s.tapToClick)
-            .putBoolean("two_finger_rc", s.twoFingerRightClick)
-            .putBoolean("acceleration", s.accelerationEnabled)
-            .putBoolean("drag_lock", s.dragLockMode)
-            .putString("click_pressure", s.clickPressure.name)
-            .putString("scroll_position", s.scrollPosition.name)
-            .putString("arrow_position", s.arrowPosition.name)
-            .putBoolean("show_arrows", s.showArrowKeys)
-            .putBoolean("show_scroll", s.showScrollStrip)
-            .putBoolean("show_system_kb", s.showSystemKeyboard)
-            .putBoolean("show_inapp_kb", s.showInAppKeyboard)
-            .commit()   // use commit() instead of apply() to guarantee immediate write
-    }
-
-    fun load(ctx: Context): TrackpadSettings {
-        val p = prefs(ctx)
-
-        fun loadSide(key: String, default: SidePosition): SidePosition {
-            val raw = p.getString(key, default.name) ?: default.name
-            return when (raw.uppercase()) {
-                "LEFT"  -> SidePosition.LEFT
-                "RIGHT" -> SidePosition.RIGHT
-                else    -> default
-            }
-        }
-
-        return TrackpadSettings(
-            pointerSpeed        = p.getFloat("pointer_speed", 1.0f),
-            scrollSpeed         = p.getFloat("scroll_speed", 0.5f),
-            invertScroll        = p.getBoolean("invert_scroll", false),
-            tapToClick          = p.getBoolean("tap_to_click", true),
-            twoFingerRightClick = p.getBoolean("two_finger_rc", true),
-            accelerationEnabled = p.getBoolean("acceleration", true),
-            dragLockMode        = p.getBoolean("drag_lock", false),
-            clickPressure       = safeEnum(p.getString("click_pressure", null), ClickPressure.MEDIUM),
-            scrollPosition      = loadSide("scroll_position", SidePosition.RIGHT),
-            arrowPosition       = loadSide("arrow_position", SidePosition.LEFT),
-            showArrowKeys       = p.getBoolean("show_arrows", true),
-            showScrollStrip     = p.getBoolean("show_scroll", true),
-            showSystemKeyboard  = p.getBoolean("show_system_kb", true),
-            showInAppKeyboard   = p.getBoolean("show_inapp_kb", true),
-        )
-    }
-
-    private inline fun <reified T : Enum<T>> safeEnum(v: String?, d: T): T =
-        try { if (v != null) enumValueOf<T>(v) else d } catch (_: Exception) { d }
-}
+// TrackpadSettingsStore is removed — settings now come from AppSettingsStore

@@ -63,7 +63,7 @@ internal fun NavNumpadTab(
     val inPlaceReorder = settings.shouldAllowInPlaceReorder(settings.navTabInPlaceReorder)
     val swapped        = settings.navTabNavArrowsSwapped
 
-    val visibleSections = settings.navTabSectionOrder.filter { section ->
+    val visibleSections = settings.navTabSectionOrder.filter { section: NavTabSection ->
         when (section) {
             NavTabSection.NAV_ARROWS         -> settings.navTabShowNavigation || settings.navTabShowArrowKeys
             NavTabSection.INSERT_TOGGLE      -> settings.navTabShowInsertToggle
