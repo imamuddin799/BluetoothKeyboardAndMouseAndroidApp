@@ -134,6 +134,9 @@ class MainActivity : ComponentActivity(),
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+
         val isLand = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         applyImmersiveMode(isLand)
 
@@ -413,11 +416,11 @@ class MainActivity : ComponentActivity(),
                             LandscapeKeyboardSettingsStore.save(this@MainActivity, newSettings)
                         },
                         onOpenSettings = { showSettingsScreen = true },
-                        modifier = Modifier.padding(innerPadding)
+                        modifier = Modifier  // ← ADD THIS
                     )
                 } else {
                     AppMainScreen(
-                        modifier               = Modifier.padding(innerPadding),
+                        modifier               = Modifier,  // ← no innerPadding
                         bleHidState            = bleHidState,
                         bleSupported           = bleSupported,
                         connectedHostList      = connectedHostList,
@@ -580,14 +583,17 @@ class MainActivity : ComponentActivity(),
 
     private fun applyImmersiveMode(landscape: Boolean) {
         val controller = WindowCompat.getInsetsController(window, window.decorView)
+
         if (landscape) {
             WindowCompat.setDecorFitsSystemWindows(window, false)
             controller.systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.systemBars())
         } else {
-            WindowCompat.setDecorFitsSystemWindows(window, true)
+            WindowCompat.setDecorFitsSystemWindows(window, false)
             controller.show(WindowInsetsCompat.Type.systemBars())
+            controller.isAppearanceLightStatusBars = false
+            window.statusBarColor = android.graphics.Color.TRANSPARENT
         }
     }
 

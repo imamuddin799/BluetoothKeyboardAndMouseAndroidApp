@@ -52,7 +52,11 @@ fun AppMainScreen(
     val tabs = listOf("Status", "Mouse", "Keyboard", "Devices")
     val isReady = connectedHostList.any { it.isSubscribed }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .statusBarsPadding()  // ← ADD THIS
+    ) {
         AppStatusBar(
             state = bleHidState,
             supported = bleSupported,
