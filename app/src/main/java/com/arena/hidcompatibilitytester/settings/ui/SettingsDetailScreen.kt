@@ -23,7 +23,6 @@ import androidx.compose.ui.unit.sp
 import com.arena.hidcompatibilitytester.settings.AppSettings
 import com.arena.hidcompatibilitytester.settings.ui.content.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,6 +43,14 @@ fun SettingsDetailScreen(
 
     val currentSubSection = subSections.find { it.id == selectedSubSectionId }
 
+    // KEY FIX: Always use latest settings in callbacks
+    val latestSettings by rememberUpdatedState(settings)
+    val stableOnSettingsChange by rememberUpdatedState(onSettingsChange)
+
+    val wrappedOnSettingsChange: (AppSettings) -> Unit = remember {
+        { newSettings -> stableOnSettingsChange(newSettings) }
+    }
+
     if (isLandscape) {
         Column(
             modifier = Modifier
@@ -62,11 +69,11 @@ fun SettingsDetailScreen(
                                 onToggle = { enabled ->
                                     val syncManager = com.arena.hidcompatibilitytester.settings.SettingsSyncManager
                                     val newSettings = if (enabled) {
-                                        syncManager.enableKeyboardSync(settings)
+                                        syncManager.enableKeyboardSync(latestSettings)
                                     } else {
-                                        syncManager.disableKeyboardSync(settings)
+                                        syncManager.disableKeyboardSync(latestSettings)
                                     }
-                                    onSettingsChange(newSettings)
+                                    stableOnSettingsChange(newSettings)
                                 },
                             )
                         }
@@ -77,11 +84,11 @@ fun SettingsDetailScreen(
                                 onToggle = { enabled ->
                                     val syncManager = com.arena.hidcompatibilitytester.settings.SettingsSyncManager
                                     val newSettings = if (enabled) {
-                                        syncManager.enableTrackpadSync(settings)
+                                        syncManager.enableTrackpadSync(latestSettings)
                                     } else {
-                                        syncManager.disableTrackpadSync(settings)
+                                        syncManager.disableTrackpadSync(latestSettings)
                                     }
-                                    onSettingsChange(newSettings)
+                                    stableOnSettingsChange(newSettings)
                                 },
                             )
                         }
@@ -114,7 +121,7 @@ fun SettingsDetailScreen(
                         subSectionId = "",
                         settings = settings,
                         isLandscape = true,
-                        onSettingsChange = onSettingsChange,
+                        onSettingsChange = wrappedOnSettingsChange,
                     )
                     Spacer(Modifier.height(20.dp))
                 }
@@ -125,7 +132,7 @@ fun SettingsDetailScreen(
                     selectedSubSectionId = selectedSubSectionId,
                     onSelectSubSection = { selectedSubSectionId = it },
                     settings = settings,
-                    onSettingsChange = onSettingsChange,
+                    onSettingsChange = wrappedOnSettingsChange,
                 )
             }
         }
@@ -136,7 +143,7 @@ fun SettingsDetailScreen(
                 currentSubSectionLabel = currentSubSection?.label,
                 onDismiss = { showResetDialog = false },
                 onReset = { scope ->
-                    onSettingsChange(applyReset(settings, destination, currentSubSection?.id, scope))
+                    stableOnSettingsChange(applyReset(latestSettings, destination, currentSubSection?.id, scope))
                     showResetDialog = false
                 },
             )
@@ -167,7 +174,6 @@ fun SettingsDetailScreen(
                     }
                 },
                 actions = {
-                    // Sync toggle
                     when (destination) {
                         SettingsDestination.PORTRAIT_KEYBOARD,
                         SettingsDestination.LANDSCAPE_KEYBOARD -> {
@@ -176,11 +182,11 @@ fun SettingsDetailScreen(
                                 onToggle = { enabled ->
                                     val syncManager = com.arena.hidcompatibilitytester.settings.SettingsSyncManager
                                     val newSettings = if (enabled) {
-                                        syncManager.enableKeyboardSync(settings)
+                                        syncManager.enableKeyboardSync(latestSettings)
                                     } else {
-                                        syncManager.disableKeyboardSync(settings)
+                                        syncManager.disableKeyboardSync(latestSettings)
                                     }
-                                    onSettingsChange(newSettings)
+                                    stableOnSettingsChange(newSettings)
                                 },
                             )
                         }
@@ -191,25 +197,23 @@ fun SettingsDetailScreen(
                                 onToggle = { enabled ->
                                     val syncManager = com.arena.hidcompatibilitytester.settings.SettingsSyncManager
                                     val newSettings = if (enabled) {
-                                        syncManager.enableTrackpadSync(settings)
+                                        syncManager.enableTrackpadSync(latestSettings)
                                     } else {
-                                        syncManager.disableTrackpadSync(settings)
+                                        syncManager.disableTrackpadSync(latestSettings)
                                     }
-                                    onSettingsChange(newSettings)
+                                    stableOnSettingsChange(newSettings)
                                 },
                             )
                         }
                         else -> {}
                     }
 
-                    // Reset button
                     SettingsIconAction(
                         icon = "↺",
                         tint = SettingsColors.Warning,
                         onClick = { showResetDialog = true },
                     )
 
-                    // Save button
                     SaveButton(
                         hasChanges = hasChanges,
                         onClick = onSave,
@@ -239,7 +243,7 @@ fun SettingsDetailScreen(
                         subSectionId = "",
                         settings = settings,
                         isLandscape = isLandscape,
-                        onSettingsChange = onSettingsChange,
+                        onSettingsChange = wrappedOnSettingsChange,
                     )
                     Spacer(Modifier.height(20.dp))
                 }
@@ -250,7 +254,7 @@ fun SettingsDetailScreen(
                     selectedSubSectionId = selectedSubSectionId,
                     onSelectSubSection = { selectedSubSectionId = it },
                     settings = settings,
-                    onSettingsChange = onSettingsChange,
+                    onSettingsChange = wrappedOnSettingsChange,
                 )
             } else {
                 PortraitDetailLayout(
@@ -259,7 +263,7 @@ fun SettingsDetailScreen(
                     selectedSubSectionId = selectedSubSectionId,
                     onSelectSubSection = { selectedSubSectionId = it },
                     settings = settings,
-                    onSettingsChange = onSettingsChange,
+                    onSettingsChange = wrappedOnSettingsChange,
                 )
             }
         }
@@ -271,16 +275,12 @@ fun SettingsDetailScreen(
             currentSubSectionLabel = currentSubSection?.label,
             onDismiss = { showResetDialog = false },
             onReset = { scope ->
-                onSettingsChange(applyReset(settings, destination, currentSubSection?.id, scope))
+                stableOnSettingsChange(applyReset(latestSettings, destination, currentSubSection?.id, scope))
                 showResetDialog = false
             },
         )
     }
 }
-
-// ═════════════════════════════════════════════════════════════════════════════
-// SAVE BUTTON
-// ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
 private fun SaveButton(
@@ -306,10 +306,6 @@ private fun SaveButton(
         )
     }
 }
-
-// ═════════════════════════════════════════════════════════════════════════════
-// PORTRAIT LAYOUT
-// ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
 private fun PortraitDetailLayout(
@@ -373,10 +369,6 @@ private fun PortraitDetailLayout(
     }
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// LANDSCAPE LAYOUT
-// ═════════════════════════════════════════════════════════════════════════════
-
 @Composable
 private fun LandscapeDetailLayout(
     destination: SettingsDestination,
@@ -387,7 +379,6 @@ private fun LandscapeDetailLayout(
     onSettingsChange: (AppSettings) -> Unit,
 ) {
     Row(modifier = Modifier.fillMaxSize()) {
-        // Left rail
         LazyColumn(
             modifier = Modifier
                 .width(140.dp)
@@ -407,7 +398,6 @@ private fun LandscapeDetailLayout(
             }
         }
 
-        // Right pane
         LazyColumn(
             modifier = Modifier
                 .weight(1f)
@@ -500,10 +490,6 @@ private fun LandscapeRailItem(
     }
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// SYNC TOGGLE
-// ═════════════════════════════════════════════════════════════════════════════
-
 @Composable
 private fun SyncToggleButton(
     checked: Boolean,
@@ -518,10 +504,6 @@ private fun SyncToggleButton(
         onClick = { onToggle(!checked) },
     )
 }
-
-// ═════════════════════════════════════════════════════════════════════════════
-// RESET DIALOG
-// ═════════════════════════════════════════════════════════════════════════════
 
 enum class ResetScope { SUB_SECTION, CATEGORY }
 
@@ -593,10 +575,6 @@ private fun ResetScopeDialog(
     )
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// RESET LOGIC
-// ═════════════════════════════════════════════════════════════════════════════
-
 private fun applyReset(
     settings: AppSettings,
     destination: SettingsDestination,
@@ -628,10 +606,6 @@ private fun applyReset(
     }
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// BODY DISPATCHER
-// ═════════════════════════════════════════════════════════════════════════════
-
 @Composable
 private fun SettingsDetailBody(
     destination: SettingsDestination,
@@ -640,75 +614,79 @@ private fun SettingsDetailBody(
     isLandscape: Boolean,
     onSettingsChange: (AppSettings) -> Unit,
 ) {
+    // KEY FIX: Use rememberUpdatedState so content files always get latest settings
+    val latestSettings by rememberUpdatedState(settings)
+    val latestOnChange by rememberUpdatedState(onSettingsChange)
+
+    val stableOnChange: (AppSettings) -> Unit = remember {
+        { newSettings -> latestOnChange(newSettings) }
+    }
+
     when (destination) {
         SettingsDestination.PORTRAIT_KEYBOARD -> {
             PortraitKeyboardContent(
                 subSectionId = subSectionId,
-                settings = settings,
+                settings = latestSettings,
                 isLandscape = isLandscape,
-                onSettingsChange = onSettingsChange,
+                onSettingsChange = stableOnChange,
             )
         }
         SettingsDestination.LANDSCAPE_KEYBOARD -> {
             LandscapeKeyboardContent(
                 subSectionId = subSectionId,
-                settings = settings,
+                settings = latestSettings,
                 isLandscape = isLandscape,
-                onSettingsChange = onSettingsChange,
+                onSettingsChange = stableOnChange,
             )
         }
         SettingsDestination.PORTRAIT_TRACKPAD -> {
             PortraitTrackpadContent(
                 subSectionId = subSectionId,
-                settings = settings,
+                settings = latestSettings,
                 isLandscape = isLandscape,
-                onSettingsChange = onSettingsChange,
+                onSettingsChange = stableOnChange,
             )
         }
         SettingsDestination.LANDSCAPE_TRACKPAD -> {
             LandscapeTrackpadContent(
                 subSectionId = subSectionId,
-                settings = settings,
+                settings = latestSettings,
                 isLandscape = isLandscape,
-                onSettingsChange = onSettingsChange,
+                onSettingsChange = stableOnChange,
             )
         }
         SettingsDestination.GENERAL_APPEARANCE -> {
             GeneralAppearanceContent(
                 subSectionId = subSectionId,
-                settings = settings,
+                settings = latestSettings,
                 isLandscape = isLandscape,
-                onSettingsChange = onSettingsChange,
+                onSettingsChange = stableOnChange,
             )
         }
         SettingsDestination.GENERAL_BEHAVIOR -> {
             GeneralBehaviorContent(
                 subSectionId = subSectionId,
-                settings = settings,
+                settings = latestSettings,
                 isLandscape = isLandscape,
-                onSettingsChange = onSettingsChange,
+                onSettingsChange = stableOnChange,
             )
         }
         SettingsDestination.GENERAL_LANGUAGE -> {
             GeneralLanguageContent(
                 subSectionId = subSectionId,
-                settings = settings,
+                settings = latestSettings,
                 isLandscape = isLandscape,
-                onSettingsChange = onSettingsChange,
+                onSettingsChange = stableOnChange,
             )
         }
         SettingsDestination.ABOUT_VERSION -> AboutVersionContent()
         SettingsDestination.ABOUT_LICENSES -> AboutLicensesContent()
-        SettingsDestination.ABOUT_RESET -> AboutResetContent(onSettingsChange = onSettingsChange)
+        SettingsDestination.ABOUT_RESET -> AboutResetContent(onSettingsChange = stableOnChange)
         SettingsDestination.FUTURE_GAMEPAD,
         SettingsDestination.FUTURE_PRESENTER,
         SettingsDestination.FUTURE_SHORTCUTS -> FutureStubContent(destination.label)
     }
 }
-
-// ═════════════════════════════════════════════════════════════════════════════
-// ABOUT / FUTURE CONTENT (kept here for simplicity)
-// ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
 private fun AboutVersionContent() {

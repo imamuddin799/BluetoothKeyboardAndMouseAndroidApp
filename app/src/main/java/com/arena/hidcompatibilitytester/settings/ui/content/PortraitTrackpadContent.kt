@@ -2,6 +2,8 @@ package com.arena.hidcompatibilitytester.settings.ui.content
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.arena.hidcompatibilitytester.settings.*
@@ -14,19 +16,21 @@ fun PortraitTrackpadContent(
     isLandscape: Boolean,
     onSettingsChange: (AppSettings) -> Unit,
 ) {
-    val tp = settings.portraitTrackpad
+    val latestSettings by rememberUpdatedState(settings)
+    val latestOnChange by rememberUpdatedState(onSettingsChange)
 
     fun update(transform: (PortraitTrackpadSettings) -> PortraitTrackpadSettings) {
-        var newSettings = settings.copy(portraitTrackpad = transform(tp))
+        val current = latestSettings.portraitTrackpad
+        var newSettings = latestSettings.copy(portraitTrackpad = transform(current))
         newSettings = SettingsSyncManager.applyTrackpadSyncFromPortrait(newSettings)
-        onSettingsChange(newSettings)
+        latestOnChange(newSettings)
     }
 
     when (subSectionId) {
-        "pointer" -> PortraitTrackpadPointerSection(tp, isLandscape, ::update)
-        "gestures" -> PortraitTrackpadGesturesSection(tp, isLandscape, ::update)
-        "layout" -> PortraitTrackpadLayoutSection(tp, isLandscape, ::update)
-        "keyboard" -> PortraitTrackpadKeyboardSection(tp, isLandscape, ::update)
+        "pointer" -> PortraitTrackpadPointerSection(settings.portraitTrackpad, isLandscape, ::update)
+        "gestures" -> PortraitTrackpadGesturesSection(settings.portraitTrackpad, isLandscape, ::update)
+        "layout" -> PortraitTrackpadLayoutSection(settings.portraitTrackpad, isLandscape, ::update)
+        "keyboard" -> PortraitTrackpadKeyboardSection(settings.portraitTrackpad, isLandscape, ::update)
     }
 }
 

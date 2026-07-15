@@ -6,15 +6,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.arena.hidcompatibilitytester.settings.AppSettings
 
-/**
- * Entry point for the settings module.
- *
- * Save-on-close behavior:
- * - Works on a local copy of settings.
- * - Changes are NOT applied until user explicitly saves.
- * - Save button appears on detail pages.
- * - Navigating back without saving triggers a discard confirmation dialog.
- */
 @Composable
 fun SettingsRootScreen(
     isLandscape: Boolean,
@@ -22,12 +13,14 @@ fun SettingsRootScreen(
     onSave: (AppSettings) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    // Local working copy — changes only committed on save
     var workingSettings by remember(settings) { mutableStateOf(settings) }
     var hasChanges by remember { mutableStateOf(false) }
     var currentPage by remember { mutableStateOf<SettingsPage>(SettingsPage.Home) }
     var showDiscardDialog by remember { mutableStateOf(false) }
     var pendingBackAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    // Key fix: always use latest workingSettings in callbacks
+    val latestSettings by rememberUpdatedState(workingSettings)
 
     fun onWorkingSettingsChange(newSettings: AppSettings) {
         workingSettings = newSettings
@@ -131,7 +124,6 @@ fun SettingsRootScreen(
             },
             dismissButton = {
                 TextButton(onClick = {
-                    // Discard changes — reset working copy
                     workingSettings = settings
                     hasChanges = false
                     showDiscardDialog = false

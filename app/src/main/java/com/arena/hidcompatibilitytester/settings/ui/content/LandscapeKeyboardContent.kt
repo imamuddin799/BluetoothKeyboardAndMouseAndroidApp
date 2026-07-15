@@ -2,6 +2,8 @@ package com.arena.hidcompatibilitytester.settings.ui.content
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.arena.hidcompatibilitytester.settings.*
@@ -14,20 +16,22 @@ fun LandscapeKeyboardContent(
     isLandscape: Boolean,
     onSettingsChange: (AppSettings) -> Unit,
 ) {
-    val kb = settings.landscapeKeyboard
+    val latestSettings by rememberUpdatedState(settings)
+    val latestOnChange by rememberUpdatedState(onSettingsChange)
 
     fun update(transform: (LandscapeKeyboardSettings) -> LandscapeKeyboardSettings) {
-        var newSettings = settings.copy(landscapeKeyboard = transform(kb))
+        val current = latestSettings.landscapeKeyboard
+        var newSettings = latestSettings.copy(landscapeKeyboard = transform(current))
         newSettings = SettingsSyncManager.applyKeyboardSyncFromLandscape(newSettings)
-        onSettingsChange(newSettings)
+        latestOnChange(newSettings)
     }
 
     when (subSectionId) {
-        "keys" -> LandscapeKeyboardKeysSection(kb, isLandscape, ::update)
-        "behavior" -> LandscapeKeyboardBehaviorSection(kb, isLandscape, ::update)
-        "appearance" -> LandscapeKeyboardAppearanceSection(kb, isLandscape, ::update)
-        "numpad" -> LandscapeKeyboardNumpadSection(kb, isLandscape, ::update)
-        "media" -> LandscapeKeyboardMediaSection(kb, isLandscape, ::update)
+        "keys" -> LandscapeKeyboardKeysSection(settings.landscapeKeyboard, isLandscape, ::update)
+        "behavior" -> LandscapeKeyboardBehaviorSection(settings.landscapeKeyboard, isLandscape, ::update)
+        "appearance" -> LandscapeKeyboardAppearanceSection(settings.landscapeKeyboard, isLandscape, ::update)
+        "numpad" -> LandscapeKeyboardNumpadSection(settings.landscapeKeyboard, isLandscape, ::update)
+        "media" -> LandscapeKeyboardMediaSection(settings.landscapeKeyboard, isLandscape, ::update)
     }
 }
 

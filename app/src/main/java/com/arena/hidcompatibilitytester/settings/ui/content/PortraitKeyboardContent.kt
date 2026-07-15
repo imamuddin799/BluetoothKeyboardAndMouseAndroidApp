@@ -2,6 +2,8 @@ package com.arena.hidcompatibilitytester.settings.ui.content
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.arena.hidcompatibilitytester.settings.*
@@ -14,20 +16,22 @@ fun PortraitKeyboardContent(
     isLandscape: Boolean,
     onSettingsChange: (AppSettings) -> Unit,
 ) {
-    val kb = settings.portraitKeyboard
+    val latestSettings by rememberUpdatedState(settings)
+    val latestOnChange by rememberUpdatedState(onSettingsChange)
 
     fun update(transform: (PortraitKeyboardSettings) -> PortraitKeyboardSettings) {
-        var newSettings = settings.copy(portraitKeyboard = transform(kb))
+        val current = latestSettings.portraitKeyboard
+        var newSettings = latestSettings.copy(portraitKeyboard = transform(current))
         newSettings = SettingsSyncManager.applyKeyboardSyncFromPortrait(newSettings)
-        onSettingsChange(newSettings)
+        latestOnChange(newSettings)
     }
 
     when (subSectionId) {
-        "keys" -> KeyboardKeysSection(kb, isLandscape, ::update)
-        "behavior" -> PortraitKeyboardBehaviorSection(kb, isLandscape, ::update)
-        "appearance" -> PortraitKeyboardAppearanceSection(kb, isLandscape, ::update)
-        "numpad" -> KeyboardNumpadSection(kb, isLandscape, ::update)
-        "media" -> KeyboardMediaSection(kb, isLandscape, ::update)
+        "keys" -> KeyboardKeysSection(settings.portraitKeyboard, isLandscape, ::update)
+        "behavior" -> PortraitKeyboardBehaviorSection(settings.portraitKeyboard, isLandscape, ::update)
+        "appearance" -> PortraitKeyboardAppearanceSection(settings.portraitKeyboard, isLandscape, ::update)
+        "numpad" -> KeyboardNumpadSection(settings.portraitKeyboard, isLandscape, ::update)
+        "media" -> KeyboardMediaSection(settings.portraitKeyboard, isLandscape, ::update)
     }
 }
 

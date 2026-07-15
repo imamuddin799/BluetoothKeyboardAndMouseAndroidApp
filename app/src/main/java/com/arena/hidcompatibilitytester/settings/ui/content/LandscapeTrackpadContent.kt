@@ -2,6 +2,8 @@ package com.arena.hidcompatibilitytester.settings.ui.content
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.arena.hidcompatibilitytester.settings.*
@@ -14,19 +16,21 @@ fun LandscapeTrackpadContent(
     isLandscape: Boolean,
     onSettingsChange: (AppSettings) -> Unit,
 ) {
-    val tp = settings.landscapeTrackpad
+    val latestSettings by rememberUpdatedState(settings)
+    val latestOnChange by rememberUpdatedState(onSettingsChange)
 
     fun update(transform: (LandscapeTrackpadSettings) -> LandscapeTrackpadSettings) {
-        var newSettings = settings.copy(landscapeTrackpad = transform(tp))
+        val current = latestSettings.landscapeTrackpad
+        var newSettings = latestSettings.copy(landscapeTrackpad = transform(current))
         newSettings = SettingsSyncManager.applyTrackpadSyncFromLandscape(newSettings)
-        onSettingsChange(newSettings)
+        latestOnChange(newSettings)
     }
 
     when (subSectionId) {
-        "pointer" -> LandscapeTrackpadPointerSection(tp, isLandscape, ::update)
-        "gestures" -> LandscapeTrackpadGesturesSection(tp, isLandscape, ::update)
-        "layout" -> LandscapeTrackpadLayoutSection(tp, isLandscape, ::update)
-        "keyboard" -> LandscapeTrackpadKeyboardSection(tp, isLandscape, ::update)
+        "pointer" -> LandscapeTrackpadPointerSection(settings.landscapeTrackpad, isLandscape, ::update)
+        "gestures" -> LandscapeTrackpadGesturesSection(settings.landscapeTrackpad, isLandscape, ::update)
+        "layout" -> LandscapeTrackpadLayoutSection(settings.landscapeTrackpad, isLandscape, ::update)
+        "keyboard" -> LandscapeTrackpadKeyboardSection(settings.landscapeTrackpad, isLandscape, ::update)
     }
 }
 
