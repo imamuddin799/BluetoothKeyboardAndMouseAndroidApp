@@ -289,61 +289,88 @@ private fun LandscapeKeyboardNumpadSection(
     isLandscape: Boolean,
     onUpdate: ((LandscapeKeyboardSettings) -> LandscapeKeyboardSettings) -> Unit,
 ) {
+    val merge = kb.mergeSystemAndModsGlobal || kb.navTabMergeSystemAndMods
+    val bothSystemAndModsEnabled = kb.navTabShowSystemKeys && kb.navTabShowQuickMods
+
+    val visibleNavSections = kb.navTabSectionOrder.filter { section ->
+        when (section) {
+            SettingsNavTabSection.NAV_ARROWS -> kb.navTabShowNavigation || kb.navTabShowArrowKeys
+            SettingsNavTabSection.INSERT_TOGGLE -> kb.navTabShowInsertToggle
+            SettingsNavTabSection.SYSTEM_KEYS -> kb.navTabShowSystemKeys && !merge
+            SettingsNavTabSection.QUICK_MODS -> kb.navTabShowQuickMods && !merge
+            SettingsNavTabSection.MERGED_SYSTEM_MODS -> merge && bothSystemAndModsEnabled
+            SettingsNavTabSection.TYPE_TEXT -> kb.navTabShowTypeText
+        }
+    }
+
     val groups = @Composable {
+        // 1. Numpad Behavior
         SettingsGroupCard(title = "Numpad Behavior") {
             SettingsToggle("Start with NumLock On", checked = kb.numpadStartsLocked) {
-                v -> onUpdate { s -> s.copy(numpadStartsLocked = v) }
+                newValue -> onUpdate { it.copy(numpadStartsLocked = newValue) }
             }
             SettingsToggle("Show Alternate Hints", checked = kb.numpadShowHints) {
-                v -> onUpdate { s -> s.copy(numpadShowHints = v) }
+                newValue -> onUpdate { it.copy(numpadShowHints = newValue) }
             }
         }
 
+        // 2. Nav Tab Options
+        SettingsGroupCard(title = "Nav Tab Options") {
+            // Make sure this uses navTabSectionStyle NOT keysTabSectionStyle
+            SettingsChipSelector(
+                label = "Section Style",
+                subtitle = "Visual style for sections in Nav+Numpad tab",
+                options = SettingsSectionStyle.entries.map { it.label },
+                selectedIndex = kb.navTabSectionStyle.ordinal,
+            ) { i -> onUpdate { it.copy(navTabSectionStyle = SettingsSectionStyle.entries[i]) } }
+
+            SettingsToggle(
+                "Merge System & Modifiers",
+                subtitle = when {
+                    kb.mergeSystemAndModsGlobal -> "Controlled by global"
+                    !bothSystemAndModsEnabled -> "Enable both System Keys & Quick Modifiers first"
+                    else -> "Nav tab only"
+                },
+                checked = kb.navTabMergeSystemAndMods,
+                enabled = !kb.mergeSystemAndModsGlobal && bothSystemAndModsEnabled,
+            ) { newValue -> onUpdate { it.copy(navTabMergeSystemAndMods = newValue) } }
+
+            SettingsToggle(
+                "In-Place Reorder",
+                subtitle = if (kb.inPlaceReorderGlobal) "Controlled by global" else "Nav tab only",
+                checked = kb.navTabInPlaceReorder,
+                enabled = !kb.inPlaceReorderGlobal,
+            ) { newValue -> onUpdate { it.copy(navTabInPlaceReorder = newValue) } }
+
+            SettingsToggle("Swap Nav ↔ Arrows", checked = kb.navTabNavArrowsSwapped) {
+                newValue -> onUpdate { it.copy(navTabNavArrowsSwapped = newValue) }
+            }
+        }
+
+        // 3. Nav+Numpad Tab Sections
         SettingsGroupCard(title = "Nav+Numpad Tab Sections") {
             SettingsToggle("Navigation", checked = kb.navTabShowNavigation) {
-                v -> onUpdate { s -> s.copy(navTabShowNavigation = v) }
+                newValue -> onUpdate { it.copy(navTabShowNavigation = newValue) }
             }
             SettingsToggle("Arrow Keys", checked = kb.navTabShowArrowKeys) {
-                v -> onUpdate { s -> s.copy(navTabShowArrowKeys = v) }
+                newValue -> onUpdate { it.copy(navTabShowArrowKeys = newValue) }
             }
             SettingsToggle("Insert/Overwrite Toggle", checked = kb.navTabShowInsertToggle) {
-                v -> onUpdate { s -> s.copy(navTabShowInsertToggle = v) }
+                newValue -> onUpdate { it.copy(navTabShowInsertToggle = newValue) }
             }
             SettingsToggle("System Keys", checked = kb.navTabShowSystemKeys) {
-                v -> onUpdate { s -> s.copy(navTabShowSystemKeys = v) }
+                newValue -> onUpdate { it.copy(navTabShowSystemKeys = newValue) }
             }
             SettingsToggle("Quick Modifiers", checked = kb.navTabShowQuickMods) {
-                v -> onUpdate { s -> s.copy(navTabShowQuickMods = v) }
+                newValue -> onUpdate { it.copy(navTabShowQuickMods = newValue) }
             }
             SettingsToggle("Type & Send Text", checked = kb.navTabShowTypeText) {
-                v -> onUpdate { s -> s.copy(navTabShowTypeText = v) }
+                newValue -> onUpdate { it.copy(navTabShowTypeText = newValue) }
             }
         }
 
-        SettingsGroupCard(title = "Nav Tab Options") {
-            SettingsToggle("Merge System & Modifiers", checked = kb.navTabMergeSystemAndMods) {
-                v -> onUpdate { s -> s.copy(navTabMergeSystemAndMods = v) }
-            }
-            SettingsToggle("In-Place Reorder", checked = kb.navTabInPlaceReorder) {
-                v -> onUpdate { s -> s.copy(navTabInPlaceReorder = v) }
-            }
-            SettingsToggle("Swap Nav ↔ Arrows", checked = kb.navTabNavArrowsSwapped) {
-                v -> onUpdate { s -> s.copy(navTabNavArrowsSwapped = v) }
-            }
-        }
-
+        // 4. Nav Tab Section Order
         SettingsGroupCard(title = "Nav Tab Section Order") {
-            val merge = kb.mergeSystemAndModsGlobal || kb.navTabMergeSystemAndMods
-            val visibleNavSections = kb.navTabSectionOrder.filter { section ->
-                when (section) {
-                    SettingsNavTabSection.NAV_ARROWS -> kb.navTabShowNavigation || kb.navTabShowArrowKeys
-                    SettingsNavTabSection.INSERT_TOGGLE -> kb.navTabShowInsertToggle
-                    SettingsNavTabSection.SYSTEM_KEYS -> kb.navTabShowSystemKeys && !merge
-                    SettingsNavTabSection.QUICK_MODS -> kb.navTabShowQuickMods && !merge
-                    SettingsNavTabSection.MERGED_SYSTEM_MODS -> merge && kb.navTabShowSystemKeys && kb.navTabShowQuickMods
-                    SettingsNavTabSection.TYPE_TEXT -> kb.navTabShowTypeText
-                }
-            }
             SettingsDragReorderList(
                 items = visibleNavSections,
                 labelProvider = { it.label },

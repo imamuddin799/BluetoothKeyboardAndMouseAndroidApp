@@ -27,7 +27,7 @@ internal fun LandscapeNavNumpadTab(
     onClearMods: () -> Unit,
     onSettingsChange: (LandscapeKeyboardSettings) -> Unit,
 ) {
-    val style = settings.keysTabSectionStyle
+    val style = settings.navTabSectionStyle
     val merge = settings.shouldMergeSystemMods(settings.navTabMergeSystemAndMods)
     val inPlaceReorder = settings.shouldAllowInPlaceReorder(settings.navTabInPlaceReorder)
 

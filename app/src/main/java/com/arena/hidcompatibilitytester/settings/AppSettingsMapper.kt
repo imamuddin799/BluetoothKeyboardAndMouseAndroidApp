@@ -45,6 +45,10 @@ fun KeyboardSettings.toPortraitSettings(): PortraitKeyboardSettings {
         navTabShowTypeText = navTabShowTypeText,
         navTabShowSystemKeys = navTabShowSystemKeys,
         navTabShowQuickMods = navTabShowQuickMods,
+        navTabSectionStyle = when (navTabSectionStyle) {
+            SectionStyle.COMPACT -> SettingsSectionStyle.COMPACT
+            SectionStyle.MEDIA -> SettingsSectionStyle.MEDIA
+        },
         navTabMergeSystemAndMods = navTabMergeSystemAndMods,
         navTabInPlaceReorder = navTabInPlaceReorder,
         navTabNavArrowsSwapped = navTabNavArrowsSwapped,
@@ -115,6 +119,10 @@ fun PortraitKeyboardSettings.toScreenSettings(): KeyboardSettings {
         navTabShowTypeText = navTabShowTypeText,
         navTabShowSystemKeys = navTabShowSystemKeys,
         navTabShowQuickMods = navTabShowQuickMods,
+        navTabSectionStyle = when (navTabSectionStyle) {
+            SettingsSectionStyle.COMPACT -> SectionStyle.COMPACT
+            SettingsSectionStyle.MEDIA -> SectionStyle.MEDIA
+        },
         navTabMergeSystemAndMods = navTabMergeSystemAndMods,
         navTabInPlaceReorder = navTabInPlaceReorder,
         navTabNavArrowsSwapped = navTabNavArrowsSwapped,
@@ -190,6 +198,10 @@ fun com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeKeybo
         navTabShowTypeText = navTabShowTypeText,
         navTabShowSystemKeys = navTabShowSystemKeys,
         navTabShowQuickMods = navTabShowQuickMods,
+        navTabSectionStyle = when (navTabSectionStyle) {
+            LandscapeSectionStyle.COMPACT -> SettingsSectionStyle.COMPACT
+            LandscapeSectionStyle.MEDIA -> SettingsSectionStyle.MEDIA
+        },
         navTabMergeSystemAndMods = navTabMergeSystemAndMods,
         navTabInPlaceReorder = navTabInPlaceReorder,
         navTabNavArrowsSwapped = navTabNavArrowsSwapped,

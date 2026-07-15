@@ -56,6 +56,7 @@ data class KeyboardSettings(
     val navTabShowSystemKeys: Boolean = true,
     val navTabShowQuickMods: Boolean = false,
     val navTabShowTypeText: Boolean = true,
+    val navTabSectionStyle: SectionStyle = SectionStyle.MEDIA,
 
     // Optional Row Visibility
     val globalOptionalRowVisibility: Boolean = false,

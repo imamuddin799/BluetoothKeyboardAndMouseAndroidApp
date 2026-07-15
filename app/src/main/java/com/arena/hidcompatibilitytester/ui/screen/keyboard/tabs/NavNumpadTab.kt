@@ -57,7 +57,7 @@ internal fun NavNumpadTab(
     onSettingsChange: ((KeyboardSettings) -> Unit)? = null,
 ) {
     val scope          = rememberCoroutineScope()
-    val style          = settings.keysTabSectionStyle
+    val style          = settings.navTabSectionStyle
     val isComfort      = style == SectionStyle.MEDIA
     val merge          = settings.shouldMergeSystemMods(settings.navTabMergeSystemAndMods)
     val inPlaceReorder = settings.shouldAllowInPlaceReorder(settings.navTabInPlaceReorder)

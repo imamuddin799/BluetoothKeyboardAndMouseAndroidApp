@@ -46,6 +46,7 @@ object KeyboardSettingsStore {
             putBoolean("navTabShowTypeText", s.navTabShowTypeText)
             putBoolean("navTabShowSystemKeys", s.navTabShowSystemKeys)
             putBoolean("navTabShowQuickMods", s.navTabShowQuickMods)
+            putString("navTabSectionStyle", s.navTabSectionStyle.name)
 
             // Optional row visibility
             putBoolean("globalOptionalRowVisibility", s.globalOptionalRowVisibility)
@@ -150,6 +151,9 @@ object KeyboardSettingsStore {
             navTabShowTypeText = p.getBoolean("navTabShowTypeText", true),
             navTabShowSystemKeys = p.getBoolean("navTabShowSystemKeys", true),
             navTabShowQuickMods = p.getBoolean("navTabShowQuickMods", false),
+            navTabSectionStyle = runCatching {
+                SectionStyle.valueOf(p.getString("navTabSectionStyle", "MEDIA")!!)
+            }.getOrDefault(SectionStyle.MEDIA),
 
             // Optional row visibility — migrate from old keys
             globalOptionalRowVisibility = p.getBoolean("globalOptionalRowVisibility", false),

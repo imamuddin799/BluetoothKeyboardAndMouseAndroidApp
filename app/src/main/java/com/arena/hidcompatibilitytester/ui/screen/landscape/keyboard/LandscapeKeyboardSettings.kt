@@ -35,6 +35,7 @@ data class LandscapeKeyboardSettings(
     val navTabShowSystemKeys: Boolean = true,
     val navTabShowQuickMods: Boolean = false,
     val navTabShowTypeText: Boolean = true,
+    val navTabSectionStyle: LandscapeSectionStyle = LandscapeSectionStyle.MEDIA,
     val globalOptionalRowVisibility: Boolean = false,
     val globalShowMediaRow: Boolean = false,
     val globalShowNavRow: Boolean = false,

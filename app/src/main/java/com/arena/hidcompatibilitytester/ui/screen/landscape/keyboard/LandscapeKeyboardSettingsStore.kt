@@ -42,6 +42,7 @@ object LandscapeKeyboardSettingsStore {
             putBoolean("navTabShowTypeText", s.navTabShowTypeText)
             putBoolean("navTabShowSystemKeys", s.navTabShowSystemKeys)
             putBoolean("navTabShowQuickMods", s.navTabShowQuickMods)
+            putString("navTabSectionStyle", s.navTabSectionStyle.name)
             putBoolean("globalOptionalRowVisibility", s.globalOptionalRowVisibility)
             putBoolean("globalShowMediaRow", s.globalShowMediaRow)
             putBoolean("globalShowNavRow", s.globalShowNavRow)
@@ -121,6 +122,7 @@ object LandscapeKeyboardSettingsStore {
             navTabShowTypeText = p.getBoolean("navTabShowTypeText", true),
             navTabShowSystemKeys = p.getBoolean("navTabShowSystemKeys", true),
             navTabShowQuickMods = p.getBoolean("navTabShowQuickMods", false),
+            navTabSectionStyle = safeEnum(p.getString("navTabSectionStyle", "MEDIA"), LandscapeSectionStyle.MEDIA),
             globalOptionalRowVisibility = p.getBoolean("globalOptionalRowVisibility", false),
             globalShowMediaRow = p.getBoolean("globalShowMediaRow", false),
             globalShowNavRow = p.getBoolean("globalShowNavRow", false),
