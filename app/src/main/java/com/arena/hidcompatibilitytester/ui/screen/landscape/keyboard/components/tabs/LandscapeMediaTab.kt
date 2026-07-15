@@ -8,6 +8,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import androidx.compose.material3.Text
 import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.*
 import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.components.*
 
@@ -22,6 +25,7 @@ internal fun LandscapeMediaTab(
 ) {
     val mediaH = settings.mediaKeySize.heightDp.dp
     val style = settings.mediaTabSectionStyle
+    val isCompact = style == LandscapeSectionStyle.COMPACT
     val merge = settings.shouldMergeSystemMods(settings.mediaTabMergeSystemAndMods)
     val inPlaceReorder = settings.shouldAllowInPlaceReorder(settings.mediaTabInPlaceReorder)
 
@@ -45,7 +49,7 @@ internal fun LandscapeMediaTab(
         viewportTopPx = it.positionInRoot().y
         viewportBottomPx = viewportTopPx + it.size.height
     }) {
-        Column(Modifier.fillMaxSize().verticalScroll(scrollState).padding(8.dp)) {
+        Column(Modifier.fillMaxSize().verticalScroll(scrollState).padding(if (isCompact) 4.dp else 8.dp)) {
             LandscapeReorderableSectionColumn(
                 items = visibleSections,
                 enabled = inPlaceReorder,
@@ -55,28 +59,96 @@ internal fun LandscapeMediaTab(
                 onReorder = { onSettingsChange(settings.copy(mediaTabSectionOrder = it)) }
             ) { _, section, _ ->
                 when (section) {
-                    LandscapeMediaTabSection.TRANSPORT -> LandscapeKbCard("Transport") {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            LANDSCAPE_MEDIA_TRANSPORT.forEach { mk ->
-                                LandscapeMediaKeyBtn(mk.icon, mk.label, Modifier.weight(1f), mediaH, settings) { onConsumerKey(mk.code) }
+                    LandscapeMediaTabSection.TRANSPORT ->
+                        if (isCompact) {
+                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                Text(
+                                    "Transport",
+                                    color = Color(0xFF607D8B),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    LANDSCAPE_MEDIA_TRANSPORT.forEach { mk ->
+                                        LandscapeMediaKeyBtn(mk.icon, mk.label, Modifier.weight(1f), mediaH, settings, LandscapeMediaRowGroup.TRANSPORT) { onConsumerKey(mk.code) }
+                                    }
+                                }
+                            }
+                        } else {
+                            LandscapeKbCard("Transport") {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    LANDSCAPE_MEDIA_TRANSPORT.forEach { mk ->
+                                        LandscapeMediaKeyBtn(mk.icon, mk.label, Modifier.weight(1f), mediaH, settings, LandscapeMediaRowGroup.TRANSPORT) { onConsumerKey(mk.code) }
+                                    }
+                                }
                             }
                         }
-                    }
-                    LandscapeMediaTabSection.VOLUME_BRIGHTNESS -> LandscapeKbCard("Volume & Brightness") {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            LANDSCAPE_MEDIA_VOLUME.forEach { mk ->
-                                LandscapeMediaKeyBtn(mk.icon, mk.label, Modifier.weight(1f), mediaH, settings, LandscapeMediaRowGroup.VOLUME) { onConsumerKey(mk.code) }
+
+                    LandscapeMediaTabSection.VOLUME_BRIGHTNESS ->
+                        if (isCompact) {
+                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                Text(
+                                    "Volume & Brightness",
+                                    color = Color(0xFF607D8B),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    LANDSCAPE_MEDIA_VOLUME.forEach { mk ->
+                                        LandscapeMediaKeyBtn(mk.icon, mk.label, Modifier.weight(1f), mediaH, settings, LandscapeMediaRowGroup.VOLUME) { onConsumerKey(mk.code) }
+                                    }
+                                    LANDSCAPE_MEDIA_BRIGHT.forEach { mk ->
+                                        LandscapeMediaKeyBtn(mk.icon, mk.label, Modifier.weight(1f), mediaH, settings, LandscapeMediaRowGroup.BRIGHTNESS) { onConsumerKey(mk.code) }
+                                    }
+                                }
                             }
-                            LANDSCAPE_MEDIA_BRIGHT.forEach { mk ->
-                                LandscapeMediaKeyBtn(mk.icon, mk.label, Modifier.weight(1f), mediaH, settings, LandscapeMediaRowGroup.BRIGHTNESS) { onConsumerKey(mk.code) }
+                        } else {
+                            LandscapeKbCard("Volume & Brightness") {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    LANDSCAPE_MEDIA_VOLUME.forEach { mk ->
+                                        LandscapeMediaKeyBtn(mk.icon, mk.label, Modifier.weight(1f), mediaH, settings, LandscapeMediaRowGroup.VOLUME) { onConsumerKey(mk.code) }
+                                    }
+                                    LANDSCAPE_MEDIA_BRIGHT.forEach { mk ->
+                                        LandscapeMediaKeyBtn(mk.icon, mk.label, Modifier.weight(1f), mediaH, settings, LandscapeMediaRowGroup.BRIGHTNESS) { onConsumerKey(mk.code) }
+                                    }
+                                }
                             }
                         }
-                    }
-                    LandscapeMediaTabSection.NAVIGATION -> LandscapeKbCard("Navigation") { LandscapeNavigationSectionContent(st, settings, style, onKeyPress) }
-                    LandscapeMediaTabSection.ARROW_KEYS -> LandscapeKbCard("Arrows") { LandscapeArrowKeysSectionContent(st, settings, style, onKeyPress) }
-                    LandscapeMediaTabSection.SYSTEM_KEYS -> LandscapeKbCard("System Keys") { LandscapeSystemKeysSectionContent(st, settings, style, onKeyPress) }
-                    LandscapeMediaTabSection.QUICK_MODS -> LandscapeKbCard("Quick Modifiers") { LandscapeQuickModsSectionContent(st, settings, style, onKeyPress, onClearMods) }
-                    LandscapeMediaTabSection.MERGED_SYSTEM_MODS -> LandscapeKbCard("System & Modifiers") { LandscapeMergedSystemModsSectionContent(st, settings, style, onKeyPress, onClearMods) }
+
+                    LandscapeMediaTabSection.NAVIGATION ->
+                        if (isCompact) {
+                            LandscapeNavigationSection(st, settings, style, onKeyPress)
+                        } else {
+                            LandscapeKbCard("Navigation") { LandscapeNavigationSectionContent(st, settings, style, onKeyPress) }
+                        }
+
+                    LandscapeMediaTabSection.ARROW_KEYS ->
+                        if (isCompact) {
+                            LandscapeArrowKeysSection(st, settings, style, onKeyPress)
+                        } else {
+                            LandscapeKbCard("Arrows") { LandscapeArrowKeysSectionContent(st, settings, style, onKeyPress) }
+                        }
+
+                    LandscapeMediaTabSection.SYSTEM_KEYS ->
+                        if (isCompact) {
+                            LandscapeSystemKeysSection(st, settings, style, onKeyPress)
+                        } else {
+                            LandscapeKbCard("System Keys") { LandscapeSystemKeysSectionContent(st, settings, style, onKeyPress) }
+                        }
+
+                    LandscapeMediaTabSection.QUICK_MODS ->
+                        if (isCompact) {
+                            LandscapeQuickModsSection(st, settings, style, onKeyPress, onClearMods)
+                        } else {
+                            LandscapeKbCard("Quick Modifiers") { LandscapeQuickModsSectionContent(st, settings, style, onKeyPress, onClearMods) }
+                        }
+
+                    LandscapeMediaTabSection.MERGED_SYSTEM_MODS ->
+                        if (isCompact) {
+                            LandscapeMergedSystemModsSection(st, settings, style, onKeyPress, onClearMods)
+                        } else {
+                            LandscapeKbCard("System & Modifiers") { LandscapeMergedSystemModsSectionContent(st, settings, style, onKeyPress, onClearMods) }
+                        }
                 }
             }
         }

@@ -83,11 +83,24 @@ private fun LandscapeKeyboardKeysSection(
         }
 
         SettingsGroupCard(title = "Section Order") {
+            val merge = kb.mergeSystemAndModsGlobal || kb.keysTabMergeSystemAndMods
+            val visibleKeySections = kb.keysTabSectionOrder.filter { section ->
+                when (section) {
+                    SettingsKeysTabSection.NAV_ARROWS -> kb.keysTabShowNavigation || kb.keysTabShowArrowKeys
+                    SettingsKeysTabSection.SYSTEM_KEYS -> kb.keysTabShowSystemKeys && !merge
+                    SettingsKeysTabSection.QUICK_MODS -> kb.keysTabShowQuickMods && !merge
+                    SettingsKeysTabSection.MERGED_SYSTEM_MODS -> merge && kb.keysTabShowSystemKeys && kb.keysTabShowQuickMods
+                }
+            }
             SettingsDragReorderList(
-                items = kb.keysTabSectionOrder,
+                items = visibleKeySections,
                 labelProvider = { it.label },
                 iconProvider = { it.icon },
-                onReorder = { newOrder -> onUpdate { s -> s.copy(keysTabSectionOrder = newOrder) } },
+                onReorder = { newOrder ->
+                    val visible = newOrder.toSet()
+                    val hidden = kb.keysTabSectionOrder.filter { it !in visible }
+                    onUpdate { it.copy(keysTabSectionOrder = newOrder + hidden) }
+                },
             )
         }
     }
@@ -320,11 +333,26 @@ private fun LandscapeKeyboardNumpadSection(
         }
 
         SettingsGroupCard(title = "Nav Tab Section Order") {
+            val merge = kb.mergeSystemAndModsGlobal || kb.navTabMergeSystemAndMods
+            val visibleNavSections = kb.navTabSectionOrder.filter { section ->
+                when (section) {
+                    SettingsNavTabSection.NAV_ARROWS -> kb.navTabShowNavigation || kb.navTabShowArrowKeys
+                    SettingsNavTabSection.INSERT_TOGGLE -> kb.navTabShowInsertToggle
+                    SettingsNavTabSection.SYSTEM_KEYS -> kb.navTabShowSystemKeys && !merge
+                    SettingsNavTabSection.QUICK_MODS -> kb.navTabShowQuickMods && !merge
+                    SettingsNavTabSection.MERGED_SYSTEM_MODS -> merge && kb.navTabShowSystemKeys && kb.navTabShowQuickMods
+                    SettingsNavTabSection.TYPE_TEXT -> kb.navTabShowTypeText
+                }
+            }
             SettingsDragReorderList(
-                items = kb.navTabSectionOrder,
+                items = visibleNavSections,
                 labelProvider = { it.label },
                 iconProvider = { it.icon },
-                onReorder = { newOrder -> onUpdate { s -> s.copy(navTabSectionOrder = newOrder) } },
+                onReorder = { newOrder ->
+                    val visible = newOrder.toSet()
+                    val hidden = kb.navTabSectionOrder.filter { it !in visible }
+                    onUpdate { it.copy(navTabSectionOrder = newOrder + hidden) }
+                },
             )
         }
     }
@@ -338,81 +366,130 @@ private fun LandscapeKeyboardMediaSection(
     isLandscape: Boolean,
     onUpdate: ((LandscapeKeyboardSettings) -> LandscapeKeyboardSettings) -> Unit,
 ) {
+    val merge = kb.mergeSystemAndModsGlobal || kb.mediaTabMergeSystemAndMods
+    val bothSystemAndModsEnabled = kb.mediaTabShowSystemKeys && kb.mediaTabShowQuickMods
+
+    val visibleMediaSections = kb.mediaTabSectionOrder.filter { section ->
+        when (section) {
+            SettingsMediaTabSection.TRANSPORT -> true
+            SettingsMediaTabSection.VOLUME_BRIGHTNESS -> true
+            SettingsMediaTabSection.NAVIGATION -> kb.mediaTabShowNavigation
+            SettingsMediaTabSection.ARROW_KEYS -> kb.mediaTabShowArrowKeys
+            SettingsMediaTabSection.SYSTEM_KEYS -> kb.mediaTabShowSystemKeys && !merge
+            SettingsMediaTabSection.QUICK_MODS -> kb.mediaTabShowQuickMods && !merge
+            SettingsMediaTabSection.MERGED_SYSTEM_MODS -> merge && bothSystemAndModsEnabled
+        }
+    }
+
+    val visibleGroups = kb.mediaRowGroupOrder.filter { group ->
+        when (group) {
+            SettingsMediaRowGroup.TRANSPORT -> kb.mediaRowShowTransport
+            SettingsMediaRowGroup.VOLUME -> kb.mediaRowShowVolume
+            SettingsMediaRowGroup.BRIGHTNESS -> kb.mediaRowShowBrightness
+        }
+    }
+
     val groups = @Composable {
+        // 1. Media Key Size
         SettingsGroupCard(title = "Media Key Size") {
             SettingsChipSelector(
                 label = "Button Size",
                 options = SettingsMediaKeySize.entries.map { it.label },
                 selectedIndex = kb.mediaKeySize.ordinal,
-            ) { i -> onUpdate { s -> s.copy(mediaKeySize = SettingsMediaKeySize.entries[i]) } }
+            ) { i -> onUpdate { it.copy(mediaKeySize = SettingsMediaKeySize.entries[i]) } }
         }
 
-        SettingsGroupCard(title = "Media Tab Sections") {
-            SettingsToggle("Navigation", checked = kb.mediaTabShowNavigation) {
-                v -> onUpdate { s -> s.copy(mediaTabShowNavigation = v) }
-            }
-            SettingsToggle("Arrow Keys", checked = kb.mediaTabShowArrowKeys) {
-                v -> onUpdate { s -> s.copy(mediaTabShowArrowKeys = v) }
-            }
-            SettingsToggle("System Keys", checked = kb.mediaTabShowSystemKeys) {
-                v -> onUpdate { s -> s.copy(mediaTabShowSystemKeys = v) }
-            }
-            SettingsToggle("Quick Modifiers", checked = kb.mediaTabShowQuickMods) {
-                v -> onUpdate { s -> s.copy(mediaTabShowQuickMods = v) }
-            }
-        }
-
+        // 2. Media Tab Style
         SettingsGroupCard(title = "Media Tab Style") {
             SettingsChipSelector(
                 label = "Section Style",
                 options = SettingsSectionStyle.entries.map { it.label },
                 selectedIndex = kb.mediaTabSectionStyle.ordinal,
-            ) { i -> onUpdate { s -> s.copy(mediaTabSectionStyle = SettingsSectionStyle.entries[i]) } }
+            ) { i -> onUpdate { it.copy(mediaTabSectionStyle = SettingsSectionStyle.entries[i]) } }
 
-            SettingsToggle("Merge System & Modifiers", checked = kb.mediaTabMergeSystemAndMods) {
-                v -> onUpdate { s -> s.copy(mediaTabMergeSystemAndMods = v) }
+            SettingsToggle(
+                "Merge System & Modifiers",
+                subtitle = when {
+                    kb.mergeSystemAndModsGlobal -> "Controlled by global"
+                    !bothSystemAndModsEnabled -> "Enable both System Keys & Quick Modifiers first"
+                    else -> "Media tab only"
+                },
+                checked = kb.mediaTabMergeSystemAndMods,
+                enabled = !kb.mergeSystemAndModsGlobal && bothSystemAndModsEnabled,
+            ) { newValue -> onUpdate { it.copy(mediaTabMergeSystemAndMods = newValue) } }
+
+            SettingsToggle(
+                "In-Place Reorder",
+                subtitle = if (kb.inPlaceReorderGlobal) "Controlled by global" else "Media tab only",
+                checked = kb.mediaTabInPlaceReorder,
+                enabled = !kb.inPlaceReorderGlobal,
+            ) { newValue -> onUpdate { it.copy(mediaTabInPlaceReorder = newValue) } }
+        }
+
+        // 3. Media Tab Sections
+        SettingsGroupCard(title = "Media Tab Sections") {
+            SettingsToggle("Navigation", checked = kb.mediaTabShowNavigation) {
+                newValue -> onUpdate { it.copy(mediaTabShowNavigation = newValue) }
             }
-            SettingsToggle("In-Place Reorder", checked = kb.mediaTabInPlaceReorder) {
-                v -> onUpdate { s -> s.copy(mediaTabInPlaceReorder = v) }
+            SettingsToggle("Arrow Keys", checked = kb.mediaTabShowArrowKeys) {
+                newValue -> onUpdate { it.copy(mediaTabShowArrowKeys = newValue) }
+            }
+            SettingsToggle("System Keys", checked = kb.mediaTabShowSystemKeys) {
+                newValue -> onUpdate { it.copy(mediaTabShowSystemKeys = newValue) }
+            }
+            SettingsToggle("Quick Modifiers", checked = kb.mediaTabShowQuickMods) {
+                newValue -> onUpdate { it.copy(mediaTabShowQuickMods = newValue) }
             }
         }
 
-        SettingsGroupCard(title = "Media Row Groups") {
-            SettingsToggle("Transport (⏮ ⏯ ⏹ ⏭)", checked = kb.mediaRowShowTransport) {
-                v -> onUpdate { s -> s.copy(mediaRowShowTransport = v) }
-            }
-            SettingsToggle("Volume (🔇 🔉 🔊)", checked = kb.mediaRowShowVolume) {
-                v -> onUpdate { s -> s.copy(mediaRowShowVolume = v) }
-            }
-            SettingsToggle("Brightness (🔅 🔆)", checked = kb.mediaRowShowBrightness) {
-                v -> onUpdate { s -> s.copy(mediaRowShowBrightness = v) }
-            }
-        }
-
-        SettingsGroupCard(title = "Media Row Repeat") {
-            SettingsToggle("Repeat Volume", checked = kb.mediaRowRepeatVolume) {
-                v -> onUpdate { s -> s.copy(mediaRowRepeatVolume = v) }
-            }
-            SettingsToggle("Repeat Brightness", checked = kb.mediaRowRepeatBrightness) {
-                v -> onUpdate { s -> s.copy(mediaRowRepeatBrightness = v) }
-            }
-        }
-
-        SettingsGroupCard(title = "Media Group Order") {
+        // 4. Media Tab Section Order
+        SettingsGroupCard(title = "Media Tab Section Order") {
             SettingsDragReorderList(
-                items = kb.mediaRowGroupOrder,
+                items = visibleMediaSections,
                 labelProvider = { it.label },
                 iconProvider = { it.icon },
-                onReorder = { newOrder -> onUpdate { s -> s.copy(mediaRowGroupOrder = newOrder) } },
+                onReorder = { newOrder ->
+                    val visible = newOrder.toSet()
+                    val hidden = kb.mediaTabSectionOrder.filter { it !in visible }
+                    onUpdate { it.copy(mediaTabSectionOrder = newOrder + hidden) }
+                },
             )
         }
 
-        SettingsGroupCard(title = "Media Tab Section Order") {
+        // 5. Media Row Repeat
+        SettingsGroupCard(title = "Media Row Repeat") {
+            SettingsToggle("Repeat Volume", checked = kb.mediaRowRepeatVolume) {
+                newValue -> onUpdate { it.copy(mediaRowRepeatVolume = newValue) }
+            }
+            SettingsToggle("Repeat Brightness", checked = kb.mediaRowRepeatBrightness) {
+                newValue -> onUpdate { it.copy(mediaRowRepeatBrightness = newValue) }
+            }
+        }
+
+        // 6. Media Row Groups
+        SettingsGroupCard(title = "Media Row Groups") {
+            SettingsToggle("Transport (⏮ ⏯ ⏹ ⏭)", checked = kb.mediaRowShowTransport) {
+                newValue -> onUpdate { it.copy(mediaRowShowTransport = newValue) }
+            }
+            SettingsToggle("Volume (🔇 🔉 🔊)", checked = kb.mediaRowShowVolume) {
+                newValue -> onUpdate { it.copy(mediaRowShowVolume = newValue) }
+            }
+            SettingsToggle("Brightness (🔅 🔆)", checked = kb.mediaRowShowBrightness) {
+                newValue -> onUpdate { it.copy(mediaRowShowBrightness = newValue) }
+            }
+        }
+
+        // 7. Media Group Order
+        SettingsGroupCard(title = "Media Group Order") {
             SettingsDragReorderList(
-                items = kb.mediaTabSectionOrder,
+                items = visibleGroups,
                 labelProvider = { it.label },
                 iconProvider = { it.icon },
-                onReorder = { newOrder -> onUpdate { s -> s.copy(mediaTabSectionOrder = newOrder) } },
+                onReorder = { newOrder ->
+                    val visible = newOrder.toSet()
+                    val hidden = kb.mediaRowGroupOrder.filter { it !in visible }
+                    onUpdate { it.copy(mediaRowGroupOrder = newOrder + hidden) }
+                },
             )
         }
     }

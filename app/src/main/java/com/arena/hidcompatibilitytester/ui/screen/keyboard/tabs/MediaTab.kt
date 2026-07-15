@@ -10,6 +10,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import androidx.compose.material3.Text
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.*
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.components.*
 
@@ -80,56 +83,110 @@ internal fun MediaTab(
             ) { _, section, _ ->
                 when (section) {
                     MediaTabSection.TRANSPORT ->
-                        KbCard("Transport") {
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                MEDIA_TRANSPORT.forEach { mk ->
-                                    MediaKeyBtn(
-                                        mk.icon,
-                                        mk.label,
-                                        Modifier.weight(1f),
-                                        mediaH,
-                                        settings
-                                    ) {
-                                        onConsumerKey(mk.code)
-                                        onUpdateLastKey(mk.label)
+                        if (isCompact) {
+                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                Text(
+                                    "Transport",
+                                    color = Color(0xFF607D8B),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    MEDIA_TRANSPORT.forEach { mk ->
+                                        MediaKeyBtn(
+                                            mk.icon, mk.label,
+                                            Modifier.weight(1f), mediaH, settings,
+                                            mediaGroup = MediaRowGroup.TRANSPORT,
+                                        ) {
+                                            onConsumerKey(mk.code)
+                                            onUpdateLastKey(mk.label)
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            KbCard("Transport") {
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    MEDIA_TRANSPORT.forEach { mk ->
+                                        MediaKeyBtn(
+                                            mk.icon, mk.label,
+                                            Modifier.weight(1f), mediaH, settings,
+                                            mediaGroup = MediaRowGroup.TRANSPORT,
+                                        ) {
+                                            onConsumerKey(mk.code)
+                                            onUpdateLastKey(mk.label)
+                                        }
                                     }
                                 }
                             }
                         }
 
                     MediaTabSection.VOLUME_BRIGHTNESS ->
-                        KbCard("Volume & Brightness") {
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                MEDIA_VOLUME.forEach { mk ->
-                                    MediaKeyBtn(
-                                        mk.icon,
-                                        mk.label,
-                                        Modifier.weight(1f),
-                                        mediaH - 8.dp,
-                                        settings,
-                                        mediaGroup = MediaRowGroup.VOLUME,
-                                    ) {
-                                        onConsumerKey(mk.code)
-                                        onUpdateLastKey(mk.label)
+                        if (isCompact) {
+                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                Text(
+                                    "Volume & Brightness",
+                                    color = Color(0xFF607D8B),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    MEDIA_VOLUME.forEach { mk ->
+                                        MediaKeyBtn(
+                                            mk.icon, mk.label,
+                                            Modifier.weight(1f), mediaH - 8.dp, settings,
+                                            mediaGroup = MediaRowGroup.VOLUME,
+                                        ) {
+                                            onConsumerKey(mk.code)
+                                            onUpdateLastKey(mk.label)
+                                        }
+                                    }
+                                    MEDIA_BRIGHT.forEach { mk ->
+                                        MediaKeyBtn(
+                                            mk.icon, mk.label,
+                                            Modifier.weight(1f), mediaH - 8.dp, settings,
+                                            mediaGroup = MediaRowGroup.BRIGHTNESS,
+                                        ) {
+                                            onConsumerKey(mk.code)
+                                            onUpdateLastKey(mk.label)
+                                        }
                                     }
                                 }
-                                MEDIA_BRIGHT.forEach { mk ->
-                                    MediaKeyBtn(
-                                        mk.icon,
-                                        mk.label,
-                                        Modifier.weight(1f),
-                                        mediaH - 8.dp,
-                                        settings,
-                                        mediaGroup = MediaRowGroup.BRIGHTNESS,
-                                    ) {
-                                        onConsumerKey(mk.code)
-                                        onUpdateLastKey(mk.label)
+                            }
+                        } else {
+                            KbCard("Volume & Brightness") {
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    MEDIA_VOLUME.forEach { mk ->
+                                        MediaKeyBtn(
+                                            mk.icon, mk.label,
+                                            Modifier.weight(1f), mediaH - 8.dp, settings,
+                                            mediaGroup = MediaRowGroup.VOLUME,
+                                        ) {
+                                            onConsumerKey(mk.code)
+                                            onUpdateLastKey(mk.label)
+                                        }
+                                    }
+                                    MEDIA_BRIGHT.forEach { mk ->
+                                        MediaKeyBtn(
+                                            mk.icon, mk.label,
+                                            Modifier.weight(1f), mediaH - 8.dp, settings,
+                                            mediaGroup = MediaRowGroup.BRIGHTNESS,
+                                        ) {
+                                            onConsumerKey(mk.code)
+                                            onUpdateLastKey(mk.label)
+                                        }
                                     }
                                 }
                             }

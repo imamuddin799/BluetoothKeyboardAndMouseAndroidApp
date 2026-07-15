@@ -36,6 +36,9 @@ import com.arena.hidcompatibilitytester.service.HidInputService
 import com.arena.hidcompatibilitytester.settings.AppSettings
 import com.arena.hidcompatibilitytester.settings.AppSettingsStore
 import com.arena.hidcompatibilitytester.settings.ui.SettingsRootScreen
+import com.arena.hidcompatibilitytester.settings.toPortraitSettings
+import com.arena.hidcompatibilitytester.settings.toLandscapeSettings
+import com.arena.hidcompatibilitytester.settings.toScreenSettings
 import com.arena.hidcompatibilitytester.ui.screen.AppMainScreen
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.KeyboardSettings
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.KeyboardSettingsSheet
@@ -267,8 +270,13 @@ class MainActivity : ComponentActivity(),
         targetAddress = address
     }
 
+    // Replace onSaveNewSettings to also sync screen-level settings
     private fun onSaveNewSettings(newSettings: AppSettings) {
         appSettings = newSettings
+        // Sync AppSettings → screen-level settings
+        keyboardSettings = newSettings.portraitKeyboard.toScreenSettings()
+        KeyboardSettingsStore.save(this, keyboardSettings)
+        // Note: landscape keyboard syncs via its own store if needed
         runBlocking { AppSettingsStore.save(this@MainActivity, newSettings) }
     }
 
@@ -411,9 +419,15 @@ class MainActivity : ComponentActivity(),
                             landscapeTrackpadSettings = newSettings
                             LandscapeTrackpadSettingsStore.save(this@MainActivity, newSettings)
                         },
+                        // In landscape LandscapeMainScreen section, replace onKeyboardSettingsChange:
                         onKeyboardSettingsChange = { newSettings ->
                             landscapeKeyboardSettings = newSettings
                             LandscapeKeyboardSettingsStore.save(this@MainActivity, newSettings)
+                            // Sync back to AppSettings
+                            appSettings = appSettings.copy(
+                                landscapeKeyboard = newSettings.toLandscapeSettings()
+                            )
+                            runBlocking { AppSettingsStore.save(this@MainActivity, appSettings) }
                         },
                         onOpenSettings = { showSettingsScreen = true },
                         modifier = Modifier  // ← ADD THIS
@@ -463,9 +477,15 @@ class MainActivity : ComponentActivity(),
                         },
                         onShowTrackpadSettings = { showTrackpadSettingsSheet = true },
                         onShowKeyboardSettings = { showKeyboardSettingsSheet = true },
-                        onSettingsChange       = { newSettings ->
+                        // In portrait AppMainScreen section, replace onSettingsChange:
+                        onSettingsChange = { newSettings ->
                             keyboardSettings = newSettings
                             KeyboardSettingsStore.save(this@MainActivity, newSettings)
+                            // Sync back to AppSettings
+                            appSettings = appSettings.copy(
+                                portraitKeyboard = newSettings.toPortraitSettings()
+                            )
+                            runBlocking { AppSettingsStore.save(this@MainActivity, appSettings) }
                         },
                         onOpenSettings = { showSettingsScreen = true },
                     )

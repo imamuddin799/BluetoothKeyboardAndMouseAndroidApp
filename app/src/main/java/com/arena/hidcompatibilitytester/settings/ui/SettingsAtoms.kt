@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -779,6 +780,20 @@ fun <T> SettingsDragReorderList(
             val isDragged = draggingIdx == index
             val offsetDp = with(density) { (offsetAnimatables[index]?.value ?: 0f).toDp() }
 
+            // Dynamic display index — matches old DragToReorderList behavior
+            val displayIndex = when {
+                isDragged -> (targetIdx + 1).coerceIn(1, orderList.size)
+                draggingIdx >= 0 -> {
+                    val wouldBe = when {
+                        targetIdx > draggingIdx && index in (draggingIdx + 1)..targetIdx -> index - 1
+                        targetIdx < draggingIdx && index in targetIdx until draggingIdx -> index + 1
+                        else -> index
+                    }
+                    wouldBe + 1
+                }
+                else -> index + 1
+            }
+
             Surface(
                 color = if (isDragged) SettingsColors.Accent.copy(0.25f) else SettingsColors.SurfaceElevated,
                 shape = RoundedCornerShape(6.dp),
@@ -804,25 +819,32 @@ fun <T> SettingsDragReorderList(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
+                        // Number badge — centered text
                         Box(
                             modifier = Modifier
-                                .size(18.dp)
+                                .size(20.dp)
                                 .background(
-                                    SettingsColors.Accent.copy(0.15f),
-                                    RoundedCornerShape(4.dp),
+                                    if (isDragged) SettingsColors.Accent.copy(0.3f)
+                                    else SettingsColors.Accent.copy(0.15f),
+                                    RoundedCornerShape(5.dp),
                                 ),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                "${index + 1}",
-                                color = SettingsColors.AccentSoft,
-                                fontSize = 10.sp,
+                                "$displayIndex",
+                                color = if (isDragged) Color.White else SettingsColors.AccentSoft,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 11.sp,
+                                modifier = Modifier.wrapContentSize(Alignment.Center),
                             )
                         }
+                        // Icon — use AccentSoft color instead of default black
                         Text(
                             iconProvider(item),
                             fontSize = 12.sp,
+                            color = SettingsColors.AccentSoft,
                         )
                         Text(
                             labelProvider(item),
