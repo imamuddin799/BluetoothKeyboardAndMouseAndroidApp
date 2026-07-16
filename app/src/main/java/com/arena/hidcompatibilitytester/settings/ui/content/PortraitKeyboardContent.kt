@@ -29,7 +29,6 @@ fun PortraitKeyboardContent(
     when (subSectionId) {
         "keys" -> KeyboardKeysSection(settings.portraitKeyboard, isLandscape, ::update)
         "behavior" -> PortraitKeyboardBehaviorSection(settings.portraitKeyboard, isLandscape, ::update)
-        "appearance" -> PortraitKeyboardAppearanceSection(settings.portraitKeyboard, isLandscape, ::update)
         "numpad" -> KeyboardNumpadSection(settings.portraitKeyboard, isLandscape, ::update)
         "media" -> KeyboardMediaSection(settings.portraitKeyboard, isLandscape, ::update)
     }
@@ -45,63 +44,143 @@ internal fun KeyboardKeysSection(
     isLandscape: Boolean,
     onUpdate: ((PortraitKeyboardSettings) -> PortraitKeyboardSettings) -> Unit,
 ) {
+    val merge = kb.mergeSystemAndModsGlobal || kb.keysTabMergeSystemAndMods
+    val bothSystemAndModsEnabled = kb.keysTabShowSystemKeys && kb.keysTabShowQuickMods
+
+    val visibleKeySections = kb.keysTabSectionOrder.filter { section ->
+        when (section) {
+            SettingsKeysTabSection.NAV_ARROWS -> kb.keysTabShowNavigation || kb.keysTabShowArrowKeys
+            SettingsKeysTabSection.SYSTEM_KEYS -> kb.keysTabShowSystemKeys && !merge
+            SettingsKeysTabSection.QUICK_MODS -> kb.keysTabShowQuickMods && !merge
+            SettingsKeysTabSection.MERGED_SYSTEM_MODS -> merge && bothSystemAndModsEnabled
+        }
+    }
+
     val groups = @Composable {
-        // ── Key Repeat ─────────────────────────────
+        // 1. Size
+        SettingsGroupCard(title = "Size") {
+            SettingsChipSelector(
+                label = "Key Height",
+                options = SettingsKeyHeight.entries.map { it.label },
+                selectedIndex = kb.keyHeight.ordinal,
+            ) { i -> onUpdate { it.copy(keyHeight = SettingsKeyHeight.entries[i]) } }
+
+            SettingsChipSelector(
+                label = "Font Size",
+                options = SettingsKeyFontSize.entries.map { it.label },
+                selectedIndex = kb.keyFontSize.ordinal,
+            ) { i -> onUpdate { it.copy(keyFontSize = SettingsKeyFontSize.entries[i]) } }
+        }
+
+        // 2. Key Repeat — add hint when disabled
         SettingsGroupCard(title = "Key Repeat") {
             SettingsToggle(
                 label = "Enable Key Repeat",
                 subtitle = "Hold a key to repeat it",
                 checked = kb.repeatEnabled,
-            ) { newValue -> onUpdate { s -> s.copy(repeatEnabled = newValue) } }
-        }
+            ) { newValue -> onUpdate { it.copy(repeatEnabled = newValue) } }
 
-        // ── Feedback ───────────────────────────────
-        SettingsGroupCard(title = "Feedback") {
-            SettingsToggle("Haptic Feedback", checked = kb.hapticEnabled, subtitle = "Vibrate on key press") {
-                onUpdate { s -> s.copy(hapticEnabled = it) }
-            }
-            SettingsToggle("Sound on Press", checked = kb.soundOnPress) {
-                onUpdate { s -> s.copy(soundOnPress = it) }
+            if (!kb.repeatEnabled) {
+                SettingsHint(
+                    text = "Key repeat is disabled. Timing settings below have no effect.",
+                    variant = SettingsHintVariant.WARNING,
+                )
             }
         }
 
-        // ── Section Visibility ─────────────────────
-        SettingsGroupCard(title = "Section Visibility") {
-            SettingsToggle("Navigation", checked = kb.keysTabShowNavigation) {
-                onUpdate { s -> s.copy(keysTabShowNavigation = it) }
+        // 3. Key Repeat Timing — add disabled hint
+        SettingsGroupCard(title = "Key Repeat Timing") {
+            if (!kb.repeatEnabled) {
+                SettingsHint(
+                    text = "Enable Key Repeat above to use these settings.",
+                    variant = SettingsHintVariant.WARNING,
+                )
             }
-            SettingsToggle("Arrow Keys", checked = kb.keysTabShowArrowKeys) {
-                onUpdate { s -> s.copy(keysTabShowArrowKeys = it) }
-            }
-            SettingsToggle("System Keys", checked = kb.keysTabShowSystemKeys) {
-                onUpdate { s -> s.copy(keysTabShowSystemKeys = it) }
-            }
-            SettingsToggle("Quick Modifiers", checked = kb.keysTabShowQuickMods) {
-                onUpdate { s -> s.copy(keysTabShowQuickMods = it) }
-            }
+
+            SettingsSlider(
+                label = "Initial Delay",
+                value = kb.repeatInitialDelayMs.toFloat(),
+                range = 100f..800f,
+                display = { "${it.toLong()}ms" },
+                minLabel = "Short", maxLabel = "Long",
+                enabled = kb.repeatEnabled,
+            ) { v -> onUpdate { it.copy(repeatInitialDelayMs = v.toLong()) } }
+
+            SettingsSlider(
+                label = "Repeat Speed",
+                value = kb.repeatIntervalMs.toFloat(),
+                range = 20f..150f,
+                display = { "${it.toLong()}ms" },
+                minLabel = "Fast", maxLabel = "Slow",
+                enabled = kb.repeatEnabled,
+            ) { v -> onUpdate { it.copy(repeatIntervalMs = v.toLong()) } }
         }
 
-        // ── Style ──────────────────────────────────
-        // In KeyboardKeysSection — this is CORRECT, keep as is
+        // 4. Style — add global hints
         SettingsGroupCard(title = "Style") {
             SettingsChipSelector(
                 label = "Section Style",
                 options = SettingsSectionStyle.entries.map { it.label },
                 selectedIndex = kb.keysTabSectionStyle.ordinal,
             ) { i -> onUpdate { it.copy(keysTabSectionStyle = SettingsSectionStyle.entries[i]) } }
+
+            SettingsToggle(
+                "Merge System & Modifiers",
+                subtitle = when {
+                    kb.mergeSystemAndModsGlobal -> "Controlled by global"
+                    !bothSystemAndModsEnabled -> "Enable both System Keys & Quick Modifiers first"
+                    else -> "Keys tab only"
+                },
+                checked = kb.keysTabMergeSystemAndMods,
+                enabled = !kb.mergeSystemAndModsGlobal && bothSystemAndModsEnabled,
+            ) { newValue -> onUpdate { it.copy(keysTabMergeSystemAndMods = newValue) } }
+
+            if (kb.mergeSystemAndModsGlobal) {
+                SettingsHint(
+                    text = "Global merge is ON. Go to Behavior → Global Toggles to turn it off.",
+                    icon = "🔒",
+                    variant = SettingsHintVariant.INFO,
+                )
+            }
+
+            SettingsToggle(
+                "In-Place Reorder",
+                subtitle = if (kb.inPlaceReorderGlobal) "Controlled by global" else "Keys tab only",
+                checked = kb.keysTabInPlaceReorder,
+                enabled = !kb.inPlaceReorderGlobal,
+            ) { newValue -> onUpdate { it.copy(keysTabInPlaceReorder = newValue) } }
+
+            if (kb.inPlaceReorderGlobal) {
+                SettingsHint(
+                    text = "Global in-place reorder is ON. Go to Behavior → Global Toggles to turn it off.",
+                    icon = "🔒",
+                    variant = SettingsHintVariant.INFO,
+                )
+            }
+
+            SettingsToggle("Swap Nav ↔ Arrows", checked = kb.keysTabNavArrowsSwapped) {
+                newValue -> onUpdate { it.copy(keysTabNavArrowsSwapped = newValue) }
+            }
         }
 
-        // ── Section Order ──────────────────────────
-        SettingsGroupCard(title = "Section Order") {
-            val merge = kb.mergeSystemAndModsGlobal || kb.keysTabMergeSystemAndMods
-            val visibleKeySections = kb.keysTabSectionOrder.filter { section ->
-                when (section) {
-                    SettingsKeysTabSection.NAV_ARROWS -> kb.keysTabShowNavigation || kb.keysTabShowArrowKeys
-                    SettingsKeysTabSection.SYSTEM_KEYS -> kb.keysTabShowSystemKeys && !merge
-                    SettingsKeysTabSection.QUICK_MODS -> kb.keysTabShowQuickMods && !merge
-                    SettingsKeysTabSection.MERGED_SYSTEM_MODS -> merge && kb.keysTabShowSystemKeys && kb.keysTabShowQuickMods
-                }
+        // 5. Section Visibility
+        SettingsGroupCard(title = "Section Visibility") {
+            SettingsToggle("Navigation", checked = kb.keysTabShowNavigation) {
+                newValue -> onUpdate { it.copy(keysTabShowNavigation = newValue) }
             }
+            SettingsToggle("Arrow Keys", checked = kb.keysTabShowArrowKeys) {
+                newValue -> onUpdate { it.copy(keysTabShowArrowKeys = newValue) }
+            }
+            SettingsToggle("System Keys", checked = kb.keysTabShowSystemKeys) {
+                newValue -> onUpdate { it.copy(keysTabShowSystemKeys = newValue) }
+            }
+            SettingsToggle("Quick Modifiers", checked = kb.keysTabShowQuickMods) {
+                newValue -> onUpdate { it.copy(keysTabShowQuickMods = newValue) }
+            }
+        }
+
+        // 6. Section Order
+        SettingsGroupCard(title = "Section Order") {
             SettingsDragReorderList(
                 items = visibleKeySections,
                 labelProvider = { it.label },
@@ -112,6 +191,170 @@ internal fun KeyboardKeysSection(
                     onUpdate { it.copy(keysTabSectionOrder = newOrder + hidden) }
                 },
             )
+        }
+
+        // 7. Optional Rows Visibility — add hints
+        SettingsGroupCard(title = "Optional Rows Visibility") {
+            SettingsToggle(
+                "Global Visibility",
+                subtitle = "Same visibility across all keyboards",
+                checked = kb.globalOptionalRowVisibility,
+            ) { newValue -> onUpdate { it.copy(globalOptionalRowVisibility = newValue) } }
+
+            if (kb.globalOptionalRowVisibility) {
+                SettingsToggle("Show Media Row", checked = kb.globalShowMediaRow) {
+                    newValue -> onUpdate { it.copy(globalShowMediaRow = newValue) }
+                }
+                SettingsToggle("Show Nav Row", checked = kb.globalShowNavRow) {
+                    newValue -> onUpdate { it.copy(globalShowNavRow = newValue) }
+                }
+            } else {
+                SettingsToggle("Media Row — Keys Tab", checked = kb.keysTabShowMediaRow) {
+                    newValue -> onUpdate { it.copy(keysTabShowMediaRow = newValue) }
+                }
+                SettingsToggle("Media Row — Trackpad", checked = kb.trackpadShowMediaRow) {
+                    newValue -> onUpdate { it.copy(trackpadShowMediaRow = newValue) }
+                }
+                SettingsToggle("Nav Row — Keys Tab", checked = kb.keysTabShowNavRow) {
+                    newValue -> onUpdate { it.copy(keysTabShowNavRow = newValue) }
+                }
+                SettingsToggle("Nav Row — Trackpad", checked = kb.trackpadShowNavRow) {
+                    newValue -> onUpdate { it.copy(trackpadShowNavRow = newValue) }
+                }
+            }
+
+            if (kb.globalOptionalRowVisibility) {
+                SettingsHint(
+                    text = "Global visibility is ON. Turn it off to customize per keyboard.",
+                    icon = "🔒",
+                    variant = SettingsHintVariant.INFO,
+                )
+            }
+        }
+
+        // 8. Optional Row Order
+        if (kb.globalOptionalRowVisibility && kb.globalShowMediaRow && kb.globalShowNavRow) {
+            // Global visibility ON + both rows enabled → show single global reorder
+            SettingsGroupCard(title = "Optional Row Order") {
+                SettingsDragReorderList(
+                    items = kb.keyboardOptionalRowOrder,
+                    labelProvider = { it.label },
+                    iconProvider = { it.icon },
+                    onReorder = { newOrder ->
+                        onUpdate {
+                            it.copy(
+                                keyboardOptionalRowOrder = newOrder,
+                                keysTabOptionalRowOrder = newOrder,
+                                trackpadOptionalRowOrder = newOrder,
+                            )
+                        }
+                    },
+                )
+            }
+        } else if (!kb.globalOptionalRowVisibility) {
+            // Global visibility OFF → show per-keyboard reorder lists
+            val keysTabHasRows = kb.keysTabShowMediaRow || kb.keysTabShowNavRow
+            val trackpadHasRows = kb.trackpadShowMediaRow || kb.trackpadShowNavRow
+
+            if (keysTabHasRows || trackpadHasRows) {
+                SettingsGroupCard(title = "Optional Row Order") {
+                    if (keysTabHasRows) {
+                        SettingsHint(
+                            text = "Keys Tab Order",
+                            icon = "⌨",
+                            variant = SettingsHintVariant.INFO,
+                        )
+                        SettingsDragReorderList(
+                            items = kb.keysTabOptionalRowOrder.filter { row ->
+                                when (row) {
+                                    SettingsOptionalRow.MEDIA_ROW -> kb.keysTabShowMediaRow
+                                    SettingsOptionalRow.NAV_ROW -> kb.keysTabShowNavRow
+                                }
+                            },
+                            labelProvider = { it.label },
+                            iconProvider = { it.icon },
+                            onReorder = { newOrder ->
+                                val visible = newOrder.toSet()
+                                val hidden = kb.keysTabOptionalRowOrder.filter { it !in visible }
+                                onUpdate { it.copy(keysTabOptionalRowOrder = newOrder + hidden) }
+                            },
+                        )
+                    }
+
+                    if (trackpadHasRows) {
+                        SettingsHint(
+                            text = "Trackpad Keyboard Order",
+                            icon = "🖱",
+                            variant = SettingsHintVariant.INFO,
+                        )
+                        SettingsDragReorderList(
+                            items = kb.trackpadOptionalRowOrder.filter { row ->
+                                when (row) {
+                                    SettingsOptionalRow.MEDIA_ROW -> kb.trackpadShowMediaRow
+                                    SettingsOptionalRow.NAV_ROW -> kb.trackpadShowNavRow
+                                }
+                            },
+                            labelProvider = { it.label },
+                            iconProvider = { it.icon },
+                            onReorder = { newOrder ->
+                                val visible = newOrder.toSet()
+                                val hidden = kb.trackpadOptionalRowOrder.filter { it !in visible }
+                                onUpdate { it.copy(trackpadOptionalRowOrder = newOrder + hidden) }
+                            },
+                        )
+                    }
+                }
+            }
+        }
+
+        // 9. Status Bar
+        SettingsGroupCard(title = "Status Bar") {
+            SettingsToggle("Show LED Indicators", checked = kb.showStatusBar) {
+                newValue -> onUpdate { it.copy(showStatusBar = newValue) }
+            }
+            SettingsToggle("Show Combo Preview", checked = kb.showComboPreview) {
+                newValue -> onUpdate { it.copy(showComboPreview = newValue) }
+            }
+        }
+
+        // 10. Key Labels
+        SettingsGroupCard(title = "Key Labels") {
+            SettingsToggle("Show Key Hints", subtitle = "Shift chars above keys", checked = kb.showKeyHints) {
+                newValue -> onUpdate { it.copy(showKeyHints = newValue) }
+            }
+            SettingsToggle("Compact Modifiers", checked = kb.compactModifiers) {
+                newValue -> onUpdate { it.copy(compactModifiers = newValue) }
+            }
+            SettingsToggle("High Contrast Mode", checked = kb.highContrastMode) {
+                newValue -> onUpdate { it.copy(highContrastMode = newValue) }
+            }
+        }
+
+        // 11. Feedback
+        SettingsGroupCard(title = "Feedback") {
+            SettingsToggle("Haptic Feedback", checked = kb.hapticEnabled, subtitle = "Vibrate on key press") {
+                newValue -> onUpdate { it.copy(hapticEnabled = newValue) }
+            }
+            SettingsToggle("Sound on Press", checked = kb.soundOnPress) {
+                newValue -> onUpdate { it.copy(soundOnPress = newValue) }
+            }
+        }
+
+        // 12. Haptics — add disabled hint
+        SettingsGroupCard(title = "Haptics") {
+            if (!kb.hapticEnabled) {
+                SettingsHint(
+                    text = "Enable Haptic Feedback above to use intensity settings.",
+                    variant = SettingsHintVariant.WARNING,
+                )
+            }
+
+            SettingsChipSelector(
+                label = "Intensity",
+                options = SettingsHapticIntensity.entries.map { it.label },
+                selectedIndex = kb.hapticIntensity.ordinal,
+                enabled = kb.hapticEnabled,
+            ) { i -> onUpdate { it.copy(hapticIntensity = SettingsHapticIntensity.entries[i]) } }
         }
     }
 
@@ -129,65 +372,74 @@ private fun PortraitKeyboardBehaviorSection(
     onUpdate: ((PortraitKeyboardSettings) -> PortraitKeyboardSettings) -> Unit,
 ) {
     val groups = @Composable {
-        SettingsGroupCard(title = "Key Repeat Timing") {
-            SettingsSlider(
-                label = "Initial Delay",
-                value = kb.repeatInitialDelayMs.toFloat(),
-                range = 100f..800f,
-                display = { "${it.toLong()}ms" },
-                minLabel = "Short", maxLabel = "Long",
-                enabled = kb.repeatEnabled,
-            ) { v -> onUpdate { s -> s.copy(repeatInitialDelayMs = v.toLong()) } }
-
-            SettingsSlider(
-                label = "Repeat Speed",
-                value = kb.repeatIntervalMs.toFloat(),
-                range = 20f..150f,
-                display = { "${it.toLong()}ms" },
-                minLabel = "Fast", maxLabel = "Slow",
-                enabled = kb.repeatEnabled,
-            ) { v -> onUpdate { s -> s.copy(repeatIntervalMs = v.toLong()) } }
-        }
-
-        SettingsGroupCard(title = "Haptics") {
-            SettingsChipSelector(
-                label = "Intensity",
-                options = SettingsHapticIntensity.entries.map { it.label },
-                selectedIndex = kb.hapticIntensity.ordinal,
-                enabled = kb.hapticEnabled,
-            ) { i -> onUpdate { s -> s.copy(hapticIntensity = SettingsHapticIntensity.entries[i]) } }
-        }
-
         SettingsGroupCard(title = "Modifier Keys") {
             SettingsToggle(
                 "Sticky Modifiers",
                 subtitle = "Mods stay held until cleared",
                 checked = kb.stickyModifiers,
-            ) { onUpdate { s -> s.copy(stickyModifiers = it) } }
+            ) { newValue -> onUpdate { it.copy(stickyModifiers = newValue) } }
 
             SettingsToggle(
                 "Keep Mods After Tab",
                 subtitle = "Mod+Tab releases only Tab",
                 checked = kb.keepModsAfterTab,
                 enabled = !kb.stickyModifiers,
-            ) { onUpdate { s -> s.copy(keepModsAfterTab = it) } }
+            ) { newValue -> onUpdate { it.copy(keepModsAfterTab = newValue) } }
+
+            // Sticky mods explanation card
+            if (kb.stickyModifiers) {
+                SettingsHint(
+                    text = "Sticky ON: Mod + Key → release only Key, Mod stays held. Mod + Tab → release only Tab. Tap Mod again or Clear to release.",
+                    icon = "🔒",
+                    variant = SettingsHintVariant.INFO,
+                )
+            } else {
+                SettingsHint(
+                    text = if (kb.keepModsAfterTab)
+                        "Sticky OFF: Mod + Key → release both. Mod + Tab → release only Tab, Mod stays held."
+                    else
+                        "Sticky OFF: Mod + Key → release both. Mod + Tab → release both.",
+                    icon = "⚡",
+                    variant = SettingsHintVariant.SUCCESS,
+                )
+            }
         }
 
         SettingsGroupCard(title = "Global Toggles") {
-            SettingsToggle("Merge System & Modifiers (all tabs)", checked = kb.mergeSystemAndModsGlobal) {
-                onUpdate { s -> s.copy(mergeSystemAndModsGlobal = it) }
+            SettingsToggle("Merge System & Modifiers", checked = kb.mergeSystemAndModsGlobal,
+                subtitle = "Combine into one section across all tabs") {
+                newValue -> onUpdate { it.copy(
+                    mergeSystemAndModsGlobal = newValue,
+                    keysTabMergeSystemAndMods = newValue,
+                    mediaTabMergeSystemAndMods = newValue,
+                    navTabMergeSystemAndMods = newValue,
+                ) }
             }
-            SettingsToggle("In-Place Reorder (all tabs)", checked = kb.inPlaceReorderGlobal) {
-                onUpdate { s -> s.copy(inPlaceReorderGlobal = it) }
-            }
-        }
 
-        SettingsGroupCard(title = "Status Bar") {
-            SettingsToggle("Show LED Indicators", checked = kb.showStatusBar) {
-                onUpdate { s -> s.copy(showStatusBar = it) }
+            if (kb.mergeSystemAndModsGlobal) {
+                SettingsHint(
+                    text = "System Keys and Quick Modifiers are merged into one section on all tabs. Per-tab merge settings are overridden.",
+                    icon = "🔒",
+                    variant = SettingsHintVariant.INFO,
+                )
             }
-            SettingsToggle("Show Combo Preview", checked = kb.showComboPreview) {
-                onUpdate { s -> s.copy(showComboPreview = it) }
+
+            SettingsToggle("In-Place Reorder", checked = kb.inPlaceReorderGlobal,
+                subtitle = "Long-press and drag to reorder on any tab") {
+                newValue -> onUpdate { it.copy(
+                    inPlaceReorderGlobal = newValue,
+                    keysTabInPlaceReorder = newValue,
+                    mediaTabInPlaceReorder = newValue,
+                    navTabInPlaceReorder = newValue,
+                ) }
+            }
+
+            if (kb.inPlaceReorderGlobal) {
+                SettingsHint(
+                    text = "In-place reorder is enabled on all tabs. Per-tab reorder settings are overridden.",
+                    icon = "🔒",
+                    variant = SettingsHintVariant.INFO,
+                )
             }
         }
 
@@ -196,7 +448,7 @@ private fun PortraitKeyboardBehaviorSection(
                 label = "Opens First",
                 options = listOf("⌨ Keys", "↕ Nav+Num", "🎵 Media"),
                 selectedIndex = kb.defaultTab.coerceIn(0, 2),
-            ) { i -> onUpdate { s -> s.copy(defaultTab = i) } }
+            ) { i -> onUpdate { it.copy(defaultTab = i) } }
         }
     }
 
@@ -214,86 +466,10 @@ private fun PortraitKeyboardAppearanceSection(
     onUpdate: ((PortraitKeyboardSettings) -> PortraitKeyboardSettings) -> Unit,
 ) {
     val groups = @Composable {
-        SettingsGroupCard(title = "Size") {
-            SettingsChipSelector(
-                label = "Key Height",
-                options = SettingsKeyHeight.entries.map { it.label },
-                selectedIndex = kb.keyHeight.ordinal,
-            ) { i -> onUpdate { s -> s.copy(keyHeight = SettingsKeyHeight.entries[i]) } }
-
-            SettingsChipSelector(
-                label = "Font Size",
-                options = SettingsKeyFontSize.entries.map { it.label },
-                selectedIndex = kb.keyFontSize.ordinal,
-            ) { i -> onUpdate { s -> s.copy(keyFontSize = SettingsKeyFontSize.entries[i]) } }
-        }
-
-        SettingsGroupCard(title = "Labels") {
-            SettingsToggle("Show Key Hints", subtitle = "Shift chars above keys", checked = kb.showKeyHints) {
-                onUpdate { s -> s.copy(showKeyHints = it) }
-            }
-            SettingsToggle("Compact Modifiers", checked = kb.compactModifiers) {
-                onUpdate { s -> s.copy(compactModifiers = it) }
-            }
-            SettingsToggle("High Contrast Mode", checked = kb.highContrastMode) {
-                onUpdate { s -> s.copy(highContrastMode = it) }
-            }
-        }
-
-        SettingsGroupCard(title = "Optional Rows Visibility") {
-            SettingsToggle(
-                "Global Visibility",
-                subtitle = "Same visibility across all keyboards",
-                checked = kb.globalOptionalRowVisibility,
-            ) { onUpdate { s -> s.copy(globalOptionalRowVisibility = it) } }
-
-            if (kb.globalOptionalRowVisibility) {
-                SettingsToggle("Show Media Row", checked = kb.globalShowMediaRow) {
-                    onUpdate { s -> s.copy(globalShowMediaRow = it) }
-                }
-                SettingsToggle("Show Nav Row", checked = kb.globalShowNavRow) {
-                    onUpdate { s -> s.copy(globalShowNavRow = it) }
-                }
-            } else {
-                SettingsToggle("Media Row — Keys Tab", checked = kb.keysTabShowMediaRow) {
-                    onUpdate { s -> s.copy(keysTabShowMediaRow = it) }
-                }
-                SettingsToggle("Media Row — Trackpad", checked = kb.trackpadShowMediaRow) {
-                    onUpdate { s -> s.copy(trackpadShowMediaRow = it) }
-                }
-                SettingsToggle("Nav Row — Keys Tab", checked = kb.keysTabShowNavRow) {
-                    onUpdate { s -> s.copy(keysTabShowNavRow = it) }
-                }
-                SettingsToggle("Nav Row — Trackpad", checked = kb.trackpadShowNavRow) {
-                    onUpdate { s -> s.copy(trackpadShowNavRow = it) }
-                }
-            }
-        }
-
-        SettingsGroupCard(title = "Optional Rows Order") {
-            SettingsToggle(
-                "Global Order",
-                subtitle = "Same order across all keyboards",
-                checked = kb.globalOptionalRowOrder,
-            ) { onUpdate { s -> s.copy(globalOptionalRowOrder = it) } }
-
-            SettingsDragReorderList(
-                items = if (kb.globalOptionalRowOrder) kb.keyboardOptionalRowOrder else kb.keysTabOptionalRowOrder,
-                labelProvider = { it.label },
-                iconProvider = { it.icon },
-                onReorder = { newOrder ->
-                    onUpdate { s ->
-                        if (s.globalOptionalRowOrder) {
-                            s.copy(
-                                keyboardOptionalRowOrder = newOrder,
-                                keysTabOptionalRowOrder = newOrder,
-                                trackpadOptionalRowOrder = newOrder,
-                            )
-                        } else {
-                            s.copy(keysTabOptionalRowOrder = newOrder)
-                        }
-                    }
-                },
+        SettingsGroupCard(title = "Appearance") {
+            SettingsHint(
+                text = "Size, Key Labels, High Contrast and Optional Rows settings have moved to the Keys tab.",
+                variant = SettingsHintVariant.INFO,
             )
         }
     }
@@ -343,7 +519,6 @@ internal fun KeyboardNumpadSection(
 
         // 2. Nav Tab Options
         SettingsGroupCard(title = "Nav Tab Options") {
-            // In KeyboardNumpadSection — make sure this uses navTabSectionStyle NOT keysTabSectionStyle
             SettingsChipSelector(
                 label = "Section Style",
                 subtitle = "Visual style for sections in Nav+Numpad tab",
@@ -362,12 +537,28 @@ internal fun KeyboardNumpadSection(
                 enabled = !kb.mergeSystemAndModsGlobal && bothSystemAndModsEnabled,
             ) { newValue -> onUpdate { it.copy(navTabMergeSystemAndMods = newValue) } }
 
+            if (kb.mergeSystemAndModsGlobal) {
+                SettingsHint(
+                    text = "Global merge is ON. Go to Behavior → Global Toggles to turn it off.",
+                    icon = "🔒",
+                    variant = SettingsHintVariant.INFO,
+                )
+            }
+
             SettingsToggle(
                 "In-Place Reorder",
                 subtitle = if (kb.inPlaceReorderGlobal) "Controlled by global" else "Nav tab only",
                 checked = kb.navTabInPlaceReorder,
                 enabled = !kb.inPlaceReorderGlobal,
             ) { newValue -> onUpdate { it.copy(navTabInPlaceReorder = newValue) } }
+
+            if (kb.inPlaceReorderGlobal) {
+                SettingsHint(
+                    text = "Global in-place reorder is ON. Go to Behavior → Global Toggles to turn it off.",
+                    icon = "🔒",
+                    variant = SettingsHintVariant.INFO,
+                )
+            }
 
             SettingsToggle("Swap Nav ↔ Arrows", checked = kb.navTabNavArrowsSwapped) {
                 newValue -> onUpdate { it.copy(navTabNavArrowsSwapped = newValue) }
@@ -476,12 +667,28 @@ internal fun KeyboardMediaSection(
                 enabled = !kb.mergeSystemAndModsGlobal && bothSystemAndModsEnabled,
             ) { newValue -> onUpdate { it.copy(mediaTabMergeSystemAndMods = newValue) } }
 
+            if (kb.mergeSystemAndModsGlobal) {
+                SettingsHint(
+                    text = "Global merge is ON. Go to Behavior → Global Toggles to turn it off.",
+                    icon = "🔒",
+                    variant = SettingsHintVariant.INFO,
+                )
+            }
+
             SettingsToggle(
                 "In-Place Reorder",
                 subtitle = if (kb.inPlaceReorderGlobal) "Controlled by global" else "Media tab only",
                 checked = kb.mediaTabInPlaceReorder,
                 enabled = !kb.inPlaceReorderGlobal,
             ) { newValue -> onUpdate { it.copy(mediaTabInPlaceReorder = newValue) } }
+
+            if (kb.inPlaceReorderGlobal) {
+                SettingsHint(
+                    text = "Global in-place reorder is ON. Go to Behavior → Global Toggles to turn it off.",
+                    icon = "🔒",
+                    variant = SettingsHintVariant.INFO,
+                )
+            }
         }
 
         // 3. Media Tab Sections
@@ -516,6 +723,11 @@ internal fun KeyboardMediaSection(
 
         // 5. Media Row Repeat
         SettingsGroupCard(title = "Media Row Repeat") {
+            SettingsHint(
+                text = "Transport keys never repeat.",
+                variant = SettingsHintVariant.INFO,
+            )
+
             SettingsToggle("Repeat Volume", checked = kb.mediaRowRepeatVolume,
                 subtitle = "Hold volume up/down to repeat") {
                 newValue -> onUpdate { it.copy(mediaRowRepeatVolume = newValue) }
@@ -541,6 +753,11 @@ internal fun KeyboardMediaSection(
 
         // 7. Media Group Order
         SettingsGroupCard(title = "Media Group Order") {
+            SettingsHint(
+                text = "Drag to reorder groups left → right",
+                variant = SettingsHintVariant.INFO,
+            )
+
             SettingsDragReorderList(
                 items = visibleGroups,
                 labelProvider = { it.label },

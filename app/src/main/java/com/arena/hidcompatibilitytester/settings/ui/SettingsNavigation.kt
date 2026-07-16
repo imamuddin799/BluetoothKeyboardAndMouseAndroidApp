@@ -62,7 +62,6 @@ data class SettingsSubSection(
 val KEYBOARD_SUB_SECTIONS = listOf(
     SettingsSubSection("keys", "Keys", "⌨"),
     SettingsSubSection("behavior", "Behavior", "⚡"),
-    SettingsSubSection("appearance", "Appearance", "🎨"),
     SettingsSubSection("numpad", "Numpad", "🔢"),
     SettingsSubSection("media", "Media", "🎵"),
 )
@@ -71,7 +70,6 @@ val KEYBOARD_SUB_SECTIONS = listOf(
 val TRACKPAD_SUB_SECTIONS = listOf(
     SettingsSubSection("pointer", "Pointer", "🖱"),
     SettingsSubSection("gestures", "Gestures", "✋"),
-    SettingsSubSection("layout", "Layout", "📐"),
     SettingsSubSection("keyboard", "Keyboard", "⌨"),
 )
 

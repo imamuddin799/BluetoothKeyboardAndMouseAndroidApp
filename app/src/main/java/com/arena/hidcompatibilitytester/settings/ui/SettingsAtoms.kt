@@ -469,7 +469,7 @@ fun SettingsHint(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(icon, fontSize = 11.sp)
+            Text(icon, fontSize = 11.sp, color = fg)
             Text(
                 text,
                 color = fg,
