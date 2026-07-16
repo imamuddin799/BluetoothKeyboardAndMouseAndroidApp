@@ -235,7 +235,7 @@ fun LandscapeTrackpadScreen(
                             showMediaRow = keyboardSettings.showMediaRowInTrackpad(),
                             showNavRow = keyboardSettings.showNavRowInTrackpad(),
                             showOptionalRows = showOptionalRows,
-                            optionalRowOrder = optionalRowOrder,
+                            optionalRowOrder = keyboardSettings.getOptionalRowOrder(keyboardSettings.trackpadOptionalRowOrder),
                             showComboPreview = false,
                             layoutMode = layoutModeOverride,
                             rightColumnMode = rightColumnMode,

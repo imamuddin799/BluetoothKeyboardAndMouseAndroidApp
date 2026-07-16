@@ -73,7 +73,8 @@ fun LandscapeKeysTab(
                 showMediaRow = settings.showMediaRowInKeysTab(),
                 showNavRow = settings.showNavRowInKeysTab(),
                 showOptionalRows = showOptionalRows,
-                layoutMode = layoutMode,   // NEW
+                optionalRowOrder = settings.getOptionalRowOrder(settings.keysTabOptionalRowOrder),
+                layoutMode = layoutMode,
                 onKeyPress = onKeyPress,
                 onConsumerKey = onConsumerKey,
             )

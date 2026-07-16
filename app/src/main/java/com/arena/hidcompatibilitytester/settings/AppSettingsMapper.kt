@@ -4,6 +4,17 @@ import com.arena.hidcompatibilitytester.ui.screen.keyboard.*
 import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.*
 import com.arena.hidcompatibilitytester.ui.screen.trackpad.*
 import com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad.*
+import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeHapticIntensity
+import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeKeyHeight
+import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeKeyFontSize
+import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeMediaKeySize
+import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeLayoutMode
+import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeSectionStyle
+import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeKeysTabSection
+import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeNavTabSection
+import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeMediaTabSection
+import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeMediaRowGroup
+import com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeKeyboardOptionalRow
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Portrait Keyboard: KeyboardSettings ↔ PortraitKeyboardSettings
@@ -450,4 +461,308 @@ private fun LandscapeMediaRowGroup.toSettings() = when (this) {
 private fun LandscapeKeyboardOptionalRow.toSettings() = when (this) {
     LandscapeKeyboardOptionalRow.MEDIA_ROW -> SettingsOptionalRow.MEDIA_ROW
     LandscapeKeyboardOptionalRow.NAV_ROW -> SettingsOptionalRow.NAV_ROW
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Landscape Trackpad mapper
+// ═════════════════════════════════════════════════════════════════════════════
+
+fun com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad.LandscapeTrackpadSettings.toLandscapeTrackpadSettings(): LandscapeTrackpadSettings {
+    return LandscapeTrackpadSettings(
+        pointerSpeed = pointerSpeed,
+        scrollSpeed = scrollSpeed,
+        invertScroll = invertScroll,
+        tapToClick = tapToClick,
+        twoFingerRightClick = twoFingerRightClick,
+        accelerationEnabled = accelerationEnabled,
+        dragLockMode = dragLockMode,
+        clickPressure = when (clickPressure) {
+            com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad.LandscapeClickPressure.LIGHT -> SettingsClickPressure.LIGHT
+            com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad.LandscapeClickPressure.MEDIUM -> SettingsClickPressure.MEDIUM
+            com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad.LandscapeClickPressure.FIRM -> SettingsClickPressure.FIRM
+        },
+        scrollPosition = when (scrollPosition) {
+            com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad.LandscapeSidePosition.LEFT -> SettingsSidePosition.LEFT
+            com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad.LandscapeSidePosition.RIGHT -> SettingsSidePosition.RIGHT
+        },
+        arrowPosition = when (arrowPosition) {
+            com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad.LandscapeSidePosition.LEFT -> SettingsSidePosition.LEFT
+            com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad.LandscapeSidePosition.RIGHT -> SettingsSidePosition.RIGHT
+        },
+        showArrowKeys = showArrowKeys,
+        showScrollStrip = showScrollStrip,
+        showSystemKeyboard = showSystemKeyboard,
+        showInAppKeyboard = showInAppKeyboard,
+        trackpadKbDefaultLayoutMode = when (trackpadKbDefaultLayoutMode) {
+            com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeLayoutMode.SINGLE_COLUMN -> SettingsLayoutMode.SINGLE_COLUMN
+            com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeLayoutMode.TWO_COLUMN -> SettingsLayoutMode.TWO_COLUMN
+        },
+        trackpadKbDefaultRightColumn = when (trackpadKbDefaultRightColumn) {
+            com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeRightColumnMode.NAV_CLUSTER -> SettingsRightColumnMode.NAV_CLUSTER
+            com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeRightColumnMode.NUMPAD -> SettingsRightColumnMode.NUMPAD
+        },
+        trackpadKbShowComboPreview = trackpadKbShowComboPreview,
+    )
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Portrait Trackpad mapper
+// ═════════════════════════════════════════════════════════════════════════════
+
+fun com.arena.hidcompatibilitytester.ui.screen.trackpad.TrackpadSettings.toPortraitTrackpadSettings(): PortraitTrackpadSettings {
+    return PortraitTrackpadSettings(
+        pointerSpeed = pointerSpeed,
+        scrollSpeed = scrollSpeed,
+        invertScroll = invertScroll,
+        tapToClick = tapToClick,
+        twoFingerRightClick = twoFingerRightClick,
+        accelerationEnabled = accelerationEnabled,
+        dragLockMode = dragLockMode,
+        clickPressure = when (clickPressure) {
+            com.arena.hidcompatibilitytester.ui.screen.trackpad.ClickPressure.LIGHT -> SettingsClickPressure.LIGHT
+            com.arena.hidcompatibilitytester.ui.screen.trackpad.ClickPressure.MEDIUM -> SettingsClickPressure.MEDIUM
+            com.arena.hidcompatibilitytester.ui.screen.trackpad.ClickPressure.FIRM -> SettingsClickPressure.FIRM
+        },
+        scrollPosition = when (scrollPosition) {
+            com.arena.hidcompatibilitytester.ui.screen.trackpad.SidePosition.LEFT -> SettingsSidePosition.LEFT
+            com.arena.hidcompatibilitytester.ui.screen.trackpad.SidePosition.RIGHT -> SettingsSidePosition.RIGHT
+        },
+        arrowPosition = when (arrowPosition) {
+            com.arena.hidcompatibilitytester.ui.screen.trackpad.SidePosition.LEFT -> SettingsSidePosition.LEFT
+            com.arena.hidcompatibilitytester.ui.screen.trackpad.SidePosition.RIGHT -> SettingsSidePosition.RIGHT
+        },
+        showArrowKeys = showArrowKeys,
+        showScrollStrip = showScrollStrip,
+        showSystemKeyboard = showSystemKeyboard,
+        showInAppKeyboard = showInAppKeyboard,
+    )
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Settings → Landscape Screen (LandscapeKeyboardSettings in ui package)
+// ═════════════════════════════════════════════════════════════════════════════
+
+fun com.arena.hidcompatibilitytester.settings.LandscapeKeyboardSettings.toLandscapeScreenSettings():
+        com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeKeyboardSettings {
+    return com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeKeyboardSettings(
+        repeatEnabled = repeatEnabled,
+        repeatInitialDelayMs = repeatInitialDelayMs,
+        repeatIntervalMs = repeatIntervalMs,
+        hapticEnabled = hapticEnabled,
+        hapticIntensity = when (hapticIntensity) {
+            SettingsHapticIntensity.LIGHT -> LandscapeHapticIntensity.LIGHT
+            SettingsHapticIntensity.MEDIUM -> LandscapeHapticIntensity.MEDIUM
+            SettingsHapticIntensity.STRONG -> LandscapeHapticIntensity.STRONG
+        },
+        soundOnPress = soundOnPress,
+        stickyModifiers = stickyModifiers,
+        keepModsAfterTab = keepModsAfterTab,
+        showKeyHints = showKeyHints,
+        highContrastMode = highContrastMode,
+        compactModifiers = compactModifiers,
+        numpadStartsLocked = numpadStartsLocked,
+        numpadShowHints = numpadShowHints,
+        showStatusBar = showStatusBar,
+        showComboPreview = showComboPreview,
+        keyHeight = when (keyHeight) {
+            SettingsKeyHeight.SMALL -> LandscapeKeyHeight.SMALL
+            SettingsKeyHeight.MEDIUM -> LandscapeKeyHeight.MEDIUM
+            SettingsKeyHeight.LARGE -> LandscapeKeyHeight.LARGE
+        },
+        keyFontSize = when (keyFontSize) {
+            SettingsKeyFontSize.SMALL -> LandscapeKeyFontSize.SMALL
+            SettingsKeyFontSize.MEDIUM -> LandscapeKeyFontSize.MEDIUM
+            SettingsKeyFontSize.LARGE -> LandscapeKeyFontSize.LARGE
+        },
+        mediaKeySize = when (mediaKeySize) {
+            SettingsMediaKeySize.SMALL -> LandscapeMediaKeySize.SMALL
+            SettingsMediaKeySize.MEDIUM -> LandscapeMediaKeySize.MEDIUM
+            SettingsMediaKeySize.LARGE -> LandscapeMediaKeySize.LARGE
+        },
+        landscapeLayoutMode = when (landscapeLayoutMode) {
+            SettingsLayoutMode.SINGLE_COLUMN -> LandscapeLayoutMode.SINGLE_COLUMN
+            SettingsLayoutMode.TWO_COLUMN -> LandscapeLayoutMode.TWO_COLUMN
+        },
+        defaultTab = defaultTab,
+        keysTabShowNavigation = keysTabShowNavigation,
+        keysTabShowArrowKeys = keysTabShowArrowKeys,
+        keysTabShowSystemKeys = keysTabShowSystemKeys,
+        keysTabShowQuickMods = keysTabShowQuickMods,
+        keysTabSectionStyle = when (keysTabSectionStyle) {
+            SettingsSectionStyle.COMPACT -> LandscapeSectionStyle.COMPACT
+            SettingsSectionStyle.MEDIA -> LandscapeSectionStyle.MEDIA
+        },
+        keysTabMergeSystemAndMods = keysTabMergeSystemAndMods,
+        keysTabInPlaceReorder = keysTabInPlaceReorder,
+        keysTabNavArrowsSwapped = keysTabNavArrowsSwapped,
+        keysTabSectionOrder = keysTabSectionOrder.map { s ->
+            when (s) {
+                SettingsKeysTabSection.NAV_ARROWS -> LandscapeKeysTabSection.NAV_ARROWS
+                SettingsKeysTabSection.SYSTEM_KEYS -> LandscapeKeysTabSection.SYSTEM_KEYS
+                SettingsKeysTabSection.QUICK_MODS -> LandscapeKeysTabSection.QUICK_MODS
+                SettingsKeysTabSection.MERGED_SYSTEM_MODS -> LandscapeKeysTabSection.MERGED_SYSTEM_MODS
+            }
+        },
+        navTabShowNavigation = navTabShowNavigation,
+        navTabShowArrowKeys = navTabShowArrowKeys,
+        navTabShowInsertToggle = navTabShowInsertToggle,
+        navTabShowTypeText = navTabShowTypeText,
+        navTabShowSystemKeys = navTabShowSystemKeys,
+        navTabShowQuickMods = navTabShowQuickMods,
+        navTabSectionStyle = when (navTabSectionStyle) {
+            SettingsSectionStyle.COMPACT -> LandscapeSectionStyle.COMPACT
+            SettingsSectionStyle.MEDIA -> LandscapeSectionStyle.MEDIA
+        },
+        navTabMergeSystemAndMods = navTabMergeSystemAndMods,
+        navTabInPlaceReorder = navTabInPlaceReorder,
+        navTabNavArrowsSwapped = navTabNavArrowsSwapped,
+        navTabSectionOrder = navTabSectionOrder.map { s ->
+            when (s) {
+                SettingsNavTabSection.NAV_ARROWS -> LandscapeNavTabSection.NAV_ARROWS
+                SettingsNavTabSection.INSERT_TOGGLE -> LandscapeNavTabSection.INSERT_TOGGLE
+                SettingsNavTabSection.SYSTEM_KEYS -> LandscapeNavTabSection.SYSTEM_KEYS
+                SettingsNavTabSection.QUICK_MODS -> LandscapeNavTabSection.QUICK_MODS
+                SettingsNavTabSection.MERGED_SYSTEM_MODS -> LandscapeNavTabSection.MERGED_SYSTEM_MODS
+                SettingsNavTabSection.TYPE_TEXT -> LandscapeNavTabSection.TYPE_TEXT
+            }
+        },
+        mediaTabShowNavigation = mediaTabShowNavigation,
+        mediaTabShowArrowKeys = mediaTabShowArrowKeys,
+        mediaTabShowSystemKeys = mediaTabShowSystemKeys,
+        mediaTabShowQuickMods = mediaTabShowQuickMods,
+        mediaTabSectionStyle = when (mediaTabSectionStyle) {
+            SettingsSectionStyle.COMPACT -> LandscapeSectionStyle.COMPACT
+            SettingsSectionStyle.MEDIA -> LandscapeSectionStyle.MEDIA
+        },
+        mediaTabMergeSystemAndMods = mediaTabMergeSystemAndMods,
+        mediaTabInPlaceReorder = mediaTabInPlaceReorder,
+        mediaTabSectionOrder = mediaTabSectionOrder.map { s ->
+            when (s) {
+                SettingsMediaTabSection.TRANSPORT -> LandscapeMediaTabSection.TRANSPORT
+                SettingsMediaTabSection.VOLUME_BRIGHTNESS -> LandscapeMediaTabSection.VOLUME_BRIGHTNESS
+                SettingsMediaTabSection.NAVIGATION -> LandscapeMediaTabSection.NAVIGATION
+                SettingsMediaTabSection.ARROW_KEYS -> LandscapeMediaTabSection.ARROW_KEYS
+                SettingsMediaTabSection.SYSTEM_KEYS -> LandscapeMediaTabSection.SYSTEM_KEYS
+                SettingsMediaTabSection.QUICK_MODS -> LandscapeMediaTabSection.QUICK_MODS
+                SettingsMediaTabSection.MERGED_SYSTEM_MODS -> LandscapeMediaTabSection.MERGED_SYSTEM_MODS
+            }
+        },
+        mergeSystemAndModsGlobal = mergeSystemAndModsGlobal,
+        inPlaceReorderGlobal = inPlaceReorderGlobal,
+        globalOptionalRowVisibility = globalOptionalRowVisibility,
+        globalShowMediaRow = globalShowMediaRow,
+        globalShowNavRow = globalShowNavRow,
+        keysTabShowMediaRow = keysTabShowMediaRow,
+        keysTabShowNavRow = keysTabShowNavRow,
+        trackpadShowMediaRow = trackpadShowMediaRow,
+        trackpadShowNavRow = trackpadShowNavRow,
+        mediaRowShowTransport = mediaRowShowTransport,
+        mediaRowShowVolume = mediaRowShowVolume,
+        mediaRowShowBrightness = mediaRowShowBrightness,
+        mediaRowRepeatVolume = mediaRowRepeatVolume,
+        mediaRowRepeatBrightness = mediaRowRepeatBrightness,
+        mediaRowGroupOrder = mediaRowGroupOrder.map { g ->
+            when (g) {
+                SettingsMediaRowGroup.TRANSPORT -> LandscapeMediaRowGroup.TRANSPORT
+                SettingsMediaRowGroup.VOLUME -> LandscapeMediaRowGroup.VOLUME
+                SettingsMediaRowGroup.BRIGHTNESS -> LandscapeMediaRowGroup.BRIGHTNESS
+            }
+        },
+        globalOptionalRowOrder = globalOptionalRowOrder,
+        keyboardOptionalRowOrder = keyboardOptionalRowOrder.map { r ->
+            when (r) {
+                SettingsOptionalRow.MEDIA_ROW -> LandscapeKeyboardOptionalRow.MEDIA_ROW
+                SettingsOptionalRow.NAV_ROW -> LandscapeKeyboardOptionalRow.NAV_ROW
+            }
+        },
+        keysTabOptionalRowOrder = keysTabOptionalRowOrder.map { r ->
+            when (r) {
+                SettingsOptionalRow.MEDIA_ROW -> LandscapeKeyboardOptionalRow.MEDIA_ROW
+                SettingsOptionalRow.NAV_ROW -> LandscapeKeyboardOptionalRow.NAV_ROW
+            }
+        },
+        trackpadOptionalRowOrder = trackpadOptionalRowOrder.map { r ->
+            when (r) {
+                SettingsOptionalRow.MEDIA_ROW -> LandscapeKeyboardOptionalRow.MEDIA_ROW
+                SettingsOptionalRow.NAV_ROW -> LandscapeKeyboardOptionalRow.NAV_ROW
+            }
+        },
+    )
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Settings → Portrait Trackpad Screen
+// ═════════════════════════════════════════════════════════════════════════════
+
+fun PortraitTrackpadSettings.toScreenTrackpadSettings():
+        com.arena.hidcompatibilitytester.ui.screen.trackpad.TrackpadSettings {
+    return com.arena.hidcompatibilitytester.ui.screen.trackpad.TrackpadSettings(
+        pointerSpeed = pointerSpeed,
+        scrollSpeed = scrollSpeed,
+        invertScroll = invertScroll,
+        tapToClick = tapToClick,
+        twoFingerRightClick = twoFingerRightClick,
+        accelerationEnabled = accelerationEnabled,
+        dragLockMode = dragLockMode,
+        clickPressure = when (clickPressure) {
+            SettingsClickPressure.LIGHT -> com.arena.hidcompatibilitytester.ui.screen.trackpad.ClickPressure.LIGHT
+            SettingsClickPressure.MEDIUM -> com.arena.hidcompatibilitytester.ui.screen.trackpad.ClickPressure.MEDIUM
+            SettingsClickPressure.FIRM -> com.arena.hidcompatibilitytester.ui.screen.trackpad.ClickPressure.FIRM
+        },
+        scrollPosition = when (scrollPosition) {
+            SettingsSidePosition.LEFT -> com.arena.hidcompatibilitytester.ui.screen.trackpad.SidePosition.LEFT
+            SettingsSidePosition.RIGHT -> com.arena.hidcompatibilitytester.ui.screen.trackpad.SidePosition.RIGHT
+        },
+        arrowPosition = when (arrowPosition) {
+            SettingsSidePosition.LEFT -> com.arena.hidcompatibilitytester.ui.screen.trackpad.SidePosition.LEFT
+            SettingsSidePosition.RIGHT -> com.arena.hidcompatibilitytester.ui.screen.trackpad.SidePosition.RIGHT
+        },
+        showArrowKeys = showArrowKeys,
+        showScrollStrip = showScrollStrip,
+        showSystemKeyboard = showSystemKeyboard,
+        showInAppKeyboard = showInAppKeyboard,
+    )
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Settings → Landscape Trackpad Screen
+// ═════════════════════════════════════════════════════════════════════════════
+
+fun com.arena.hidcompatibilitytester.settings.LandscapeTrackpadSettings.toScreenLandscapeTrackpadSettings():
+        com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad.LandscapeTrackpadSettings {
+    return com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad.LandscapeTrackpadSettings(
+        pointerSpeed = pointerSpeed,
+        scrollSpeed = scrollSpeed,
+        invertScroll = invertScroll,
+        tapToClick = tapToClick,
+        twoFingerRightClick = twoFingerRightClick,
+        accelerationEnabled = accelerationEnabled,
+        dragLockMode = dragLockMode,
+        clickPressure = when (clickPressure) {
+            SettingsClickPressure.LIGHT -> com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad.LandscapeClickPressure.LIGHT
+            SettingsClickPressure.MEDIUM -> com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad.LandscapeClickPressure.MEDIUM
+            SettingsClickPressure.FIRM -> com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad.LandscapeClickPressure.FIRM
+        },
+        scrollPosition = when (scrollPosition) {
+            SettingsSidePosition.LEFT -> com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad.LandscapeSidePosition.LEFT
+            SettingsSidePosition.RIGHT -> com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad.LandscapeSidePosition.RIGHT
+        },
+        arrowPosition = when (arrowPosition) {
+            SettingsSidePosition.LEFT -> com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad.LandscapeSidePosition.LEFT
+            SettingsSidePosition.RIGHT -> com.arena.hidcompatibilitytester.ui.screen.landscape.trackpad.LandscapeSidePosition.RIGHT
+        },
+        showArrowKeys = showArrowKeys,
+        showScrollStrip = showScrollStrip,
+        showSystemKeyboard = showSystemKeyboard,
+        showInAppKeyboard = showInAppKeyboard,
+        trackpadKbDefaultLayoutMode = when (trackpadKbDefaultLayoutMode) {
+            SettingsLayoutMode.SINGLE_COLUMN -> com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeLayoutMode.SINGLE_COLUMN
+            SettingsLayoutMode.TWO_COLUMN -> com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeLayoutMode.TWO_COLUMN
+        },
+        trackpadKbDefaultRightColumn = when (trackpadKbDefaultRightColumn) {
+            SettingsRightColumnMode.NAV_CLUSTER -> com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeRightColumnMode.NAV_CLUSTER
+            SettingsRightColumnMode.NUMPAD -> com.arena.hidcompatibilitytester.ui.screen.landscape.keyboard.LandscapeRightColumnMode.NUMPAD
+        },
+        trackpadKbShowComboPreview = trackpadKbShowComboPreview,
+    )
 }

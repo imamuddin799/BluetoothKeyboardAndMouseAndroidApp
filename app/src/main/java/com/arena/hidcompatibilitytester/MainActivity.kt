@@ -39,6 +39,11 @@ import com.arena.hidcompatibilitytester.settings.ui.SettingsRootScreen
 import com.arena.hidcompatibilitytester.settings.toPortraitSettings
 import com.arena.hidcompatibilitytester.settings.toLandscapeSettings
 import com.arena.hidcompatibilitytester.settings.toScreenSettings
+import com.arena.hidcompatibilitytester.settings.toLandscapeTrackpadSettings
+import com.arena.hidcompatibilitytester.settings.toPortraitTrackpadSettings
+import com.arena.hidcompatibilitytester.settings.toLandscapeScreenSettings
+import com.arena.hidcompatibilitytester.settings.toScreenTrackpadSettings
+import com.arena.hidcompatibilitytester.settings.toScreenLandscapeTrackpadSettings
 import com.arena.hidcompatibilitytester.ui.screen.AppMainScreen
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.KeyboardSettings
 import com.arena.hidcompatibilitytester.ui.screen.keyboard.KeyboardSettingsSheet
@@ -270,13 +275,25 @@ class MainActivity : ComponentActivity(),
         targetAddress = address
     }
 
-    // Replace onSaveNewSettings to also sync screen-level settings
     private fun onSaveNewSettings(newSettings: AppSettings) {
         appSettings = newSettings
-        // Sync AppSettings → screen-level settings
+
+        // Sync AppSettings → portrait screen-level settings
         keyboardSettings = newSettings.portraitKeyboard.toScreenSettings()
         KeyboardSettingsStore.save(this, keyboardSettings)
-        // Note: landscape keyboard syncs via its own store if needed
+
+        // Sync AppSettings → landscape screen-level settings
+        landscapeKeyboardSettings = newSettings.landscapeKeyboard.toLandscapeScreenSettings()
+        LandscapeKeyboardSettingsStore.save(this, landscapeKeyboardSettings)
+
+        // Sync AppSettings → portrait trackpad screen-level settings
+        trackpadSettings = newSettings.portraitTrackpad.toScreenTrackpadSettings()
+        TrackpadSettingsStore.save(this, trackpadSettings)
+
+        // Sync AppSettings → landscape trackpad screen-level settings
+        landscapeTrackpadSettings = newSettings.landscapeTrackpad.toScreenLandscapeTrackpadSettings()
+        LandscapeTrackpadSettingsStore.save(this, landscapeTrackpadSettings)
+
         runBlocking { AppSettingsStore.save(this@MainActivity, newSettings) }
     }
 
@@ -418,6 +435,11 @@ class MainActivity : ComponentActivity(),
                         onTrackpadSettingsChange = { newSettings ->
                             landscapeTrackpadSettings = newSettings
                             LandscapeTrackpadSettingsStore.save(this@MainActivity, newSettings)
+                            // Sync back to AppSettings  
+                            appSettings = appSettings.copy(
+                                landscapeTrackpad = newSettings.toLandscapeTrackpadSettings()
+                            )
+                            runBlocking { AppSettingsStore.save(this@MainActivity, appSettings) }
                         },
                         // In landscape LandscapeMainScreen section, replace onKeyboardSettingsChange:
                         onKeyboardSettingsChange = { newSettings ->
