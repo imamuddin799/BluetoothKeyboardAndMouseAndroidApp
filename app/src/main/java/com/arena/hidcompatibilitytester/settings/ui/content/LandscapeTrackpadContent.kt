@@ -131,35 +131,6 @@ private fun LandscapeTrackpadPointerSection(
                 )
             }
         }
-
-        // 5. Landscape Keyboard Layout
-        SettingsGroupCard(title = "Landscape Keyboard Layout") {
-            SettingsChipSelector(
-                label = "Default Layout",
-                subtitle = "When keyboard opens from trackpad",
-                options = SettingsLayoutMode.entries.map { it.label },
-                selectedIndex = tp.trackpadKbDefaultLayoutMode.ordinal,
-            ) { i -> onUpdate { it.copy(trackpadKbDefaultLayoutMode = SettingsLayoutMode.entries[i]) } }
-
-            SettingsChipSelector(
-                label = "Right Column Content",
-                subtitle = "Applies only when Two Column layout is active",
-                options = SettingsRightColumnMode.entries.map { it.label },
-                selectedIndex = tp.trackpadKbDefaultRightColumn.ordinal,
-            ) { i -> onUpdate { it.copy(trackpadKbDefaultRightColumn = SettingsRightColumnMode.entries[i]) } }
-
-            SettingsToggle(
-                "Show Combo Preview",
-                subtitle = "Show mod+key combo next to LED indicators",
-                checked = tp.trackpadKbShowComboPreview,
-            ) { newValue -> onUpdate { it.copy(trackpadKbShowComboPreview = newValue) } }
-
-            SettingsHint(
-                text = "These control the initial state when the trackpad's in-app keyboard opens. Session-only changes from the status bar don't persist.",
-                icon = "ℹ",
-                variant = SettingsHintVariant.INFO,
-            )
-        }
     }
 
     RenderTrackpadGroups(isLandscape, groups)
@@ -283,6 +254,34 @@ private fun LandscapeTrackpadKeyboardSection(
                     variant = SettingsHintVariant.WARNING,
                 )
             }
+        }
+
+        SettingsGroupCard(title = "Landscape Keyboard Layout") {
+            SettingsChipSelector(
+                label = "Default Layout",
+                subtitle = "When keyboard opens from trackpad",
+                options = SettingsLayoutMode.entries.map { it.label },
+                selectedIndex = tp.trackpadKbDefaultLayoutMode.ordinal,
+            ) { i -> onUpdate { it.copy(trackpadKbDefaultLayoutMode = SettingsLayoutMode.entries[i]) } }
+
+            SettingsChipSelector(
+                label = "Right Column Content",
+                subtitle = "Applies only when Two Column layout is active",
+                options = SettingsRightColumnMode.entries.map { it.label },
+                selectedIndex = tp.trackpadKbDefaultRightColumn.ordinal,
+            ) { i -> onUpdate { it.copy(trackpadKbDefaultRightColumn = SettingsRightColumnMode.entries[i]) } }
+
+            SettingsToggle(
+                "Show Combo Preview",
+                subtitle = "Show mod+key combo next to LED indicators",
+                checked = tp.trackpadKbShowComboPreview,
+            ) { newValue -> onUpdate { it.copy(trackpadKbShowComboPreview = newValue) } }
+
+            SettingsHint(
+                text = "These control the initial state when the trackpad's in-app keyboard opens. Session-only changes from the status bar don't persist.",
+                icon = "ℹ",
+                variant = SettingsHintVariant.INFO,
+            )
         }
     }
 
